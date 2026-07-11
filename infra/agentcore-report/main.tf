@@ -103,7 +103,7 @@ data "aws_iam_policy_document" "agent" {
     actions   = ["logs:CreateLogStream", "logs:PutLogEvents", "logs:CreateLogGroup"]
     resources = ["*"]
   }
-  # Bedrock model calls for the LLM relevance gate + query rewrite (Converse API).
+  # Bedrock model calls for fail-closed candidate confirmation (Converse API).
   statement {
     sid = "InvokeModel"
     actions = [
@@ -111,30 +111,6 @@ data "aws_iam_policy_document" "agent" {
       "bedrock:InvokeModelWithResponseStream",
     ]
     resources = ["*"]
-  }
-  # Call the managed Web Search tool through the AgentCore Gateway (MCP, IAM auth).
-  statement {
-    sid       = "InvokeGateway"
-    actions   = ["bedrock-agentcore:InvokeGateway"]
-    resources = ["arn:aws:bedrock-agentcore:${local.region}:${local.acct}:gateway/*"]
-  }
-  # AgentCore Browser tool — start/stop/connect to a managed headless Chromium
-  # session for in-AWS web browsing (renders JS, finds deep PDF links). Uses the
-  # AWS-managed default browser (aws.browser.v1); no data leaves the account.
-  statement {
-    sid = "BrowserTool"
-    actions = [
-      "bedrock-agentcore:StartBrowserSession",
-      "bedrock-agentcore:StopBrowserSession",
-      "bedrock-agentcore:GetBrowserSession",
-      "bedrock-agentcore:ListBrowserSessions",
-      "bedrock-agentcore:ConnectBrowserAutomationStream",
-      "bedrock-agentcore:ConnectBrowserLiveViewStream",
-    ]
-    resources = [
-      "arn:aws:bedrock-agentcore:${local.region}:aws:browser/aws.browser.v1",
-      "arn:aws:bedrock-agentcore:${local.region}:${local.acct}:browser-session/*",
-    ]
   }
 }
 

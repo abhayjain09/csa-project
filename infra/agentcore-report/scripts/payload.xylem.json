@@ -1,9 +1,15 @@
 {
-  "company": "Xylem Inc.",
-  "web_query1": "site: xylem.com Anti-Bribery Anti-Corruption Policy",
-  "web_query2": "site: xylem.com Code of Conduct",
-  "web_query3": "site: xylem.com annual report current year - 1",
-  "web_query4": "site: xylem.com annual report current year - 2",
-  "web_query5": "site: xylem.com sustainability report current year - 1",
-  "web_query6": "site: xylem.com sustainability report current year - 2"
+  "company": {
+    "legal_name": "Xylem Inc.",
+    "aliases": ["Xylem"],
+    "cik": "0001524472",
+    "country": "US",
+    "official_domains": ["xylem.com"]
+  },
+  "requests": [
+    {"id": "anti-bribery", "document_type": "anti_bribery_policy"},
+    {"id": "code-of-conduct", "document_type": "code_of_conduct"},
+    {"id": "annual-report-2024", "document_type": "annual_report", "year": 2024},
+    {"id": "sustainability-2024", "document_type": "sustainability_report", "year": 2024}
+  ]
 }

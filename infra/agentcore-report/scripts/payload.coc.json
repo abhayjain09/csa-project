@@ -1,9 +1,17 @@
 {
-  "company": "paccar",
-  "web_query1": "site: https://www.paccar.com Anti-Bribery Anti-Corruption Policy",
-  "web_query2": "site: https://www.paccar.com Code of Conduct",
-  "web_query3": "site: https://www.paccar.com annual report current year - 1",
-  "web_query4": "site: https://www.paccar.com annual report current year - 2",
-  "web_query5": "site: https://www.paccar.com sustainability report current year - 1",
-  "web_query6": "site: https://www.paccar.com sustainability report current year - 2"
+  "company": {
+    "legal_name": "PACCAR Inc",
+    "aliases": ["PACCAR"],
+    "cik": "0000753362",
+    "country": "US",
+    "official_domains": ["paccar.com"],
+    "trusted_document_hosts": ["q4cdn.com"]
+  },
+  "requests": [
+    {"id": "anti-bribery", "document_type": "anti_bribery_policy"},
+    {"id": "code-of-conduct", "document_type": "code_of_conduct"},
+    {"id": "annual-report-2024", "document_type": "annual_report", "year": 2024},
+    {"id": "annual-report-2023", "document_type": "annual_report", "year": 2023},
+    {"id": "sustainability-2024", "document_type": "sustainability_report", "year": 2024}
+  ]
 }

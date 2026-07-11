@@ -1,4 +1,16 @@
 {
-  "web_query1": "site: https://www.paccar.com/ Anti-Bribery & Anti-Corruption Policy ",
-  "web_query2": " site: https://www.paccar.com/ Anti-Bribery & Anti-Corruption Policy"
+  "run_id": "paccar-2025-example",
+  "company": {
+    "legal_name": "PACCAR Inc",
+    "aliases": ["PACCAR"],
+    "cik": "0000753362",
+    "country": "US",
+    "official_domains": ["paccar.com"],
+    "trusted_document_hosts": ["q4cdn.com"]
+  },
+  "requests": [
+    {"id": "annual-report-2024", "document_type": "annual_report", "year": 2024},
+    {"id": "code-of-conduct", "document_type": "code_of_conduct"},
+    {"id": "anti-bribery", "document_type": "anti_bribery_policy"}
+  ]
 }

@@ -27,3 +27,18 @@ sec_user_agent = "Report IQ operations@example.com"
 
 # Optional Brave Search API alternative. It is also only a site-scoped fallback.
 # brave_search_api_key = "..."
+
+# Final fallback for reports behind JavaScript navigation, year selectors, and
+# download buttons. It uses managed AgentCore Browser plus Playwright and runs
+# only for request items with "allow_browser": true.
+use_browser = true
+browser_region = "us-east-1"
+
+# Optional long-running Fargate browser worker. Enable only after selecting
+# approved network placement. It handles normal JavaScript navigation after the
+# AgentCore Browser tier fails, but reports login/CAPTCHA/WAF pages for manual
+# review and never attempts to bypass them.
+# enable_fargate_browser_worker = true
+# fargate_subnet_ids            = ["subnet-...", "subnet-..."]
+# fargate_security_group_ids    = ["sg-..."]
+# fargate_assign_public_ip       = false

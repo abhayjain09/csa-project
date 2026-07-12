@@ -74,15 +74,45 @@ variable "serper_api_key" {
 }
 
 variable "use_browser" {
-  description = "Legacy v1 setting retained for existing tfvars. Browser work should run in a separate Lambda/Fargate Tier 3 worker, not this runtime."
+  description = "Enable the final AgentCore Browser / Playwright tier for JavaScript-rendered company report pages. It is used only after registry, site, and scoped-search discovery miss."
   type        = bool
   default     = false
 }
 
 variable "browser_identifier" {
-  description = "Legacy v1 browser setting retained for existing tfvars."
+  description = "AgentCore Browser identifier. The runtime currently uses the AWS-managed default aws.browser.v1."
   type        = string
   default     = "aws.browser.v1"
+}
+
+variable "browser_region" {
+  description = "AWS Region hosting the AgentCore Browser. Keep this aligned with the runtime region unless Browser availability requires otherwise."
+  type        = string
+  default     = "us-east-1"
+}
+
+variable "enable_fargate_browser_worker" {
+  description = "Deploy the optional SQS-driven Fargate browser worker for long-running dynamic-site attempts. It detects login/WAF/CAPTCHA and sends those jobs to manual review; it never bypasses them."
+  type        = bool
+  default     = false
+}
+
+variable "fargate_subnet_ids" {
+  description = "Subnets for the Fargate browser worker. Required when enable_fargate_browser_worker is true; use private subnets with NAT for production, or explicitly approved public subnets for proof-of-concept use."
+  type        = list(string)
+  default     = []
+}
+
+variable "fargate_security_group_ids" {
+  description = "Security groups for the Fargate browser worker. Required when enable_fargate_browser_worker is true."
+  type        = list(string)
+  default     = []
+}
+
+variable "fargate_assign_public_ip" {
+  description = "Assign a public IP to the Fargate worker. Use false with private subnets and NAT in production."
+  type        = bool
+  default     = false
 }
 
 variable "google_cx" {

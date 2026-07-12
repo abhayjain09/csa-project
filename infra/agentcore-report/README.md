@@ -11,6 +11,7 @@ company + document request
   -> Tier 0: official filing registry (SEC EDGAR, Companies House)
   -> Tier 1: verified company site paths and sitemap links
   -> Tier 2: optional site-scoped Google PSE or Brave search
+  -> Tier 3: AgentCore Browser + Playwright for rendered navigation and downloads
   -> deterministic PDF/HTML validation + optional Bedrock confirmation
   -> exactly one winner written to S3 and DynamoDB
 ```
@@ -35,7 +36,7 @@ the same query: that was the reason the previous runtime stored several reports.
     "trusted_document_hosts": ["q4cdn.com"]
   },
   "requests": [
-    {"id": "annual-2024", "document_type": "annual_report", "year": 2024},
+    {"id": "annual-2024", "document_type": "annual_report", "year": 2024, "allow_browser": true},
     {"id": "conduct", "document_type": "code_of_conduct"}
   ]
 }
@@ -114,11 +115,47 @@ sites. Keep S3, DynamoDB, and Bedrock access inside AWS as configured by Terrafo
 
 ## Browser and country adapters
 
-The original deep browser crawler was deliberately removed from the synchronous
-runtime. It was selecting and downloading documents before there was strong source
-identity. For JavaScript-only or bot-protected website policies, add a separate
-Lambda/Fargate browser worker as a future Tier 3. Its output must use the same
-candidate contract and validator in `agent.py`; it must not write directly to S3.
+For JavaScript-only report pages, enable `use_browser = true` and add
+`"allow_browser": true` to the individual request. Tier 3 opens an AgentCore
+Browser session, follows only rendered links and buttons on approved company
+domains, selects the requested year in ordinary HTML `<select>` controls, and
+clicks a download control. It reads the rendered DOM first. A screenshot is sent
+to the configured Bedrock model only when several download controls are ambiguous.
+The browser never writes directly to S3: its candidate still passes the same
+company, class, year, and LLM validation as every other tier.
+
+For long-running, login-required, or heavily bot-protected sites, move this same
+browser candidate contract to the optional Fargate worker. Enable it only with
+approved network placement:
+
+```hcl
+enable_fargate_browser_worker = true
+fargate_subnet_ids            = ["subnet-...", "subnet-..."]
+fargate_security_group_ids    = ["sg-..."]
+fargate_assign_public_ip       = false
+```
+
+When the runtime has no validated result, it returns `queued_browser_worker` and
+a `browser_job_id`. The Fargate worker has a 10-minute / 40-page budget for normal
+rendered navigation, then writes a result to the browser-results SQS queue.
+Possible worker outcomes are `stored`, `duplicate`, `not_found`, or
+`manual_review_required`. `manual_review_required` contains `login_required` or
+`blocked_waf_or_captcha`; it does not attempt credential entry, CAPTCHA solving,
+WAF evasion, proxy rotation, or an unscoped browser search.
+
+Read completed asynchronous results with:
+
+```bash
+python scripts/read_browser_results.py "$(terraform output -raw browser_worker_results_queue_url)" \
+  --region=us-east-1 --delete
+```
+
+The first worker deployment needs both ECR repositories before building images:
+
+```bash
+terraform apply -target=aws_ecr_repository.agent -target=aws_ecr_repository.browser_worker
+./scripts/deploy.sh v4
+```
 
 SEC EDGAR and Companies House are implemented now. India BSE/NSE and EU OAM/ESEF
 should be added as separate registry adapters once their issuer identifiers and

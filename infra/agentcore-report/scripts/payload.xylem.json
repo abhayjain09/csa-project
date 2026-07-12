@@ -9,7 +9,7 @@
   "requests": [
     {"id": "anti-bribery", "document_type": "anti_bribery_policy"},
     {"id": "code-of-conduct", "document_type": "code_of_conduct"},
-    {"id": "annual-report-2024", "document_type": "annual_report", "year": 2024},
+    {"id": "annual-report-2024", "document_type": "annual_report", "year": 2024, "allow_browser": true},
     {"id": "sustainability-2024", "document_type": "sustainability_report", "year": 2024}
   ]
 }

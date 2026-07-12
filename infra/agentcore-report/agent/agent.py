@@ -19,6 +19,7 @@ import re
 import time
 import uuid
 import xml.etree.ElementTree as ET
+from collections import deque
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
@@ -52,10 +53,20 @@ GOOGLE_CX = os.environ.get("GOOGLE_CX", "").strip()
 BRAVE_SEARCH_API_KEY = os.environ.get("BRAVE_SEARCH_API_KEY", "").strip()
 COMPANIES_HOUSE_API_KEY = os.environ.get("COMPANIES_HOUSE_API_KEY", "").strip()
 PRESIGN_EXPIRY_SECONDS = int(os.environ.get("PRESIGN_EXPIRY_SECONDS", "3600"))
+USE_BROWSER = os.environ.get("USE_BROWSER", "false").lower() == "true"
+BROWSER_REGION = os.environ.get("BROWSER_REGION", REGION)
+BROWSER_IDENTIFIER = os.environ.get("BROWSER_IDENTIFIER", "aws.browser.v1")
+BROWSER_SESSION_TIMEOUT_SECONDS = int(os.environ.get("BROWSER_SESSION_TIMEOUT_SECONDS", "180"))
+BROWSER_MAX_PAGES = int(os.environ.get("BROWSER_MAX_PAGES", "12"))
+BROWSER_MAX_SECONDS = int(os.environ.get("BROWSER_MAX_SECONDS", "120"))
+BROWSER_CLICK_TIMEOUT_MS = int(os.environ.get("BROWSER_CLICK_TIMEOUT_MS", "12000"))
+BROWSER_VISION_MODEL_ID = os.environ.get("BROWSER_VISION_MODEL_ID", LLM_MODEL_ID).strip()
+FARGATE_BROWSER_QUEUE_URL = os.environ.get("FARGATE_BROWSER_QUEUE_URL", "").strip()
 
 _s3 = boto3.client("s3", region_name=REGION) if BUCKET else None
 _table = boto3.resource("dynamodb", region_name=REGION).Table(PROVENANCE_TABLE) if PROVENANCE_TABLE else None
 _bedrock = boto3.client("bedrock-runtime", region_name=REGION) if LLM_MODEL_ID else None
+_sqs = boto3.client("sqs", region_name=REGION) if FARGATE_BROWSER_QUEUE_URL else None
 _last_sec_request = 0.0
 _sec_ticker_cache: dict[str, str] | None = None
 
@@ -94,6 +105,7 @@ class DocumentRequest:
     document_type: str
     year: int | None = None
     allow_search: bool = True
+    allow_browser: bool = False
 
 
 @dataclass
@@ -491,6 +503,289 @@ def _official_site_candidates(company: Company, request: DocumentRequest, diagno
     return sorted(unique.values(), key=lambda item: _score_link(item, request), reverse=True)[:MAX_CANDIDATES_PER_TIER]
 
 
+_BROWSER_NAV_TERMS = (
+    "investor", "financial", "annual report", "annual reports", "reports",
+    "filing", "results", "sustainability", "governance", "ethics",
+    "compliance", "policy", "policies", "download",
+)
+_BROWSER_DOCUMENT_EXTENSIONS = (".pdf", ".doc", ".docx", ".rtf")
+
+
+def _browser_control_score(text: str, request: DocumentRequest) -> int:
+    """Score a rendered control without asking an LLM to drive the site."""
+    lowered = text.lower()
+    rule = DOCUMENT_RULES[request.document_type]
+    score = sum(8 for alias in rule["aliases"] if alias in lowered)
+    score += sum(2 for term in _BROWSER_NAV_TERMS if term in lowered)
+    if "download" in lowered:
+        score += 8
+    if request.year and str(request.year) in lowered:
+        score += 8
+    if any(term in lowered for term in rule["reject_terms"]):
+        score -= 100
+    return score
+
+
+def _browser_controls(page) -> list[dict[str, str]]:
+    """Return the rendered controls, including links injected after page load."""
+    return page.locator("a, button, [role='link'], [role='button']").evaluate_all(
+        """elements => elements.slice(0, 200).map((element, index) => ({
+          index: String(index),
+          tag: element.tagName.toLowerCase(),
+          text: (element.innerText || element.getAttribute('aria-label') || '').trim().replace(/\\s+/g, ' '),
+          href: element.href || element.getAttribute('data-href') || '',
+          download: element.hasAttribute('download') ? 'true' : ''
+        }))"""
+    )
+
+
+def _browser_document_candidates(page, company: Company, request: DocumentRequest) -> list[Candidate]:
+    candidates: list[Candidate] = []
+    for control in _browser_controls(page):
+        href = urljoin(page.url, control.get("href", ""))
+        label = control.get("text", "")
+        if not href:
+            continue
+        path = urlparse(href).path.lower()
+        is_file = path.endswith(_BROWSER_DOCUMENT_EXTENSIONS)
+        is_download = control.get("download") == "true" or "download" in label.lower()
+        if not (is_file or is_download):
+            continue
+        candidate = Candidate(
+            url=href,
+            source_tier="browser",
+            title=label,
+            discovered_from=page.url,
+            metadata={"browser_path": page.url, "discovery": "rendered_dom"},
+        )
+        if _is_allowed_candidate(candidate, company) and _browser_control_score(label + " " + href, request) >= 0:
+            candidates.append(candidate)
+    unique = {candidate.url: candidate for candidate in candidates}
+    return sorted(unique.values(), key=lambda item: _browser_control_score(item.title + " " + item.url, request), reverse=True)[:MAX_CANDIDATES_PER_TIER]
+
+
+def _browser_navigation_urls(page, company: Company, request: DocumentRequest) -> list[str]:
+    urls: list[tuple[int, str]] = []
+    for control in _browser_controls(page):
+        href = urljoin(page.url, control.get("href", ""))
+        if not href or urlparse(href).path.lower().endswith(_BROWSER_DOCUMENT_EXTENSIONS):
+            continue
+        if not any(_host_matches(href, domain) for domain in company.official_domains):
+            continue
+        score = _browser_control_score(control.get("text", "") + " " + href, request)
+        if score > 0:
+            urls.append((score, href))
+    return [url for _, url in sorted(set(urls), reverse=True)[:BROWSER_MAX_PAGES]]
+
+
+def _browser_select_requested_year(page, request: DocumentRequest) -> bool:
+    if request.year is None:
+        return False
+    selected = False
+    selects = page.locator("select")
+    for index in range(min(selects.count(), 10)):
+        select = selects.nth(index)
+        try:
+            options = select.locator("option").evaluate_all(
+                "options => options.map(option => ({value: option.value, text: option.textContent.trim()}))"
+            )
+            match = next((option for option in options if str(request.year) in option["text"]), None)
+            if match and match.get("value"):
+                select.select_option(value=match["value"], timeout=BROWSER_CLICK_TIMEOUT_MS)
+                page.wait_for_timeout(750)
+                selected = True
+        except Exception as exc:  # A disabled or custom select is a normal browser fallback case.
+            print(f"[browser] year selector skipped: {type(exc).__name__}")
+    return selected
+
+
+def _browser_expand_navigation(page, request: DocumentRequest) -> None:
+    """Open rendered menu buttons before reading the DOM again.
+
+    Only labels relevant to the requested document may be clicked. The browser
+    never fills forms, signs in, or leaves an approved company domain.
+    """
+    controls = page.locator("button, [role='button']")
+    for index in range(min(controls.count(), 40)):
+        control = controls.nth(index)
+        try:
+            label = (control.inner_text(timeout=1000) or control.get_attribute("aria-label") or "").strip()
+            if _browser_control_score(label, request) < 2 or "download" in label.lower():
+                continue
+            control.click(timeout=BROWSER_CLICK_TIMEOUT_MS)
+            page.wait_for_timeout(300)
+        except Exception:
+            continue
+
+
+def _browser_vision_choice(page, request: DocumentRequest) -> str | None:
+    """Use one screenshot only when DOM labels leave download controls ambiguous."""
+    if _bedrock is None or not BROWSER_VISION_MODEL_ID:
+        return None
+    controls = [item for item in _browser_controls(page) if item.get("text")][:20]
+    if not controls:
+        return None
+    try:
+        screenshot = page.screenshot(type="jpeg", quality=70, full_page=False)
+        prompt = (
+            "Choose the one visible control that downloads the requested corporate document. "
+            "Do not choose navigation, login, search, or a different report type. "
+            f"Requested document type: {request.document_type}; year: {request.year}.\n"
+            f"Rendered controls: {json.dumps([item['text'] for item in controls])}\n"
+            'Return only JSON: {"label":"exact control text or null"}.'
+        )
+        response = _bedrock.converse(
+            modelId=BROWSER_VISION_MODEL_ID,
+            messages=[{"role": "user", "content": [
+                {"text": prompt},
+                {"image": {"format": "jpeg", "source": {"bytes": screenshot}}},
+            ]}],
+            inferenceConfig={"maxTokens": 80, "temperature": 0},
+        )
+        output = "".join(part.get("text", "") for part in response["output"]["message"]["content"])
+        output = re.sub(r"^```(?:json)?\s*|\s*```$", "", output.strip(), flags=re.I)
+        label = json.loads(output).get("label")
+        return str(label).strip() if label else None
+    except Exception as exc:
+        print(f"[browser] screenshot decision unavailable: {type(exc).__name__}")
+        return None
+
+
+def _browser_click_download(page, company: Company, request: DocumentRequest) -> list[Candidate]:
+    controls = page.locator("a, button, [role='link'], [role='button']")
+    available = _browser_controls(page)
+    attempts = [item for item in available if "download" in item.get("text", "").lower()]
+    if not attempts:
+        return []
+    if len(attempts) > 1:
+        selected_label = _browser_vision_choice(page, request)
+        if selected_label:
+            attempts = [item for item in available if item.get("text") == selected_label]
+    downloaded: list[Candidate] = []
+    for control_data in attempts[:3]:
+        try:
+            control = controls.nth(int(control_data["index"]))
+            with page.expect_download(timeout=BROWSER_CLICK_TIMEOUT_MS) as download_info:
+                control.click(timeout=BROWSER_CLICK_TIMEOUT_MS)
+            download = download_info.value
+            path = download.path()
+            if not path:
+                continue
+            with open(path, "rb") as document_file:
+                body = document_file.read(MAX_DOCUMENT_BYTES + 1)
+            if not body or len(body) > MAX_DOCUMENT_BYTES:
+                continue
+            source_url = download.url or page.url
+            candidate = Candidate(
+                url=source_url,
+                source_tier="browser",
+                title=download.suggested_filename or control_data.get("text", ""),
+                discovered_from=page.url,
+                body=body,
+                content_type="application/pdf" if body.startswith(b"%PDF") else "application/octet-stream",
+                metadata={"browser_path": page.url, "discovery": "rendered_click"},
+            )
+            if _is_allowed_candidate(candidate, company):
+                downloaded.append(candidate)
+        except Exception as exc:
+            print(f"[browser] download click skipped: {type(exc).__name__}")
+    return downloaded
+
+
+def _browser_candidates(company: Company, request: DocumentRequest, diagnostics: list[str]) -> list[Candidate]:
+    """Navigate approved company pages with remote Playwright as the final tier."""
+    if not USE_BROWSER or not request.allow_browser or not company.official_domains:
+        return []
+    try:
+        from bedrock_agentcore.tools.browser_client import BrowserClient
+        from playwright.sync_api import sync_playwright
+    except ImportError as exc:  # Image configuration issue, not a retrieval result.
+        diagnostics.append(f"browser dependencies unavailable: {type(exc).__name__}")
+        return []
+
+    seeds: list[str] = []
+    for domain in company.official_domains:
+        root = f"https://{_normalise_domain(domain)}"
+        seeds.extend(urljoin(root, path) for path in ["/", *DOCUMENT_RULES[request.document_type]["site_paths"]])
+    queue: deque[str] = deque(dict.fromkeys(seeds))
+    visited: set[str] = set()
+    started = time.monotonic()
+    browser_client = BrowserClient(region=BROWSER_REGION)
+    try:
+        browser_client.start(
+            identifier=BROWSER_IDENTIFIER,
+            name=f"reportiq{uuid.uuid4().hex[:12]}",
+            session_timeout_seconds=BROWSER_SESSION_TIMEOUT_SECONDS,
+            viewport={"width": 1440, "height": 1000},
+        )
+        ws_url, headers = browser_client.generate_ws_headers()
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.connect_over_cdp(ws_url, headers=headers)
+            context = browser.contexts[0] if browser.contexts else browser.new_context()
+            page = context.pages[0] if context.pages else context.new_page()
+            while queue and len(visited) < BROWSER_MAX_PAGES and time.monotonic() - started < BROWSER_MAX_SECONDS:
+                url = queue.popleft()
+                if url in visited or not any(_host_matches(url, domain) for domain in company.official_domains):
+                    continue
+                visited.add(url)
+                try:
+                    page.goto(url, wait_until="domcontentloaded", timeout=BROWSER_CLICK_TIMEOUT_MS)
+                    page.wait_for_timeout(750)
+                except Exception as exc:
+                    diagnostics.append(f"browser navigation {url}: {type(exc).__name__}")
+                    continue
+                _browser_select_requested_year(page, request)
+                direct = _browser_document_candidates(page, company, request)
+                if direct:
+                    browser.close()
+                    return direct
+                downloaded = _browser_click_download(page, company, request)
+                if downloaded:
+                    browser.close()
+                    return downloaded
+                _browser_expand_navigation(page, request)
+                direct = _browser_document_candidates(page, company, request)
+                if direct:
+                    browser.close()
+                    return direct
+                for next_url in _browser_navigation_urls(page, company, request):
+                    if next_url not in visited:
+                        queue.append(next_url)
+            browser.close()
+    except Exception as exc:
+        diagnostics.append(f"browser session failed: {type(exc).__name__}")
+    finally:
+        try:
+            browser_client.stop()
+        except Exception:
+            pass
+    return []
+
+
+def _queue_fargate_browser_job(company: Company, request: DocumentRequest, run_id: str, diagnostics: list[str]) -> str | None:
+    """Queue a long-running normal-browser attempt; never queue a bypass task."""
+    if _sqs is None or not FARGATE_BROWSER_QUEUE_URL:
+        return None
+    job_id = uuid.uuid4().hex
+    message = {
+        "job_id": job_id,
+        "run_id": run_id,
+        "company": asdict(company),
+        "request": asdict(request),
+        "policy": {
+            "allow_login": False,
+            "allow_captcha_bypass": False,
+            "allow_waf_bypass": False,
+        },
+    }
+    try:
+        _sqs.send_message(QueueUrl=FARGATE_BROWSER_QUEUE_URL, MessageBody=json.dumps(message))
+        return job_id
+    except Exception as exc:
+        diagnostics.append(f"fargate browser queue failed: {type(exc).__name__}")
+        return None
+
+
 def _google_candidates(company: Company, request: DocumentRequest) -> list[Candidate]:
     if not GOOGLE_API_KEY or not GOOGLE_CX:
         return []
@@ -538,17 +833,18 @@ def _search_candidates(company: Company, request: DocumentRequest) -> list[Candi
 def _fetch_and_select(candidates: Iterable[Candidate], company: Company, request: DocumentRequest, diagnostics: list[str]) -> tuple[Candidate | None, Validation | None]:
     accepted: list[tuple[Candidate, Validation]] = []
     for candidate in candidates:
-        try:
-            headers = None
-            if candidate.source_tier == "registry" and "sec.gov" in candidate.url:
-                headers = {"User-Agent": SEC_USER_AGENT}
-            elif candidate.metadata.get("auth") == "companies_house":
-                auth = base64.b64encode(f"{COMPANIES_HOUSE_API_KEY}:".encode()).decode()
-                headers = {"Authorization": f"Basic {auth}"}
-            candidate.body, candidate.content_type = _fetch(candidate.url, headers)
-        except RetrievalError as exc:
-            diagnostics.append(f"{candidate.source_tier} fetch {candidate.url}: {exc}")
-            continue
+        if candidate.body is None:
+            try:
+                headers = None
+                if candidate.source_tier == "registry" and "sec.gov" in candidate.url:
+                    headers = {"User-Agent": SEC_USER_AGENT}
+                elif candidate.metadata.get("auth") == "companies_house":
+                    auth = base64.b64encode(f"{COMPANIES_HOUSE_API_KEY}:".encode()).decode()
+                    headers = {"Authorization": f"Basic {auth}"}
+                candidate.body, candidate.content_type = _fetch(candidate.url, headers)
+            except RetrievalError as exc:
+                diagnostics.append(f"{candidate.source_tier} fetch {candidate.url}: {exc}")
+                continue
         validation = _validate(candidate, company, request)
         if validation.accepted:
             accepted.append((candidate, validation))
@@ -613,20 +909,35 @@ def _parse_requests(payload: dict[str, Any]) -> list[DocumentRequest]:
         year = raw.get("year")
         if year is not None and (not isinstance(year, int) or year < 1990 or year > dt.date.today().year + 1):
             raise ValueError("request.year must be a four-digit integer")
-        requests.append(DocumentRequest(id=str(raw.get("id") or f"request-{index}"), document_type=document_type, year=year, allow_search=bool(raw.get("allow_search", True))))
+        requests.append(DocumentRequest(
+            id=str(raw.get("id") or f"request-{index}"),
+            document_type=document_type,
+            year=year,
+            allow_search=bool(raw.get("allow_search", True)),
+            allow_browser=bool(raw.get("allow_browser", USE_BROWSER)),
+        ))
     return requests
 
 
-def _run_request(company: Company, request: DocumentRequest, diagnostics: list[str]) -> dict[str, Any]:
-    tiers: list[tuple[str, list[Candidate]]] = [("registry", _registry_candidates(company, request, diagnostics))]
-    tiers.append(("official_site", _official_site_candidates(company, request, diagnostics)))
+def _run_request(company: Company, request: DocumentRequest, run_id: str, diagnostics: list[str]) -> dict[str, Any]:
+    discovery_tiers = [
+        ("registry", lambda: _registry_candidates(company, request, diagnostics)),
+        ("official_site", lambda: _official_site_candidates(company, request, diagnostics)),
+    ]
     if request.allow_search:
-        tiers.append(("site_scoped_search", _search_candidates(company, request)))
-    for tier, candidates in tiers:
+        discovery_tiers.append(("site_scoped_search", lambda: _search_candidates(company, request)))
+    if request.allow_browser:
+        discovery_tiers.append(("browser", lambda: _browser_candidates(company, request, diagnostics)))
+    for tier, discover in discovery_tiers:
+        candidates = discover()
         candidate, validation = _fetch_and_select(candidates, company, request, diagnostics)
         if candidate and validation:
             return {"status": "validated", "request": asdict(request), "candidate": candidate, "validation": validation}
         diagnostics.append(f"{request.id}: no validated result from {tier}")
+    if request.allow_browser:
+        job_id = _queue_fargate_browser_job(company, request, run_id, diagnostics)
+        if job_id:
+            return {"status": "queued", "request": asdict(request), "browser_job_id": job_id}
     return {"status": "not_found", "request": asdict(request)}
 
 
@@ -640,15 +951,20 @@ def _invoke_sync(payload: dict[str, Any]) -> dict[str, Any]:
     diagnostics: list[str] = []
     downloaded: list[dict[str, Any]] = []
     results: list[dict[str, Any]] = []
+    queued: list[dict[str, Any]] = []
     for request in requests:
-        outcome = _run_request(company, request, diagnostics)
+        outcome = _run_request(company, request, run_id, diagnostics)
         if outcome["status"] == "validated":
             stored = _store(company, request, run_id, outcome["candidate"], outcome["validation"])
             downloaded.append(stored)
             results.append({"request_id": request.id, "status": stored["status"], "source_tier": stored["source_tier"], "s3_key": stored["s3_key"]})
+        elif outcome["status"] == "queued":
+            queued_result = {"request_id": request.id, "status": "queued_browser_worker", "browser_job_id": outcome["browser_job_id"]}
+            queued.append(queued_result)
+            results.append(queued_result)
         else:
             results.append({"request_id": request.id, "status": "not_found"})
-    return {"run_id": run_id, "company": company.legal_name, "requested": len(requests), "downloaded_count": len(downloaded), "results": results, "downloaded": downloaded, "diagnostics": diagnostics, "policy": {"one_document_per_request": True, "registry_first": True, "require_llm_validation": REQUIRE_LLM_VALIDATION}}
+    return {"run_id": run_id, "company": company.legal_name, "requested": len(requests), "downloaded_count": len(downloaded), "results": results, "downloaded": downloaded, "queued": queued, "diagnostics": diagnostics, "policy": {"one_document_per_request": True, "registry_first": True, "require_llm_validation": REQUIRE_LLM_VALIDATION}}
 
 
 @app.entrypoint

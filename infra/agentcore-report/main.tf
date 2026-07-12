@@ -9,6 +9,14 @@ resource "aws_ecr_repository" "agent" {
   }
 }
 
+resource "aws_ecr_repository" "browser_worker" {
+  name                 = "${var.name}-browser-worker"
+  image_tag_mutability = "MUTABLE"
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+}
+
 # =============================================================================
 # S3 — system-of-record for downloaded reports (partitioned by company)
 # =============================================================================
@@ -111,6 +119,30 @@ data "aws_iam_policy_document" "agent" {
       "bedrock:InvokeModelWithResponseStream",
     ]
     resources = ["*"]
+  }
+  # Tier 3 dynamic-site fallback. Playwright connects to the managed AgentCore
+  # Browser only after registry, static-site, and site-scoped search miss.
+  statement {
+    sid = "BrowserTool"
+    actions = [
+      "bedrock-agentcore:StartBrowserSession",
+      "bedrock-agentcore:StopBrowserSession",
+      "bedrock-agentcore:GetBrowserSession",
+      "bedrock-agentcore:ListBrowserSessions",
+      "bedrock-agentcore:ConnectBrowserAutomationStream",
+    ]
+    resources = [
+      "arn:aws:bedrock-agentcore:${local.region}:aws:browser/aws.browser.v1",
+      "arn:aws:bedrock-agentcore:${local.region}:${local.acct}:browser-session/*",
+    ]
+  }
+  dynamic "statement" {
+    for_each = var.enable_fargate_browser_worker ? [1] : []
+    content {
+      sid       = "QueueBrowserFallback"
+      actions   = ["sqs:SendMessage"]
+      resources = [aws_sqs_queue.browser_jobs[0].arn]
+    }
   }
 }
 

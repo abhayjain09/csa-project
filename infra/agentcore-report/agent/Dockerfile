@@ -13,6 +13,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
+# Playwright connects to the remote AgentCore Browser over CDP. No local Chromium
+# binary is installed in this runtime image.
 COPY agent.py .
 COPY config ./config
 

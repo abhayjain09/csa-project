@@ -17,10 +17,14 @@ REPO="$(terraform output -raw ecr_repository_url)"
 echo "==> 1/3 build + push ${REPO}:${TAG}"
 ./scripts/build_and_push.sh "$ACCOUNT" "$REGION" "$REPO" "$TAG"
 
-echo "==> 2/3 terraform apply (image_tag=${TAG})"
+WORKER_REPO="$(terraform output -raw browser_worker_ecr_repository_url)"
+echo "==> 2/4 build + push browser worker ${WORKER_REPO}:${TAG}"
+./scripts/build_and_push_browser_worker.sh "$REGION" "$WORKER_REPO" "$TAG"
+
+echo "==> 3/4 terraform apply (image_tag=${TAG})"
 terraform apply -auto-approve -var "image_tag=${TAG}"
 
-echo "==> 3/3 confirm the DEFAULT endpoint advanced"
+echo "==> 4/4 confirm the DEFAULT endpoint advanced"
 ID="$(terraform output -raw agent_runtime_arn | sed 's#.*/##')"
 aws bedrock-agentcore-control list-agent-runtime-endpoints \
   --agent-runtime-id "$ID" --region "$REGION" \

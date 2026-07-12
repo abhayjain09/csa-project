@@ -74,6 +74,13 @@ class ValidationTests(unittest.TestCase):
             agent._sec_fetch_json = original_fetch
             agent._sec_ticker_cache = None
 
+    def test_browser_control_prioritises_requested_year_and_rejects_neighbour(self):
+        request = agent.DocumentRequest("annual-2024", "annual_report", 2024, allow_browser=True)
+        preferred = agent._browser_control_score("Download 2024 Annual Report", request)
+        rejected = agent._browser_control_score("Download 2024 Proxy Statement", request)
+        self.assertGreater(preferred, 0)
+        self.assertLess(rejected, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

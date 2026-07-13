@@ -1,0 +1,13 @@
+.DS_Store
+.env
+.terraform/
+.env.*
+.venv/
+node_modules/
+dist/
+build/
+coverage/
+__pycache__/
+.pytest_cache/
+*.pyc
+

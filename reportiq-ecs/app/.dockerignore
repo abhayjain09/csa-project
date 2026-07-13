@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.venv/
+logs/
+*.log
+.git/
+.DS_Store
+gunicorn.pid

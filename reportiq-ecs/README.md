@@ -41,6 +41,32 @@ reportiq-ecs/
 
 Existing S3 bucket, provenance table, and AgentCore runtime are **referenced, not modified**.
 
+## Retrieval Contract
+
+The portal accepts only a company name and official website. It stores those two
+values in DynamoDB and sends one typed AgentCore request containing the fixed
+document plan: annual report, sustainability report, code of conduct,
+anti-bribery policy, whistleblowing policy, tax strategy, supplier code, and
+proxy statement. It never generates `web_query1` through `web_query23` or sends
+unscoped search strings.
+
+The optional Fargate browser worker is deployed by `infra/agentcore-report`, but
+it reuses this stack's `reportiq-cluster`, ECS task subnets, `reportiq-tasks-sg`,
+and provider tags. Copy the following values into that stack when enabling it:
+
+```bash
+cd reportiq-ecs/terraform
+terraform output -raw ecs_cluster
+terraform output -json ecs_subnet_ids
+terraform output -raw ecs_task_security_group_id
+```
+
+Those private subnets need NAT egress for the worker to reach public company
+websites. VPC endpoints alone only reach AWS services. Copy the AgentCore
+`browser_worker_results_queue_url` and queue ARN into this stack's optional
+`browser_results_queue_*` variables so the portal can update queued runs when
+the browser worker finishes.
+
 ---
 
 ## Deploy (3 steps from your Mac)

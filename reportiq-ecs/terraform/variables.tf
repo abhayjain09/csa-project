@@ -107,6 +107,18 @@ variable "agent_qualifier" {
   default     = "DEFAULT"
 }
 
+variable "browser_results_queue_url" {
+  description = "Optional result queue URL from infra/agentcore-report. When set, the portal updates queued browser-worker runs as results arrive."
+  type        = string
+  default     = ""
+}
+
+variable "browser_results_queue_arn" {
+  description = "Optional result queue ARN from infra/agentcore-report. Required with browser_results_queue_url to grant the portal SQS consume permission."
+  type        = string
+  default     = ""
+}
+
 variable "manage_dynamo_tables" {
   description = "If true, Terraform creates the queries+runs tables. If false, they must already exist."
   type        = bool

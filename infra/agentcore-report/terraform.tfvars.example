@@ -39,6 +39,7 @@ browser_region = "us-east-1"
 # AgentCore Browser tier fails, but reports login/CAPTCHA/WAF pages for manual
 # review and never attempts to bypass them.
 # enable_fargate_browser_worker = true
+# fargate_ecs_cluster_id        = "reportiq-cluster"
 # fargate_subnet_ids            = ["subnet-...", "subnet-..."]
-# fargate_security_group_ids    = ["sg-..."]
+# fargate_security_group_ids    = ["sg-reportiq-tasks"]
 # fargate_assign_public_ip       = false

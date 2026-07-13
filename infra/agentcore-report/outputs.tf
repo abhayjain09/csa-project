@@ -14,6 +14,10 @@ output "browser_worker_results_queue_url" {
   value = var.enable_fargate_browser_worker ? aws_sqs_queue.browser_results[0].id : ""
 }
 
+output "browser_worker_results_queue_arn" {
+  value = var.enable_fargate_browser_worker ? aws_sqs_queue.browser_results[0].arn : ""
+}
+
 output "region" {
   value = local.region
 }

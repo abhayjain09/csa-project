@@ -245,7 +245,7 @@ tr.detail-row td{padding:0}
   <div class="page-body">
     <div class="breadcrumbs"><a onclick="navTo('dashboard',document.getElementById('nav-dashboard'))">Home</a> / Run Query</div>
     <h1 class="page-title">Run Query</h1>
-    <p class="page-subtitle">Enter company and official site pairs one by one. A query payload is generated for each row and saved to DynamoDB, with optional immediate trigger.</p>
+    <p class="page-subtitle">Enter only the company name and official website. Report IQ uses a fixed, validated document plan and never sends broad web-query batches.</p>
 
     <div id="bulkRunSection" style="margin-top:24px">
       <div class="form-grid" style="margin-top:0;margin-bottom:14px">
@@ -289,7 +289,7 @@ tr.detail-row td{padding:0}
     </div>
     <div class="table-wrapper">
       <table>
-        <thead><tr><th>Company</th><th>Search query</th><th>Web queries</th><th>Created</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>Company</th><th>Official website</th><th>Document plan</th><th>Created</th><th>Status</th><th></th></tr></thead>
         <tbody id="queryTable"><tr><td colspan="6" class="empty-state"><span class="spinner"></span> Loading…</td></tr></tbody>
       </table>
     </div>
@@ -575,16 +575,16 @@ function renderQueriesTable() {
   const co   = document.getElementById('qryCompanyFilter').value;
   const items = allQueries.filter(q =>
     (!co || q.company === co) &&
-    (!txt || (q.company||'').toLowerCase().includes(txt) || (q.search_query||'').toLowerCase().includes(txt))
+    (!txt || (q.company||'').toLowerCase().includes(txt) || (q.official_website||'').toLowerCase().includes(txt))
   );
   if (!items.length) { tb.innerHTML = '<tr><td colspan="6" class="empty-state">No queries found.</td></tr>'; return; }
   const sorted = [...items].sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||''));
   tb.innerHTML = sorted.map(q => {
-    const wqs = Object.keys(q).filter(k=>k.startsWith('web_query')).length;
+    const documentTypes = Array.isArray(q.document_types) ? q.document_types.length : 0;
     return `<tr>
       <td><strong>${escH(q.company||'')}</strong></td>
-      <td style="max-width:320px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escH(q.search_query||'')}</td>
-      <td>${wqs} quer${wqs===1?'y':'ies'}</td>
+      <td style="max-width:320px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escH(q.official_website||'')}</td>
+      <td>${documentTypes || 'Default'} document types</td>
       <td>${fmtDt(q.created_at)}</td>
       <td>${statusBadge(q.status)}</td>
       <td><button class="btn-link" onclick="triggerQuery('${escH(q.query_id)}','${escH(q.company||'')}')">▶ Run</button></td>
@@ -660,40 +660,9 @@ function removeBulkRunRow(btn){
   btn.parentNode.remove();
   syncBulkPreview();
 }
-var BULK_DOC_QUERIES=[
-  'Code of Conduct',
-  'Anti-Corruption and Bribery Policy',
-  'Conflicts of Interest Policy',
-  'Insider Trading Policy',
-  'Discrimination and Harassment Policy',
-  'Supplier Code of Conduct',
-  'Whistleblowing Policy',
-  'Sustainability Report',
-  'GHG Emission Report',
-  'Annual Report',
-  'Environment Policy',
-  'Environment, Health and Safety Policy',
-  'Biodiversity Policy',
-  'Impact Report',
-  'Human Rights Policy',
-  'Human Due Diligence',
-  'Modern Slavery Statement',
-  'Remuneration Report',
-  'Proxy Statement',
-  'Risk Management Policy',
-  'Tax Strategy and Policy Document',
-  'Wolfsberg Questionnaire',
-  'Health and Safety Policy',
-];
 function _buildBulkRecord(company,site,partial){
-  // partial=true: include empty fields so preview shows even incomplete rows
-  const obj={company,search_query:''};
-  if(site){
-    BULK_DOC_QUERIES.forEach((q,i)=>{obj['web_query'+(i+1)]='site:'+site+' '+q;});
-  } else if(partial){
-    obj.web_query1='';
-  }
-  return obj;
+  // The backend owns the typed plan. The UI submits only company identity.
+  return {company,official_website:site};
 }
 function buildBulkPayload(){
   const rows=document.querySelectorAll('#bulkRunRows .bulk-row');

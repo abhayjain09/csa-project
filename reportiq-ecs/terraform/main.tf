@@ -6,15 +6,16 @@ locals {
   acct   = var.account_id
 
   container_env = {
-    AWS_REGION        = var.region
-    QUERIES_TABLE     = var.queries_table
-    PROVENANCE_TABLE  = var.provenance_table
-    RUNS_TABLE        = var.runs_table
-    REPORTS_BUCKET    = var.reports_bucket
-    AGENT_RUNTIME_ARN = var.agent_runtime_arn
-    AGENT_QUALIFIER   = var.agent_qualifier
-    STATIC_DIR        = "/app/static"
-    PORT              = "8080"
+    AWS_REGION                = var.region
+    QUERIES_TABLE             = var.queries_table
+    PROVENANCE_TABLE          = var.provenance_table
+    RUNS_TABLE                = var.runs_table
+    REPORTS_BUCKET            = var.reports_bucket
+    AGENT_RUNTIME_ARN         = var.agent_runtime_arn
+    AGENT_QUALIFIER           = var.agent_qualifier
+    BROWSER_RESULTS_QUEUE_URL = var.browser_results_queue_url
+    STATIC_DIR                = "/app/static"
+    PORT                      = "8080"
   }
 }
 
@@ -155,6 +156,16 @@ data "aws_iam_policy_document" "task_perms" {
     effect    = "Allow"
     actions   = ["bedrock-agentcore:InvokeAgentRuntime"]
     resources = ["arn:aws:bedrock-agentcore:${local.region}:${local.acct}:runtime/*"]
+  }
+
+  dynamic "statement" {
+    for_each = var.browser_results_queue_arn != "" ? [var.browser_results_queue_arn] : []
+    content {
+      sid       = "ConsumeBrowserResults"
+      effect    = "Allow"
+      actions   = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"]
+      resources = [statement.value]
+    }
   }
 }
 

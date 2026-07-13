@@ -57,6 +57,7 @@ REPORTS_BUCKET    = os.environ.get("REPORTS_BUCKET",     "edo-coanalyst-report-6
 AGENT_RUNTIME_ARN = os.environ.get("AGENT_RUNTIME_ARN",
     "arn:aws:bedrock-agentcore:us-east-1:610639371721:runtime/edo_coanalyst_report-3dAfJRHyfY")
 AGENT_QUALIFIER   = os.environ.get("AGENT_QUALIFIER",    "DEFAULT")
+BROWSER_RESULTS_QUEUE_URL = os.environ.get("BROWSER_RESULTS_QUEUE_URL", "")
 STATIC_DIR        = os.environ.get("STATIC_DIR",
     os.path.join(os.path.dirname(__file__), "..", "static"))
 
@@ -70,11 +71,19 @@ STATIC_DIR        = os.environ.get("STATIC_DIR",
 # the durable fix is AgentCore's async invoke pattern, not a bigger number.
 AGENT_READ_TIMEOUT = int(os.environ.get("AGENT_READ_TIMEOUT", "600"))
 
-# Chunking: how many web_query* fields per AgentCore invoke, and how many
-# invokes may run concurrently. concurrency=2 is the "mix of both" — faster
-# than pure sequential, capped low enough to avoid WebSearch 429 throttling.
-AGENT_CHUNK_SIZE        = int(os.environ.get("AGENT_CHUNK_SIZE",        "3"))
-AGENT_CHUNK_CONCURRENCY = int(os.environ.get("AGENT_CHUNK_CONCURRENCY", "2"))
+# The UI intentionally collects only a company name and its official website.
+# Document selection is a server-side policy, not a set of user-authored search
+# strings. This keeps every AgentCore run inside one verified company scope.
+DEFAULT_DOCUMENT_REQUESTS = (
+    "annual_report",
+    "sustainability_report",
+    "code_of_conduct",
+    "anti_bribery_policy",
+    "whistleblowing_policy",
+    "tax_strategy",
+    "supplier_code_of_conduct",
+    "proxy_statement",
+)
 
 # A run is considered "stx`uck" if it has been running for more than this many minutes
 # (used only as a cheap outer gate for whether it's worth spawning a reconcile check —
@@ -125,6 +134,10 @@ def get_s3():
         config=Config(signature_version="s3v4", s3={"addressing_style": "virtual"}),
     )
 
+
+def get_sqs():
+    return boto3.client("sqs", region_name=REGION)
+
 # ─── Company slug (MUST match agent._slug so S3 keys / provenance line up) ─────
 def _agent_slug(name: str) -> str:
     """
@@ -137,6 +150,33 @@ def _agent_slug(name: str) -> str:
     s = unicodedata.normalize("NFKD", name or "unknown")
     s = "".join(c for c in s if not unicodedata.combining(c))
     return re.sub(r"[^a-z0-9]+", "-", s.lower()).strip("-") or "unknown"
+
+
+def _official_domain(value: str) -> str:
+    """Normalize a UI website value to the exact domain sent to AgentCore."""
+    value = (value or "").strip().lower()
+    value = re.sub(r"^https?://", "", value)
+    return value.split("/", 1)[0].removeprefix("www.")
+
+
+def _structured_agent_payload(company: str, website: str, run_id: str) -> dict:
+    domain = _official_domain(website)
+    return {
+        "run_id": run_id,
+        "company": {
+            "legal_name": company,
+            "official_domains": [domain],
+        },
+        "requests": [
+            {
+                "id": document_type,
+                "document_type": document_type,
+                "allow_search": True,
+                "allow_browser": True,
+            }
+            for document_type in DEFAULT_DOCUMENT_REQUESTS
+        ],
+    }
 
 
 # ─── AgentCore invoke ─────────────────────────────────────────────────────────
@@ -611,6 +651,67 @@ _reconciler_thread.start()
 log.info("Background reconciler started (every 60s)")
 
 
+def _consume_browser_results():
+    """Merge asynchronous Fargate browser outcomes into the originating run."""
+    if not BROWSER_RESULTS_QUEUE_URL:
+        return
+    sqs = get_sqs()
+    while True:
+        try:
+            messages = sqs.receive_message(
+                QueueUrl=BROWSER_RESULTS_QUEUE_URL,
+                MaxNumberOfMessages=10,
+                WaitTimeSeconds=20,
+                VisibilityTimeout=60,
+            ).get("Messages", [])
+            for message in messages:
+                try:
+                    result = json.loads(message["Body"])
+                    run_id = str(result.get("run_id", ""))
+                    if not run_id:
+                        raise ValueError("browser result has no run_id")
+                    runs = get_dynamo().Table(RUNS_TABLE)
+                    row = runs.get_item(Key={"run_id": run_id}).get("Item", {})
+                    downloaded = json.loads(row.get("downloaded", "[]"))
+                    if result.get("status") in {"stored", "duplicate"} and isinstance(result.get("document"), dict):
+                        document = result["document"]
+                        if not any(item.get("s3_key") == document.get("s3_key") for item in downloaded if isinstance(item, dict)):
+                            downloaded.append(document)
+                    status = "complete" if downloaded else result.get("status", "no_results")
+                    runs.update_item(
+                        Key={"run_id": run_id},
+                        UpdateExpression="SET #st = :s, #fin = :f, #dl = :d, #dg = :dx",
+                        ExpressionAttributeNames={"#st": "status", "#fin": "finished_at", "#dl": "downloaded", "#dg": "diagnostics"},
+                        ExpressionAttributeValues={
+                            ":s": status,
+                            ":f": datetime.now(timezone.utc).isoformat(),
+                            ":d": json.dumps(downloaded),
+                            ":dx": json.dumps({"browser_result": result}),
+                        },
+                    )
+                    query_id = row.get("query_id")
+                    if query_id:
+                        get_dynamo().Table(QUERIES_TABLE).update_item(
+                            Key={"query_id": query_id},
+                            UpdateExpression="SET #st = :s, #upd = :u",
+                            ExpressionAttributeNames={"#st": "status", "#upd": "updated_at"},
+                            ExpressionAttributeValues={":s": status, ":u": datetime.now(timezone.utc).isoformat()},
+                        )
+                    log.info("[browser-result] run=%s status=%s", run_id[:8], status)
+                    sqs.delete_message(QueueUrl=BROWSER_RESULTS_QUEUE_URL, ReceiptHandle=message["ReceiptHandle"])
+                except Exception:
+                    log.exception("[browser-result] unable to process result")
+        except Exception:
+            log.exception("[browser-result] poll failed; retrying")
+            import time
+            time.sleep(5)
+
+
+if BROWSER_RESULTS_QUEUE_URL:
+    threading.Thread(target=_consume_browser_results, daemon=True).start()
+    log.info("Browser result consumer started")
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Routes — static
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -638,23 +739,22 @@ def save_query():
     table  = dynamo.Table(QUERIES_TABLE)
 
     for item in items:
-        web_queries = {k: v for k, v in item.items() if k.startswith("web_query")}
-        if not web_queries:
-            return jsonify({"error": "At least one web_query<N> field required"}), 400
-
         query_id = str(uuid.uuid4())
-        company  = item.get("company", "Unknown")
+        company  = str(item.get("company", "")).strip()
+        website  = _official_domain(str(item.get("official_website", item.get("website", ""))))
+        if not company or not website or "." not in website:
+            return jsonify({"error": "company and official_website are required"}), 400
         now_iso  = datetime.now(timezone.utc).isoformat()
 
         record = {
             "query_id":     query_id,
             "company":      company,
-            "search_query": item.get("search_query", ""),
+            "official_website": website,
+            "document_types": list(DEFAULT_DOCUMENT_REQUESTS),
             "status":       "pending",
             "created_at":   now_iso,
             "updated_at":   now_iso,
             "run_id":       None,
-            **web_queries,
         }
         table.put_item(Item=record)
         log.info("Saved query %s for %s", query_id, company)
@@ -695,6 +795,8 @@ def trigger_query(query_id):
     item   = resp.get("Item")
     if not item:
         return jsonify({"error": "Query not found"}), 404
+    if not item.get("official_website"):
+        return jsonify({"error": "This is a legacy web-query record. Submit the company and official website again to use the registry-first workflow."}), 409
     run_id = _async_invoke(item)
     return jsonify({"run_id": run_id, "query_id": query_id, "status": "triggered"})
 
@@ -981,6 +1083,75 @@ def _do_invoke(run_id: str, query_record: dict):
             log.error("[run %s] Could not write fatal status: %s", run_id[:8], ex2)
 
 
+def _do_structured_invoke(run_id: str, query_record: dict) -> None:
+    """Invoke the registry-first contract once for a company website pair."""
+    dynamo = get_dynamo()
+    runs_tbl = dynamo.Table(RUNS_TABLE)
+    queries_tbl = dynamo.Table(QUERIES_TABLE)
+    company = str(query_record["company"])
+    website = _official_domain(str(query_record["official_website"]))
+    query_id = str(query_record.get("query_id", "unknown"))
+    now_iso = datetime.now(timezone.utc).isoformat()
+    payload = _structured_agent_payload(company, website, run_id)
+
+    runs_tbl.put_item(Item={
+        "run_id": run_id,
+        "query_id": query_id,
+        "company": company,
+        "official_website": website,
+        "status": "running",
+        "started_at": now_iso,
+        "heartbeat_at": now_iso,
+        "payload": json.dumps(payload),
+        "downloaded": json.dumps([]),
+        "failures": json.dumps([]),
+        "diagnostics": json.dumps({"request_count": len(DEFAULT_DOCUMENT_REQUESTS)}),
+    })
+    queries_tbl.update_item(
+        Key={"query_id": query_id},
+        UpdateExpression="SET #st = :s, #rid = :r, #upd = :u",
+        ExpressionAttributeNames={"#st": "status", "#rid": "run_id", "#upd": "updated_at"},
+        ExpressionAttributeValues={":s": "running", ":r": run_id, ":u": now_iso},
+    )
+
+    raw = _invoke_agentcore_http(json.dumps(payload).encode("utf-8"))
+    try:
+        response = json.loads(raw.decode("utf-8")) if raw else {}
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise RuntimeError("AgentCore returned invalid JSON") from exc
+    if not isinstance(response, dict) or response.get("status") == "invalid_request":
+        raise RuntimeError(str(response.get("error", "AgentCore returned an invalid response")))
+
+    downloaded = response.get("downloaded") if isinstance(response.get("downloaded"), list) else []
+    queued = response.get("queued") if isinstance(response.get("queued"), list) else []
+    results = response.get("results") if isinstance(response.get("results"), list) else []
+    failures = [item for item in results if isinstance(item, dict) and item.get("status") == "not_found"]
+    if downloaded:
+        status = "complete"
+    elif queued:
+        status = "queued_browser_worker"
+    else:
+        status = "no_results"
+    finished_at = datetime.now(timezone.utc).isoformat()
+    runs_tbl.update_item(
+        Key={"run_id": run_id},
+        UpdateExpression="SET #st = :s, #fin = :f, #hb = :h, #dl = :d, #fl = :fa, #dg = :dx",
+        ExpressionAttributeNames={"#st": "status", "#fin": "finished_at", "#hb": "heartbeat_at", "#dl": "downloaded", "#fl": "failures", "#dg": "diagnostics"},
+        ExpressionAttributeValues={
+            ":s": status, ":f": finished_at, ":h": finished_at,
+            ":d": json.dumps(downloaded), ":fa": json.dumps(failures),
+            ":dx": json.dumps({"request_count": len(DEFAULT_DOCUMENT_REQUESTS), "agent_results": results, "queued": queued, "diagnostics": response.get("diagnostics", [])}),
+        },
+    )
+    queries_tbl.update_item(
+        Key={"query_id": query_id},
+        UpdateExpression="SET #st = :s, #upd = :u",
+        ExpressionAttributeNames={"#st": "status", "#upd": "updated_at"},
+        ExpressionAttributeValues={":s": status, ":u": finished_at},
+    )
+    log.info("[run %s] structured company=%s status=%s downloaded=%d queued=%d", run_id[:8], company, status, len(downloaded), len(queued))
+
+
 # ─── Chunking helpers (PATCH #6) ──────────────────────────────────────────────
 def _chunk_web_queries(query_record: dict, size: int) -> list:
     """
@@ -1044,6 +1215,9 @@ def _invoke_one_chunk(chunk_index: int, chunk_queries: list, company: str,
 
 
 def _do_invoke_inner(run_id: str, query_record: dict):
+    if query_record.get("official_website"):
+        _do_structured_invoke(run_id, query_record)
+        return
     dynamo   = get_dynamo()
     runs_tbl = dynamo.Table(RUNS_TABLE)
     qry_tbl  = dynamo.Table(QUERIES_TABLE)
@@ -1350,4 +1524,4 @@ def health():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
-    app.run(host="0.0.0.0", port=port, debug=False, threaded=True)  
+    app.run(host="0.0.0.0", port=port, debug=False, threaded=True)

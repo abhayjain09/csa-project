@@ -1,6 +1,7 @@
-# Optional long-running browser worker. It is intentionally disabled by default:
-# the caller must provide approved subnets and security groups before Terraform
-# creates an internet-facing browser workload.
+# Optional long-running browser worker. It intentionally reuses the Report IQ
+# ECS cluster, task subnets, and task security groups rather than creating a
+# second cluster or another network boundary. The selected private subnets must
+# have NAT egress: this service fetches public company websites.
 
 resource "aws_sqs_queue" "browser_dead_letter" {
   count                     = var.enable_fargate_browser_worker ? 1 : 0
@@ -99,11 +100,6 @@ resource "aws_iam_role_policy" "browser_worker_task" {
   policy = data.aws_iam_policy_document.browser_worker_task[0].json
 }
 
-resource "aws_ecs_cluster" "browser_worker" {
-  count = var.enable_fargate_browser_worker ? 1 : 0
-  name  = "${var.name}-browser-worker"
-}
-
 resource "aws_ecs_task_definition" "browser_worker" {
   count                    = var.enable_fargate_browser_worker ? 1 : 0
   family                   = "${var.name}-browser-worker"
@@ -149,7 +145,7 @@ resource "aws_ecs_task_definition" "browser_worker" {
 resource "aws_ecs_service" "browser_worker" {
   count           = var.enable_fargate_browser_worker ? 1 : 0
   name            = "${var.name}-browser-worker"
-  cluster         = aws_ecs_cluster.browser_worker[0].id
+  cluster         = var.fargate_ecs_cluster_id
   task_definition = aws_ecs_task_definition.browser_worker[0].arn
   desired_count   = 1
   launch_type     = "FARGATE"
@@ -162,8 +158,8 @@ resource "aws_ecs_service" "browser_worker" {
 
   lifecycle {
     precondition {
-      condition     = length(var.fargate_subnet_ids) > 0 && length(var.fargate_security_group_ids) > 0
-      error_message = "fargate_subnet_ids and fargate_security_group_ids are required when enable_fargate_browser_worker is true."
+      condition     = var.fargate_ecs_cluster_id != "" && length(var.fargate_subnet_ids) > 0 && length(var.fargate_security_group_ids) > 0
+      error_message = "fargate_ecs_cluster_id, fargate_subnet_ids, and fargate_security_group_ids are required when enable_fargate_browser_worker is true. Reuse the outputs/resources from reportiq-ecs."
     }
   }
 

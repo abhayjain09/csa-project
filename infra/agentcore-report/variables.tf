@@ -92,9 +92,15 @@ variable "browser_region" {
 }
 
 variable "enable_fargate_browser_worker" {
-  description = "Deploy the optional SQS-driven Fargate browser worker for long-running dynamic-site attempts. It detects login/WAF/CAPTCHA and sends those jobs to manual review; it never bypasses them."
+  description = "Deploy the optional SQS-driven Fargate browser worker for long-running dynamic-site attempts. It reuses the existing Report IQ ECS cluster, task subnets, and task security group; it never bypasses login/WAF/CAPTCHA."
   type        = bool
   default     = false
+}
+
+variable "fargate_ecs_cluster_id" {
+  description = "Existing ECS cluster ID or ARN for the browser-worker service. Use the reportiq-ecs Terraform output ecs_cluster; no second cluster is created."
+  type        = string
+  default     = ""
 }
 
 variable "fargate_subnet_ids" {
@@ -104,7 +110,7 @@ variable "fargate_subnet_ids" {
 }
 
 variable "fargate_security_group_ids" {
-  description = "Security groups for the Fargate browser worker. Required when enable_fargate_browser_worker is true."
+  description = "Existing ECS task security groups for the Fargate browser worker. Use reportiq-ecs reportiq-tasks-sg; it already permits outbound HTTPS."
   type        = list(string)
   default     = []
 }

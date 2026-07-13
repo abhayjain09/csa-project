@@ -130,10 +130,17 @@ approved network placement:
 
 ```hcl
 enable_fargate_browser_worker = true
+fargate_ecs_cluster_id        = "reportiq-cluster"
 fargate_subnet_ids            = ["subnet-...", "subnet-..."]
 fargate_security_group_ids    = ["sg-..."]
 fargate_assign_public_ip       = false
 ```
+
+Use the existing values from `reportiq-ecs`: its `ecs_cluster` output, the
+configured `subnet_ids`, and `reportiq-tasks-sg`. These resources share the
+same organisation tags through the Terraform AWS provider. The worker needs a
+NAT route from those private subnets to public company websites; AWS VPC
+endpoints alone are not sufficient.
 
 When the runtime has no validated result, it returns `queued_browser_worker` and
 a `browser_job_id`. The Fargate worker has a 10-minute / 40-page budget for normal

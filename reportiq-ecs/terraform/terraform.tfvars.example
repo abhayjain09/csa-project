@@ -1,0 +1,20 @@
+# Network — these are the actual values for your environment
+vpc_id     = "vpc-0ddfa2c6e06a4bc99"
+subnet_ids = ["subnet-0eb319a33bfde7293", "subnet-0ccac81dc574f7dee"]  # us-east-1a, us-east-1b
+
+region           = "us-east-1"
+account_id       = "610639371721"
+app_name         = "reportiq"
+image_tag        = "latest"
+cpu              = 512
+memory           = 1024
+desired_count    = 1
+cpu_architecture = "ARM64"      # build on Apple Silicon natively; X86_64 if you build amd64
+assign_public_ip = false
+
+# Tables already exist (created earlier via CLI):
+manage_dynamo_tables = false
+
+# Your EC2 had no outbound internet → subnets are private with only an S3 endpoint.
+# Fargate needs ECR + logs endpoints to pull the image. Keep true unless you add NAT.
+create_vpc_endpoints = true

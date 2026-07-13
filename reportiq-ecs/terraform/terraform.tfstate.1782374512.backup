@@ -1,0 +1,1798 @@
+{
+  "version": 4,
+  "terraform_version": "1.15.3",
+  "serial": 53,
+  "lineage": "81dc7ebe-4982-8817-db68-e0f48227e354",
+  "outputs": {
+    "alb_dns_name": {
+      "value": "internal-reportiq-internal-alb-466021085.us-east-1.elb.amazonaws.com",
+      "type": "string"
+    },
+    "certificate_arn": {
+      "value": "arn:aws:acm:us-east-1:610639371721:certificate/c69d7fdd-81dd-464b-ac95-d7e9f7b263cf",
+      "type": "string"
+    },
+    "ecr_repository_url": {
+      "value": "610639371721.dkr.ecr.us-east-1.amazonaws.com/reportiq",
+      "type": "string"
+    },
+    "ecs_cluster": {
+      "value": "reportiq-cluster",
+      "type": "string"
+    },
+    "ecs_service": {
+      "value": "reportiq",
+      "type": "string"
+    },
+    "log_group": {
+      "value": "/ecs/reportiq",
+      "type": "string"
+    },
+    "portal_url": {
+      "value": "https://internal-reportiq-internal-alb-466021085.us-east-1.elb.amazonaws.com",
+      "type": "string"
+    },
+    "target_group_arn": {
+      "value": "arn:aws:elasticloadbalancing:us-east-1:610639371721:targetgroup/reportiq-tg/ef67a022a8d544ee",
+      "type": "string"
+    }
+  },
+  "resources": [
+    {
+      "mode": "data",
+      "type": "aws_caller_identity",
+      "name": "current",
+      "provider": "provider[\"registry.terraform.io/hashicorp/aws\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "account_id": "610639371721",
+            "arn": "arn:aws:sts::610639371721:assumed-role/ADFS-MHF-SystemAdministrator/abhay.lunkad@spglobal.com",
+            "id": "610639371721",
+            "user_id": "AROAY4LHRLXE2PLEG667L:abhay.lunkad@spglobal.com"
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0
+        }
+      ]
+    },
+    {
+      "mode": "data",
+      "type": "aws_iam_policy_document",
+      "name": "ecs_assume",
+      "provider": "provider[\"registry.terraform.io/hashicorp/aws\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "id": "1077804475",
+            "json": "{\n  \"Version\": \"2012-10-17\",\n  \"Statement\": [\n    {\n      \"Effect\": \"Allow\",\n      \"Action\": \"sts:AssumeRole\",\n      \"Principal\": {\n        \"Service\": \"ecs-tasks.amazonaws.com\"\n      }\n    }\n  ]\n}",
+            "minified_json": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"sts:AssumeRole\",\"Principal\":{\"Service\":\"ecs-tasks.amazonaws.com\"}}]}",
+            "override_json": null,
+            "override_policy_documents": null,
+            "policy_id": null,
+            "source_json": null,
+            "source_policy_documents": null,
+            "statement": [
+              {
+                "actions": [
+                  "sts:AssumeRole"
+                ],
+                "condition": [],
+                "effect": "Allow",
+                "not_actions": [],
+                "not_principals": [],
+                "not_resources": [],
+                "principals": [
+                  {
+                    "identifiers": [
+                      "ecs-tasks.amazonaws.com"
+                    ],
+                    "type": "Service"
+                  }
+                ],
+                "resources": [],
+                "sid": ""
+              }
+            ],
+            "version": "2012-10-17"
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0
+        }
+      ]
+    },
+    {
+      "mode": "data",
+      "type": "aws_iam_policy_document",
+      "name": "task_perms",
+      "provider": "provider[\"registry.terraform.io/hashicorp/aws\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "id": "2842579292",
+            "json": "{\n  \"Version\": \"2012-10-17\",\n  \"Statement\": [\n    {\n      \"Sid\": \"DynamoPortalTables\",\n      \"Effect\": \"Allow\",\n      \"Action\": [\n        \"dynamodb:UpdateItem\",\n        \"dynamodb:Scan\",\n        \"dynamodb:Query\",\n        \"dynamodb:PutItem\",\n        \"dynamodb:GetItem\",\n        \"dynamodb:DescribeTable\",\n        \"dynamodb:DeleteItem\"\n      ],\n      \"Resource\": [\n        \"arn:aws:dynamodb:us-east-1:610639371721:table/reportiq-web-queries/index/*\",\n        \"arn:aws:dynamodb:us-east-1:610639371721:table/reportiq-web-queries\",\n        \"arn:aws:dynamodb:us-east-1:610639371721:table/reportiq-runs/index/*\",\n        \"arn:aws:dynamodb:us-east-1:610639371721:table/reportiq-runs\",\n        \"arn:aws:dynamodb:us-east-1:610639371721:table/edo-coanalyst-report-provenance/index/*\",\n        \"arn:aws:dynamodb:us-east-1:610639371721:table/edo-coanalyst-report-provenance\"\n      ]\n    },\n    {\n      \"Sid\": \"S3ReportsBucket\",\n      \"Effect\": \"Allow\",\n      \"Action\": [\n        \"s3:PutObject\",\n        \"s3:ListBucket\",\n        \"s3:GetObject\"\n      ],\n      \"Resource\": [\n        \"arn:aws:s3:::edo-coanalyst-report-610639371721/*\",\n        \"arn:aws:s3:::edo-coanalyst-report-610639371721\"\n      ]\n    },\n    {\n      \"Sid\": \"AgentCoreInvoke\",\n      \"Effect\": \"Allow\",\n      \"Action\": \"bedrock-agentcore:InvokeAgentRuntime\",\n      \"Resource\": \"arn:aws:bedrock-agentcore:us-east-1:610639371721:runtime/*\"\n    }\n  ]\n}",
+            "minified_json": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Sid\":\"DynamoPortalTables\",\"Effect\":\"Allow\",\"Action\":[\"dynamodb:UpdateItem\",\"dynamodb:Scan\",\"dynamodb:Query\",\"dynamodb:PutItem\",\"dynamodb:GetItem\",\"dynamodb:DescribeTable\",\"dynamodb:DeleteItem\"],\"Resource\":[\"arn:aws:dynamodb:us-east-1:610639371721:table/reportiq-web-queries/index/*\",\"arn:aws:dynamodb:us-east-1:610639371721:table/reportiq-web-queries\",\"arn:aws:dynamodb:us-east-1:610639371721:table/reportiq-runs/index/*\",\"arn:aws:dynamodb:us-east-1:610639371721:table/reportiq-runs\",\"arn:aws:dynamodb:us-east-1:610639371721:table/edo-coanalyst-report-provenance/index/*\",\"arn:aws:dynamodb:us-east-1:610639371721:table/edo-coanalyst-report-provenance\"]},{\"Sid\":\"S3ReportsBucket\",\"Effect\":\"Allow\",\"Action\":[\"s3:PutObject\",\"s3:ListBucket\",\"s3:GetObject\"],\"Resource\":[\"arn:aws:s3:::edo-coanalyst-report-610639371721/*\",\"arn:aws:s3:::edo-coanalyst-report-610639371721\"]},{\"Sid\":\"AgentCoreInvoke\",\"Effect\":\"Allow\",\"Action\":\"bedrock-agentcore:InvokeAgentRuntime\",\"Resource\":\"arn:aws:bedrock-agentcore:us-east-1:610639371721:runtime/*\"}]}",
+            "override_json": null,
+            "override_policy_documents": null,
+            "policy_id": null,
+            "source_json": null,
+            "source_policy_documents": null,
+            "statement": [
+              {
+                "actions": [
+                  "dynamodb:DeleteItem",
+                  "dynamodb:DescribeTable",
+                  "dynamodb:GetItem",
+                  "dynamodb:PutItem",
+                  "dynamodb:Query",
+                  "dynamodb:Scan",
+                  "dynamodb:UpdateItem"
+                ],
+                "condition": [],
+                "effect": "Allow",
+                "not_actions": [],
+                "not_principals": [],
+                "not_resources": [],
+                "principals": [],
+                "resources": [
+                  "arn:aws:dynamodb:us-east-1:610639371721:table/edo-coanalyst-report-provenance",
+                  "arn:aws:dynamodb:us-east-1:610639371721:table/edo-coanalyst-report-provenance/index/*",
+                  "arn:aws:dynamodb:us-east-1:610639371721:table/reportiq-runs",
+                  "arn:aws:dynamodb:us-east-1:610639371721:table/reportiq-runs/index/*",
+                  "arn:aws:dynamodb:us-east-1:610639371721:table/reportiq-web-queries",
+                  "arn:aws:dynamodb:us-east-1:610639371721:table/reportiq-web-queries/index/*"
+                ],
+                "sid": "DynamoPortalTables"
+              },
+              {
+                "actions": [
+                  "s3:GetObject",
+                  "s3:ListBucket",
+                  "s3:PutObject"
+                ],
+                "condition": [],
+                "effect": "Allow",
+                "not_actions": [],
+                "not_principals": [],
+                "not_resources": [],
+                "principals": [],
+                "resources": [
+                  "arn:aws:s3:::edo-coanalyst-report-610639371721",
+                  "arn:aws:s3:::edo-coanalyst-report-610639371721/*"
+                ],
+                "sid": "S3ReportsBucket"
+              },
+              {
+                "actions": [
+                  "bedrock-agentcore:InvokeAgentRuntime"
+                ],
+                "condition": [],
+                "effect": "Allow",
+                "not_actions": [],
+                "not_principals": [],
+                "not_resources": [],
+                "principals": [],
+                "resources": [
+                  "arn:aws:bedrock-agentcore:us-east-1:610639371721:runtime/*"
+                ],
+                "sid": "AgentCoreInvoke"
+              }
+            ],
+            "version": "2012-10-17"
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0
+        }
+      ]
+    },
+    {
+      "mode": "data",
+      "type": "aws_route_tables",
+      "name": "selected",
+      "provider": "provider[\"registry.terraform.io/hashicorp/aws\"]",
+      "instances": [
+        {
+          "index_key": 0,
+          "schema_version": 0,
+          "attributes": {
+            "filter": null,
+            "id": "us-east-1",
+            "ids": [
+              "rtb-017ab1cfe1259120d",
+              "rtb-0a9ccc5e601c29663",
+              "rtb-06fdfafd7178f3e23"
+            ],
+            "tags": null,
+            "timeouts": null,
+            "vpc_id": "vpc-0ddfa2c6e06a4bc99"
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "aws_acm_certificate",
+      "name": "cert",
+      "provider": "provider[\"registry.terraform.io/hashicorp/aws\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "arn": "arn:aws:acm:us-east-1:610639371721:certificate/c69d7fdd-81dd-464b-ac95-d7e9f7b263cf",
+            "certificate_authority_arn": "",
+            "certificate_body": "-----BEGIN CERTIFICATE-----\nMIIDhzCCAm+gAwIBAgIQFkYOsUa7eGvgJJVbxm1LuzANBgkqhkiG9w0BAQsFADAx\nMRMwEQYDVQQKDApTJlAgR2xvYmFsMRowGAYDVQQDExFyZXBvcnRpcS1pbnRlcm5h\nbDAeFw0yNjA2MjUwNjQ3MzhaFw0yODA5MjcwNjQ3MzhaMDExEzARBgNVBAoMClMm\nUCBHbG9iYWwxGjAYBgNVBAMTEXJlcG9ydGlxLWludGVybmFsMIIBIjANBgkqhkiG\n9w0BAQEFAAOCAQ8AMIIBCgKCAQEAw5kVPdVF2qJo5xkR0tbIZlxtI6UNNQmcLldO\ny8A87GWF6IwkKHbsqAdS1PR0kIXyRHFut4gqpfCAl064e/bR9s1BDlHr8TzyUAOQ\nyGWDGiTzW/jeJa1MDcSnpHnee+mj46aH60E9uK1Jf7tb/7G6VU+dXcgc+7s8nIRC\nOOWybB4qCO9Ktkwp/gDZ776/o0+Bhyu5lQz92c30ZaafGpscTq99MUi+Kp5Ur44z\nLnxSTDCV5oLPpMqNVXEDUsxKwp87F0Ct+I2gy/7mQrdTZj/F8FpdXRZz/FDOYRj/\n8NGt9EusuRucvX7X/F3T57klvW4cWYLr3jsuuc1HP7KFsP11OwIDAQABo4GaMIGX\nMA4GA1UdDwEB/wQEAwIFoDATBgNVHSUEDDAKBggrBgEFBQcDATAMBgNVHRMBAf8E\nAjAAMGIGA1UdEQRbMFmCEXJlcG9ydGlxLWludGVybmFsgkRpbnRlcm5hbC1yZXBv\ncnRpcS1pbnRlcm5hbC1hbGItNDY2MDIxMDg1LnVzLWVhc3QtMS5lbGIuYW1hem9u\nYXdzLmNvbTANBgkqhkiG9w0BAQsFAAOCAQEAYT+eX44RqKcjvCe3jIbHRopRlKYD\nvZo//m4/PNLgMr2IvhUwHFFd+ReuIuv1yLxnCNPO7fisMDF4aBl0/RnsQRgYPHVq\nA3X4yhCeykmsXxUUQJLSXM0QaufbubKNi64UlxaCNK8Jeoom1dvzVfC4AwuJuObV\n4KsGF6M1riIZzRnfKYg7PfdwLDypj4MIXT69NPqQM91VmKH4FVSd6PSIWsms7JGT\n07UXaS65WQwA2EaMXauEvloyimvvRr/0PkCKpIdZJumjnIgY05uTQ/bu6CmlyIbd\nfnPWZxzjRKAayu2/KZi+xGVMU20IWuLzBVWRNJmixGIPOCDb5uhIpH0Emw==\n-----END CERTIFICATE-----\n",
+            "certificate_chain": null,
+            "domain_name": "reportiq-internal",
+            "domain_validation_options": [],
+            "early_renewal_duration": "",
+            "id": "arn:aws:acm:us-east-1:610639371721:certificate/c69d7fdd-81dd-464b-ac95-d7e9f7b263cf",
+            "key_algorithm": "RSA_2048",
+            "not_after": "2028-09-27T06:47:38Z",
+            "not_before": "2026-06-25T06:47:38Z",
+            "options": [
+              {
+                "certificate_transparency_logging_preference": "DISABLED"
+              }
+            ],
+            "pending_renewal": false,
+            "private_key": "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEAw5kVPdVF2qJo5xkR0tbIZlxtI6UNNQmcLldOy8A87GWF6Iwk\nKHbsqAdS1PR0kIXyRHFut4gqpfCAl064e/bR9s1BDlHr8TzyUAOQyGWDGiTzW/je\nJa1MDcSnpHnee+mj46aH60E9uK1Jf7tb/7G6VU+dXcgc+7s8nIRCOOWybB4qCO9K\ntkwp/gDZ776/o0+Bhyu5lQz92c30ZaafGpscTq99MUi+Kp5Ur44zLnxSTDCV5oLP\npMqNVXEDUsxKwp87F0Ct+I2gy/7mQrdTZj/F8FpdXRZz/FDOYRj/8NGt9EusuRuc\nvX7X/F3T57klvW4cWYLr3jsuuc1HP7KFsP11OwIDAQABAoIBAE8aMcT343AwDkyn\njtW9lv4OkvS/Yz/3yvnSxUMRU5Im3KjXRCg5MCwkChOlaR6pjPixBx2iK91ADkEi\nzOkVQISXLaAk8U52X2iMiJkCtKp2FxUy6GREWWWYClQyFQ/3xRfj2UQC9nshWYAW\nvXYC4mBt+i5bJ52Gc1S5CC8KdcXTF4xjmXMmSwdXknXxZmVusjH43T/LIKU1TuwK\nwR4Yw4vL9CbkWJGyBRuhD5hWi/0pVlJbu2vn3UvJGeg04A0JZbvHKbHZxI7g0W4+\n5Ooe7Z1QbHb14l0/wgnmDujKYdAXZVbPNWsaZCohHTRPdfObqFcIvGchYLfeYs3F\nlHoANsECgYEAzrH2LsmznPBEZKaPyseNBrmGNgTtJNZx00l1wAiddKVL8wtYgL0R\nXCNGwPTQYoyLQpWfe24LGbWTov49dSM2X3b8eMz1soty+MlPQUV99XnL3ifdroSu\nnbA7JwmmNB/GcepMuGX4/98DvxT2TMnqNL68/lK0eOUyNHpaTUizsrUCgYEA8kF2\nE+Zqq13rMJ2ajbZjcIUPJsD0zaanbdPZRekE00akD8zW+jiEe4utuOpBLtfvUVk2\nph//k0U9rb5arH7xD4CdewOIkazAeBusWSFqWH8630MboJQgTc5iIMbH2RTz/ADp\n0Z6xC8P5pzM6XUmUetuX6xLZi+/37XxlkQqqzi8CgYEAlXl5EQjojVvr+eXCIuEA\niZZtCm+xl2xFUIjVUJRqWcqYDCFuVVtlTH5uUmg4sqv0oahWdwpzmJoJNFwr0aQv\nVAZWOn3uSLoz4NqkKA27M2RrHDM0S1rEdGDXxjliKlu4RPUtmkSUN2Xt7aeZHpr+\ndjphroHc5XjKP80jtLQYz+kCgYAyvsOdJ4bwnpvFcz4MsUfjKfwiggjFi0NHHjlF\nC6qXFxUGukHN6EjYGEorkeZViaX3xFhONCW1E6v32QflWjHkrWxPeE4DNcybXDCd\n+wHrx7rtSYFgAadCpRipBPqX3mu9PfO8lSFA9aw1+eUf5WnU0mrgMvKe/YVRmd0s\npK9iwQKBgDRYWScWJLZ3TroX0DA5QwQM/DCF1j3znTGVyYf0zeT/u2gMLGc4aO5i\nvi8E9xxZ+Ci9wD/xgLJqJiavhndMl8jWV/EG7R9UTputoBMmZvS4Gx6uFguhKj+V\nKxDyq60GcasWK9Taetj4j+hSiootV3/51mGVsjxKTmHk3jXE5aZc\n-----END RSA PRIVATE KEY-----\n",
+            "renewal_eligibility": "INELIGIBLE",
+            "renewal_summary": [],
+            "status": "ISSUED",
+            "subject_alternative_names": [
+              "internal-reportiq-internal-alb-466021085.us-east-1.elb.amazonaws.com",
+              "reportiq-internal"
+            ],
+            "tags": {
+              "Name": "reportiq-selfsigned"
+            },
+            "tags_all": {
+              "AppID": "ASP0017650",
+              "CreatedBy": "Abhay.Lunkad",
+              "Environment": "NonProd",
+              "Name": "reportiq-selfsigned",
+              "Owner": "anuthama.c@spglobal.com",
+              "contact": "askdevopscloud@spglobal.com"
+            },
+            "type": "IMPORTED",
+            "validation_emails": [],
+            "validation_method": "NONE",
+            "validation_option": []
+          },
+          "sensitive_attributes": [
+            [
+              {
+                "type": "get_attr",
+                "value": "private_key"
+              }
+            ]
+          ],
+          "identity_schema_version": 0,
+          "private": "bnVsbA==",
+          "dependencies": [
+            "aws_lb.app",
+            "aws_security_group.alb",
+            "tls_private_key.cert",
+            "tls_self_signed_cert.cert"
+          ],
+          "create_before_destroy": true
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "aws_cloudwatch_log_group",
+      "name": "app",
+      "provider": "provider[\"registry.terraform.io/hashicorp/aws\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "arn": "arn:aws:logs:us-east-1:610639371721:log-group:/ecs/reportiq",
+            "id": "/ecs/reportiq",
+            "kms_key_id": "",
+            "log_group_class": "STANDARD",
+            "name": "/ecs/reportiq",
+            "name_prefix": "",
+            "retention_in_days": 30,
+            "skip_destroy": false,
+            "tags": {},
+            "tags_all": {
+              "AppID": "ASP0017650",
+              "CreatedBy": "Abhay.Lunkad",
+              "Environment": "NonProd",
+              "Name": "EDO-CoAnalyst-tool",
+              "Owner": "anuthama.c@spglobal.com",
+              "contact": "askdevopscloud@spglobal.com"
+            }
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "bnVsbA=="
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "aws_ecr_lifecycle_policy",
+      "name": "app",
+      "provider": "provider[\"registry.terraform.io/hashicorp/aws\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "id": "reportiq",
+            "policy": "{\"rules\":[{\"action\":{\"type\":\"expire\"},\"description\":\"Keep last 10 images\",\"rulePriority\":1,\"selection\":{\"countNumber\":10,\"countType\":\"imageCountMoreThan\",\"tagStatus\":\"any\"}}]}",
+            "registry_id": "610639371721",
+            "repository": "reportiq"
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "bnVsbA==",
+          "dependencies": [
+            "aws_ecr_repository.app"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "aws_ecr_repository",
+      "name": "app",
+      "provider": "provider[\"registry.terraform.io/hashicorp/aws\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "arn": "arn:aws:ecr:us-east-1:610639371721:repository/reportiq",
+            "encryption_configuration": [
+              {
+                "encryption_type": "AES256",
+                "kms_key": ""
+              }
+            ],
+            "force_delete": true,
+            "id": "reportiq",
+            "image_scanning_configuration": [
+              {
+                "scan_on_push": true
+              }
+            ],
+            "image_tag_mutability": "MUTABLE",
+            "name": "reportiq",
+            "registry_id": "610639371721",
+            "repository_url": "610639371721.dkr.ecr.us-east-1.amazonaws.com/reportiq",
+            "tags": {},
+            "tags_all": {
+              "AppID": "ASP0017650",
+              "CreatedBy": "Abhay.Lunkad",
+              "Environment": "NonProd",
+              "Name": "EDO-CoAnalyst-tool",
+              "Owner": "anuthama.c@spglobal.com",
+              "contact": "askdevopscloud@spglobal.com"
+            },
+            "timeouts": null
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiZGVsZXRlIjoxMjAwMDAwMDAwMDAwfX0="
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "aws_ecs_cluster",
+      "name": "main",
+      "provider": "provider[\"registry.terraform.io/hashicorp/aws\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "arn": "arn:aws:ecs:us-east-1:610639371721:cluster/reportiq-cluster",
+            "configuration": [],
+            "id": "arn:aws:ecs:us-east-1:610639371721:cluster/reportiq-cluster",
+            "name": "reportiq-cluster",
+            "service_connect_defaults": [],
+            "setting": [
+              {
+                "name": "containerInsights",
+                "value": "enabled"
+              }
+            ],
+            "tags": {},
+            "tags_all": {
+              "AppID": "ASP0017650",
+              "CreatedBy": "Abhay.Lunkad",
+              "Environment": "NonProd",
+              "Name": "EDO-CoAnalyst-tool",
+              "Owner": "anuthama.c@spglobal.com",
+              "contact": "askdevopscloud@spglobal.com"
+            }
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "bnVsbA=="
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "aws_ecs_service",
+      "name": "app",
+      "provider": "provider[\"registry.terraform.io/hashicorp/aws\"]",
+      "instances": [
+        {
+          "schema_version": 1,
+          "attributes": {
+            "alarms": [],
+            "availability_zone_rebalancing": "DISABLED",
+            "capacity_provider_strategy": [],
+            "cluster": "arn:aws:ecs:us-east-1:610639371721:cluster/reportiq-cluster",
+            "deployment_circuit_breaker": [
+              {
+                "enable": false,
+                "rollback": false
+              }
+            ],
+            "deployment_controller": [
+              {
+                "type": "ECS"
+              }
+            ],
+            "deployment_maximum_percent": 200,
+            "deployment_minimum_healthy_percent": 100,
+            "desired_count": 1,
+            "enable_ecs_managed_tags": false,
+            "enable_execute_command": false,
+            "force_delete": null,
+            "force_new_deployment": null,
+            "health_check_grace_period_seconds": 60,
+            "iam_role": "/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS",
+            "id": "arn:aws:ecs:us-east-1:610639371721:service/reportiq-cluster/reportiq",
+            "launch_type": "FARGATE",
+            "load_balancer": [
+              {
+                "container_name": "reportiq",
+                "container_port": 8080,
+                "elb_name": "",
+                "target_group_arn": "arn:aws:elasticloadbalancing:us-east-1:610639371721:targetgroup/reportiq-tg/ef67a022a8d544ee"
+              }
+            ],
+            "name": "reportiq",
+            "network_configuration": [
+              {
+                "assign_public_ip": false,
+                "security_groups": [
+                  "sg-014957b1b0ad4b0a4"
+                ],
+                "subnets": [
+                  "subnet-0ccac81dc574f7dee",
+                  "subnet-0eb319a33bfde7293"
+                ]
+              }
+            ],
+            "ordered_placement_strategy": [],
+            "placement_constraints": [],
+            "platform_version": "LATEST",
+            "propagate_tags": "NONE",
+            "scheduling_strategy": "REPLICA",
+            "service_connect_configuration": [],
+            "service_registries": [],
+            "tags": {},
+            "tags_all": {
+              "AppID": "ASP0017650",
+              "CreatedBy": "Abhay.Lunkad",
+              "Environment": "NonProd",
+              "Name": "EDO-CoAnalyst-tool",
+              "Owner": "anuthama.c@spglobal.com",
+              "contact": "askdevopscloud@spglobal.com"
+            },
+            "task_definition": "arn:aws:ecs:us-east-1:610639371721:task-definition/reportiq:4",
+            "timeouts": null,
+            "triggers": {},
+            "volume_configuration": [],
+            "vpc_lattice_configurations": [],
+            "wait_for_steady_state": false
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjoxMjAwMDAwMDAwMDAwLCJkZWxldGUiOjEyMDAwMDAwMDAwMDAsInVwZGF0ZSI6MTIwMDAwMDAwMDAwMH0sInNjaGVtYV92ZXJzaW9uIjoiMSJ9",
+          "dependencies": [
+            "aws_acm_certificate.cert",
+            "aws_cloudwatch_log_group.app",
+            "aws_ecr_repository.app",
+            "aws_ecs_cluster.main",
+            "aws_ecs_task_definition.app",
+            "aws_iam_role.execution",
+            "aws_iam_role.task",
+            "aws_lb.app",
+            "aws_lb_listener.http_redirect",
+            "aws_lb_listener.https",
+            "aws_lb_target_group.app",
+            "aws_security_group.alb",
+            "aws_security_group.tasks",
+            "data.aws_iam_policy_document.ecs_assume",
+            "tls_private_key.cert",
+            "tls_self_signed_cert.cert"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "aws_ecs_task_definition",
+      "name": "app",
+      "provider": "provider[\"registry.terraform.io/hashicorp/aws\"]",
+      "instances": [
+        {
+          "schema_version": 1,
+          "attributes": {
+            "arn": "arn:aws:ecs:us-east-1:610639371721:task-definition/reportiq:4",
+            "arn_without_revision": "arn:aws:ecs:us-east-1:610639371721:task-definition/reportiq",
+            "container_definitions": "[{\"environment\":[{\"name\":\"AGENT_QUALIFIER\",\"value\":\"DEFAULT\"},{\"name\":\"AGENT_RUNTIME_ARN\",\"value\":\"arn:aws:bedrock-agentcore:us-east-1:610639371721:runtime/edo_coanalyst_report-3dAfJRHyfY\"},{\"name\":\"AWS_REGION\",\"value\":\"us-east-1\"},{\"name\":\"PORT\",\"value\":\"8080\"},{\"name\":\"PROVENANCE_TABLE\",\"value\":\"edo-coanalyst-report-provenance\"},{\"name\":\"QUERIES_TABLE\",\"value\":\"reportiq-web-queries\"},{\"name\":\"REPORTS_BUCKET\",\"value\":\"edo-coanalyst-report-610639371721\"},{\"name\":\"RUNS_TABLE\",\"value\":\"reportiq-runs\"},{\"name\":\"STATIC_DIR\",\"value\":\"/app/static\"}],\"essential\":true,\"healthCheck\":{\"command\":[\"CMD-SHELL\",\"python3 -c 'import urllib.request; urllib.request.urlopen(\\\"http://localhost:8080/health\\\")' || exit 1\"],\"interval\":30,\"retries\":3,\"startPeriod\":40,\"timeout\":5},\"image\":\"610639371721.dkr.ecr.us-east-1.amazonaws.com/reportiq:v20260625-131511\",\"logConfiguration\":{\"logDriver\":\"awslogs\",\"options\":{\"awslogs-group\":\"/ecs/reportiq\",\"awslogs-region\":\"us-east-1\",\"awslogs-stream-prefix\":\"ecs\"}},\"mountPoints\":[],\"name\":\"reportiq\",\"portMappings\":[{\"containerPort\":8080,\"hostPort\":8080,\"protocol\":\"tcp\"}],\"systemControls\":[],\"volumesFrom\":[]}]",
+            "cpu": "512",
+            "enable_fault_injection": false,
+            "ephemeral_storage": [],
+            "execution_role_arn": "arn:aws:iam::610639371721:role/reportiq-ecs-execution",
+            "family": "reportiq",
+            "id": "reportiq",
+            "inference_accelerator": [],
+            "ipc_mode": "",
+            "memory": "1024",
+            "network_mode": "awsvpc",
+            "pid_mode": "",
+            "placement_constraints": [],
+            "proxy_configuration": [],
+            "requires_compatibilities": [
+              "FARGATE"
+            ],
+            "revision": 4,
+            "runtime_platform": [
+              {
+                "cpu_architecture": "ARM64",
+                "operating_system_family": "LINUX"
+              }
+            ],
+            "skip_destroy": false,
+            "tags": null,
+            "tags_all": {
+              "AppID": "ASP0017650",
+              "CreatedBy": "Abhay.Lunkad",
+              "Environment": "NonProd",
+              "Name": "EDO-CoAnalyst-tool",
+              "Owner": "anuthama.c@spglobal.com",
+              "contact": "askdevopscloud@spglobal.com"
+            },
+            "task_role_arn": "arn:aws:iam::610639371721:role/reportiq-ecs-task",
+            "track_latest": false,
+            "volume": []
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "eyJzY2hlbWFfdmVyc2lvbiI6IjEifQ==",
+          "dependencies": [
+            "aws_cloudwatch_log_group.app",
+            "aws_ecr_repository.app",
+            "aws_iam_role.execution",
+            "aws_iam_role.task",
+            "data.aws_iam_policy_document.ecs_assume"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "aws_iam_role",
+      "name": "execution",
+      "provider": "provider[\"registry.terraform.io/hashicorp/aws\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "arn": "arn:aws:iam::610639371721:role/reportiq-ecs-execution",
+            "assume_role_policy": "{\"Statement\":[{\"Action\":\"sts:AssumeRole\",\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"ecs-tasks.amazonaws.com\"}}],\"Version\":\"2012-10-17\"}",
+            "create_date": "2026-06-25T06:37:46Z",
+            "description": "",
+            "force_detach_policies": false,
+            "id": "reportiq-ecs-execution",
+            "inline_policy": [],
+            "managed_policy_arns": [
+              "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+            ],
+            "max_session_duration": 3600,
+            "name": "reportiq-ecs-execution",
+            "name_prefix": "",
+            "path": "/",
+            "permissions_boundary": "",
+            "tags": {},
+            "tags_all": {
+              "AppID": "ASP0017650",
+              "CreatedBy": "Abhay.Lunkad",
+              "Environment": "NonProd",
+              "Name": "EDO-CoAnalyst-tool",
+              "Owner": "anuthama.c@spglobal.com",
+              "contact": "askdevopscloud@spglobal.com"
+            },
+            "unique_id": "AROAY4LHRLXEWCVBWV6ZR"
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "bnVsbA==",
+          "dependencies": [
+            "data.aws_iam_policy_document.ecs_assume"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "aws_iam_role",
+      "name": "task",
+      "provider": "provider[\"registry.terraform.io/hashicorp/aws\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "arn": "arn:aws:iam::610639371721:role/reportiq-ecs-task",
+            "assume_role_policy": "{\"Statement\":[{\"Action\":\"sts:AssumeRole\",\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"ecs-tasks.amazonaws.com\"}}],\"Version\":\"2012-10-17\"}",
+            "create_date": "2026-06-25T06:37:46Z",
+            "description": "",
+            "force_detach_policies": false,
+            "id": "reportiq-ecs-task",
+            "inline_policy": [
+              {
+                "name": "reportiq-task-permissions",
+                "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Action\":[\"dynamodb:UpdateItem\",\"dynamodb:Scan\",\"dynamodb:Query\",\"dynamodb:PutItem\",\"dynamodb:GetItem\",\"dynamodb:DescribeTable\",\"dynamodb:DeleteItem\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:dynamodb:us-east-1:610639371721:table/reportiq-web-queries/index/*\",\"arn:aws:dynamodb:us-east-1:610639371721:table/reportiq-web-queries\",\"arn:aws:dynamodb:us-east-1:610639371721:table/reportiq-runs/index/*\",\"arn:aws:dynamodb:us-east-1:610639371721:table/reportiq-runs\",\"arn:aws:dynamodb:us-east-1:610639371721:table/edo-coanalyst-report-provenance/index/*\",\"arn:aws:dynamodb:us-east-1:610639371721:table/edo-coanalyst-report-provenance\"],\"Sid\":\"DynamoPortalTables\"},{\"Action\":[\"s3:PutObject\",\"s3:ListBucket\",\"s3:GetObject\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:s3:::edo-coanalyst-report-610639371721/*\",\"arn:aws:s3:::edo-coanalyst-report-610639371721\"],\"Sid\":\"S3ReportsBucket\"},{\"Action\":\"bedrock-agentcore:InvokeAgentRuntime\",\"Effect\":\"Allow\",\"Resource\":\"arn:aws:bedrock-agentcore:us-east-1:610639371721:runtime/*\",\"Sid\":\"AgentCoreInvoke\"}]}"
+              }
+            ],
+            "managed_policy_arns": [],
+            "max_session_duration": 3600,
+            "name": "reportiq-ecs-task",
+            "name_prefix": "",
+            "path": "/",
+            "permissions_boundary": "",
+            "tags": {},
+            "tags_all": {
+              "AppID": "ASP0017650",
+              "CreatedBy": "Abhay.Lunkad",
+              "Environment": "NonProd",
+              "Name": "EDO-CoAnalyst-tool",
+              "Owner": "anuthama.c@spglobal.com",
+              "contact": "askdevopscloud@spglobal.com"
+            },
+            "unique_id": "AROAY4LHRLXE5SH7ZYJ2P"
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "bnVsbA==",
+          "dependencies": [
+            "data.aws_iam_policy_document.ecs_assume"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "aws_iam_role_policy",
+      "name": "task",
+      "provider": "provider[\"registry.terraform.io/hashicorp/aws\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "id": "reportiq-ecs-task:reportiq-task-permissions",
+            "name": "reportiq-task-permissions",
+            "name_prefix": "",
+            "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Action\":[\"dynamodb:UpdateItem\",\"dynamodb:Scan\",\"dynamodb:Query\",\"dynamodb:PutItem\",\"dynamodb:GetItem\",\"dynamodb:DescribeTable\",\"dynamodb:DeleteItem\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:dynamodb:us-east-1:610639371721:table/reportiq-web-queries/index/*\",\"arn:aws:dynamodb:us-east-1:610639371721:table/reportiq-web-queries\",\"arn:aws:dynamodb:us-east-1:610639371721:table/reportiq-runs/index/*\",\"arn:aws:dynamodb:us-east-1:610639371721:table/reportiq-runs\",\"arn:aws:dynamodb:us-east-1:610639371721:table/edo-coanalyst-report-provenance/index/*\",\"arn:aws:dynamodb:us-east-1:610639371721:table/edo-coanalyst-report-provenance\"],\"Sid\":\"DynamoPortalTables\"},{\"Action\":[\"s3:PutObject\",\"s3:ListBucket\",\"s3:GetObject\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:s3:::edo-coanalyst-report-610639371721/*\",\"arn:aws:s3:::edo-coanalyst-report-610639371721\"],\"Sid\":\"S3ReportsBucket\"},{\"Action\":\"bedrock-agentcore:InvokeAgentRuntime\",\"Effect\":\"Allow\",\"Resource\":\"arn:aws:bedrock-agentcore:us-east-1:610639371721:runtime/*\",\"Sid\":\"AgentCoreInvoke\"}]}",
+            "role": "reportiq-ecs-task"
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "bnVsbA==",
+          "dependencies": [
+            "aws_iam_role.task",
+            "data.aws_iam_policy_document.ecs_assume",
+            "data.aws_iam_policy_document.task_perms"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "aws_iam_role_policy_attachment",
+      "name": "execution",
+      "provider": "provider[\"registry.terraform.io/hashicorp/aws\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "id": "reportiq-ecs-execution-20260625063748358800000002",
+            "policy_arn": "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
+            "role": "reportiq-ecs-execution"
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "bnVsbA==",
+          "dependencies": [
+            "aws_iam_role.execution",
+            "data.aws_iam_policy_document.ecs_assume"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "aws_lb",
+      "name": "app",
+      "provider": "provider[\"registry.terraform.io/hashicorp/aws\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "access_logs": [
+              {
+                "bucket": "spg-infosec-elb-logs-use1",
+                "enabled": false,
+                "prefix": "alb"
+              }
+            ],
+            "arn": "arn:aws:elasticloadbalancing:us-east-1:610639371721:loadbalancer/app/reportiq-internal-alb/31fb5132fd283c51",
+            "arn_suffix": "app/reportiq-internal-alb/31fb5132fd283c51",
+            "client_keep_alive": 3600,
+            "connection_logs": [
+              {
+                "bucket": "",
+                "enabled": false,
+                "prefix": ""
+              }
+            ],
+            "customer_owned_ipv4_pool": "",
+            "desync_mitigation_mode": "defensive",
+            "dns_name": "internal-reportiq-internal-alb-466021085.us-east-1.elb.amazonaws.com",
+            "dns_record_client_routing_policy": null,
+            "drop_invalid_header_fields": true,
+            "enable_cross_zone_load_balancing": true,
+            "enable_deletion_protection": false,
+            "enable_http2": true,
+            "enable_tls_version_and_cipher_suite_headers": false,
+            "enable_waf_fail_open": false,
+            "enable_xff_client_port": false,
+            "enable_zonal_shift": false,
+            "enforce_security_group_inbound_rules_on_private_link_traffic": "",
+            "id": "arn:aws:elasticloadbalancing:us-east-1:610639371721:loadbalancer/app/reportiq-internal-alb/31fb5132fd283c51",
+            "idle_timeout": 60,
+            "internal": true,
+            "ip_address_type": "ipv4",
+            "ipam_pools": [],
+            "load_balancer_type": "application",
+            "minimum_load_balancer_capacity": [],
+            "name": "reportiq-internal-alb",
+            "name_prefix": "",
+            "preserve_host_header": false,
+            "security_groups": [
+              "sg-06e6164e8751be2eb"
+            ],
+            "subnet_mapping": [
+              {
+                "allocation_id": "",
+                "ipv6_address": "",
+                "outpost_id": "",
+                "private_ipv4_address": "",
+                "subnet_id": "subnet-0ccac81dc574f7dee"
+              },
+              {
+                "allocation_id": "",
+                "ipv6_address": "",
+                "outpost_id": "",
+                "private_ipv4_address": "",
+                "subnet_id": "subnet-0eb319a33bfde7293"
+              }
+            ],
+            "subnets": [
+              "subnet-0ccac81dc574f7dee",
+              "subnet-0eb319a33bfde7293"
+            ],
+            "tags": {
+              "Name": "reportiq-internal-alb"
+            },
+            "tags_all": {
+              "AppID": "ASP0017650",
+              "CreatedBy": "Abhay.Lunkad",
+              "Environment": "NonProd",
+              "Name": "reportiq-internal-alb",
+              "Owner": "anuthama.c@spglobal.com",
+              "contact": "askdevopscloud@spglobal.com"
+            },
+            "timeouts": null,
+            "vpc_id": "vpc-0ddfa2c6e06a4bc99",
+            "xff_header_processing_mode": "append",
+            "zone_id": "Z35SXDOTRQ7X7K"
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjo2MDAwMDAwMDAwMDAsImRlbGV0ZSI6NjAwMDAwMDAwMDAwLCJ1cGRhdGUiOjYwMDAwMDAwMDAwMH19",
+          "dependencies": [
+            "aws_security_group.alb"
+          ],
+          "create_before_destroy": true
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "aws_lb_listener",
+      "name": "http_redirect",
+      "provider": "provider[\"registry.terraform.io/hashicorp/aws\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "alpn_policy": null,
+            "arn": "arn:aws:elasticloadbalancing:us-east-1:610639371721:listener/app/reportiq-internal-alb/31fb5132fd283c51/a34658dab7147f93",
+            "certificate_arn": null,
+            "default_action": [
+              {
+                "authenticate_cognito": [],
+                "authenticate_oidc": [],
+                "fixed_response": [],
+                "forward": [],
+                "order": 1,
+                "redirect": [
+                  {
+                    "host": "#{host}",
+                    "path": "/#{path}",
+                    "port": "443",
+                    "protocol": "HTTPS",
+                    "query": "#{query}",
+                    "status_code": "HTTP_301"
+                  }
+                ],
+                "target_group_arn": "",
+                "type": "redirect"
+              }
+            ],
+            "id": "arn:aws:elasticloadbalancing:us-east-1:610639371721:listener/app/reportiq-internal-alb/31fb5132fd283c51/a34658dab7147f93",
+            "load_balancer_arn": "arn:aws:elasticloadbalancing:us-east-1:610639371721:loadbalancer/app/reportiq-internal-alb/31fb5132fd283c51",
+            "mutual_authentication": [],
+            "port": 80,
+            "protocol": "HTTP",
+            "routing_http_request_x_amzn_mtls_clientcert_header_name": null,
+            "routing_http_request_x_amzn_mtls_clientcert_issuer_header_name": null,
+            "routing_http_request_x_amzn_mtls_clientcert_leaf_header_name": null,
+            "routing_http_request_x_amzn_mtls_clientcert_serial_number_header_name": null,
+            "routing_http_request_x_amzn_mtls_clientcert_subject_header_name": null,
+            "routing_http_request_x_amzn_mtls_clientcert_validity_header_name": null,
+            "routing_http_request_x_amzn_tls_cipher_suite_header_name": null,
+            "routing_http_request_x_amzn_tls_version_header_name": null,
+            "routing_http_response_access_control_allow_credentials_header_value": "",
+            "routing_http_response_access_control_allow_headers_header_value": "",
+            "routing_http_response_access_control_allow_methods_header_value": "",
+            "routing_http_response_access_control_allow_origin_header_value": "",
+            "routing_http_response_access_control_expose_headers_header_value": "",
+            "routing_http_response_access_control_max_age_header_value": "",
+            "routing_http_response_content_security_policy_header_value": "",
+            "routing_http_response_server_enabled": true,
+            "routing_http_response_strict_transport_security_header_value": "",
+            "routing_http_response_x_content_type_options_header_value": "",
+            "routing_http_response_x_frame_options_header_value": "",
+            "ssl_policy": "",
+            "tags": {},
+            "tags_all": {
+              "AppID": "ASP0017650",
+              "CreatedBy": "Abhay.Lunkad",
+              "Environment": "NonProd",
+              "Name": "EDO-CoAnalyst-tool",
+              "Owner": "anuthama.c@spglobal.com",
+              "contact": "askdevopscloud@spglobal.com"
+            },
+            "tcp_idle_timeout_seconds": null,
+            "timeouts": null
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjozMDAwMDAwMDAwMDAsInVwZGF0ZSI6MzAwMDAwMDAwMDAwfX0=",
+          "dependencies": [
+            "aws_lb.app",
+            "aws_security_group.alb"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "aws_lb_listener",
+      "name": "https",
+      "provider": "provider[\"registry.terraform.io/hashicorp/aws\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "alpn_policy": null,
+            "arn": "arn:aws:elasticloadbalancing:us-east-1:610639371721:listener/app/reportiq-internal-alb/31fb5132fd283c51/4d3c3be1823b64fc",
+            "certificate_arn": "arn:aws:acm:us-east-1:610639371721:certificate/c69d7fdd-81dd-464b-ac95-d7e9f7b263cf",
+            "default_action": [
+              {
+                "authenticate_cognito": [],
+                "authenticate_oidc": [],
+                "fixed_response": [],
+                "forward": [],
+                "order": 1,
+                "redirect": [],
+                "target_group_arn": "arn:aws:elasticloadbalancing:us-east-1:610639371721:targetgroup/reportiq-tg/ef67a022a8d544ee",
+                "type": "forward"
+              }
+            ],
+            "id": "arn:aws:elasticloadbalancing:us-east-1:610639371721:listener/app/reportiq-internal-alb/31fb5132fd283c51/4d3c3be1823b64fc",
+            "load_balancer_arn": "arn:aws:elasticloadbalancing:us-east-1:610639371721:loadbalancer/app/reportiq-internal-alb/31fb5132fd283c51",
+            "mutual_authentication": [
+              {
+                "advertise_trust_store_ca_names": "",
+                "ignore_client_certificate_expiry": false,
+                "mode": "off",
+                "trust_store_arn": ""
+              }
+            ],
+            "port": 443,
+            "protocol": "HTTPS",
+            "routing_http_request_x_amzn_mtls_clientcert_header_name": "",
+            "routing_http_request_x_amzn_mtls_clientcert_issuer_header_name": "",
+            "routing_http_request_x_amzn_mtls_clientcert_leaf_header_name": "",
+            "routing_http_request_x_amzn_mtls_clientcert_serial_number_header_name": "",
+            "routing_http_request_x_amzn_mtls_clientcert_subject_header_name": "",
+            "routing_http_request_x_amzn_mtls_clientcert_validity_header_name": "",
+            "routing_http_request_x_amzn_tls_cipher_suite_header_name": "",
+            "routing_http_request_x_amzn_tls_version_header_name": "",
+            "routing_http_response_access_control_allow_credentials_header_value": "",
+            "routing_http_response_access_control_allow_headers_header_value": "",
+            "routing_http_response_access_control_allow_methods_header_value": "",
+            "routing_http_response_access_control_allow_origin_header_value": "",
+            "routing_http_response_access_control_expose_headers_header_value": "",
+            "routing_http_response_access_control_max_age_header_value": "",
+            "routing_http_response_content_security_policy_header_value": "",
+            "routing_http_response_server_enabled": true,
+            "routing_http_response_strict_transport_security_header_value": "",
+            "routing_http_response_x_content_type_options_header_value": "",
+            "routing_http_response_x_frame_options_header_value": "",
+            "ssl_policy": "ELBSecurityPolicy-TLS13-1-2-2021-06",
+            "tags": {},
+            "tags_all": {
+              "AppID": "ASP0017650",
+              "CreatedBy": "Abhay.Lunkad",
+              "Environment": "NonProd",
+              "Name": "EDO-CoAnalyst-tool",
+              "Owner": "anuthama.c@spglobal.com",
+              "contact": "askdevopscloud@spglobal.com"
+            },
+            "tcp_idle_timeout_seconds": null,
+            "timeouts": null
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjozMDAwMDAwMDAwMDAsInVwZGF0ZSI6MzAwMDAwMDAwMDAwfX0=",
+          "dependencies": [
+            "aws_acm_certificate.cert",
+            "aws_lb.app",
+            "aws_lb_target_group.app",
+            "aws_security_group.alb",
+            "tls_private_key.cert",
+            "tls_self_signed_cert.cert"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "aws_lb_target_group",
+      "name": "app",
+      "provider": "provider[\"registry.terraform.io/hashicorp/aws\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "arn": "arn:aws:elasticloadbalancing:us-east-1:610639371721:targetgroup/reportiq-tg/ef67a022a8d544ee",
+            "arn_suffix": "targetgroup/reportiq-tg/ef67a022a8d544ee",
+            "connection_termination": null,
+            "deregistration_delay": "30",
+            "health_check": [
+              {
+                "enabled": true,
+                "healthy_threshold": 2,
+                "interval": 30,
+                "matcher": "200",
+                "path": "/health",
+                "port": "traffic-port",
+                "protocol": "HTTP",
+                "timeout": 5,
+                "unhealthy_threshold": 3
+              }
+            ],
+            "id": "arn:aws:elasticloadbalancing:us-east-1:610639371721:targetgroup/reportiq-tg/ef67a022a8d544ee",
+            "ip_address_type": "ipv4",
+            "lambda_multi_value_headers_enabled": false,
+            "load_balancer_arns": [
+              "arn:aws:elasticloadbalancing:us-east-1:610639371721:loadbalancer/app/reportiq-internal-alb/31fb5132fd283c51"
+            ],
+            "load_balancing_algorithm_type": "round_robin",
+            "load_balancing_anomaly_mitigation": "off",
+            "load_balancing_cross_zone_enabled": "use_load_balancer_configuration",
+            "name": "reportiq-tg",
+            "name_prefix": "",
+            "port": 8080,
+            "preserve_client_ip": null,
+            "protocol": "HTTP",
+            "protocol_version": "HTTP1",
+            "proxy_protocol_v2": false,
+            "slow_start": 0,
+            "stickiness": [
+              {
+                "cookie_duration": 86400,
+                "cookie_name": "",
+                "enabled": false,
+                "type": "lb_cookie"
+              }
+            ],
+            "tags": {},
+            "tags_all": {
+              "AppID": "ASP0017650",
+              "CreatedBy": "Abhay.Lunkad",
+              "Environment": "NonProd",
+              "Name": "EDO-CoAnalyst-tool",
+              "Owner": "anuthama.c@spglobal.com",
+              "contact": "askdevopscloud@spglobal.com"
+            },
+            "target_failover": [
+              {
+                "on_deregistration": null,
+                "on_unhealthy": null
+              }
+            ],
+            "target_group_health": [
+              {
+                "dns_failover": [
+                  {
+                    "minimum_healthy_targets_count": "1",
+                    "minimum_healthy_targets_percentage": "off"
+                  }
+                ],
+                "unhealthy_state_routing": [
+                  {
+                    "minimum_healthy_targets_count": 1,
+                    "minimum_healthy_targets_percentage": "off"
+                  }
+                ]
+              }
+            ],
+            "target_health_state": [
+              {
+                "enable_unhealthy_connection_termination": null,
+                "unhealthy_draining_interval": null
+              }
+            ],
+            "target_type": "ip",
+            "vpc_id": "vpc-0ddfa2c6e06a4bc99"
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "bnVsbA=="
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "aws_security_group",
+      "name": "alb",
+      "provider": "provider[\"registry.terraform.io/hashicorp/aws\"]",
+      "instances": [
+        {
+          "schema_version": 1,
+          "attributes": {
+            "arn": "arn:aws:ec2:us-east-1:610639371721:security-group/sg-06e6164e8751be2eb",
+            "description": "Report IQ ALB - internal HTTP/HTTPS",
+            "egress": [
+              {
+                "cidr_blocks": [
+                  "0.0.0.0/0"
+                ],
+                "description": "",
+                "from_port": 0,
+                "ipv6_cidr_blocks": [],
+                "prefix_list_ids": [],
+                "protocol": "-1",
+                "security_groups": [],
+                "self": false,
+                "to_port": 0
+              }
+            ],
+            "id": "sg-06e6164e8751be2eb",
+            "ingress": [
+              {
+                "cidr_blocks": [
+                  "10.0.0.0/8",
+                  "172.16.0.0/12",
+                  "192.168.0.0/16"
+                ],
+                "description": "HTTP from internal network (redirects to 443)",
+                "from_port": 80,
+                "ipv6_cidr_blocks": [],
+                "prefix_list_ids": [],
+                "protocol": "tcp",
+                "security_groups": [],
+                "self": false,
+                "to_port": 80
+              },
+              {
+                "cidr_blocks": [
+                  "10.0.0.0/8",
+                  "172.16.0.0/12",
+                  "192.168.0.0/16"
+                ],
+                "description": "HTTPS from internal network",
+                "from_port": 443,
+                "ipv6_cidr_blocks": [],
+                "prefix_list_ids": [],
+                "protocol": "tcp",
+                "security_groups": [],
+                "self": false,
+                "to_port": 443
+              }
+            ],
+            "name": "reportiq-alb-sg",
+            "name_prefix": "",
+            "owner_id": "610639371721",
+            "revoke_rules_on_delete": false,
+            "tags": {
+              "Name": "reportiq-alb-sg"
+            },
+            "tags_all": {
+              "AppID": "ASP0017650",
+              "CreatedBy": "Abhay.Lunkad",
+              "Environment": "NonProd",
+              "Name": "reportiq-alb-sg",
+              "Owner": "anuthama.c@spglobal.com",
+              "contact": "askdevopscloud@spglobal.com"
+            },
+            "timeouts": null,
+            "vpc_id": "vpc-0ddfa2c6e06a4bc99"
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjo2MDAwMDAwMDAwMDAsImRlbGV0ZSI6OTAwMDAwMDAwMDAwfSwic2NoZW1hX3ZlcnNpb24iOiIxIn0=",
+          "create_before_destroy": true
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "aws_security_group",
+      "name": "tasks",
+      "provider": "provider[\"registry.terraform.io/hashicorp/aws\"]",
+      "instances": [
+        {
+          "schema_version": 1,
+          "attributes": {
+            "arn": "arn:aws:ec2:us-east-1:610639371721:security-group/sg-014957b1b0ad4b0a4",
+            "description": "Report IQ ECS tasks",
+            "egress": [
+              {
+                "cidr_blocks": [
+                  "0.0.0.0/0"
+                ],
+                "description": "",
+                "from_port": 0,
+                "ipv6_cidr_blocks": [],
+                "prefix_list_ids": [],
+                "protocol": "-1",
+                "security_groups": [],
+                "self": false,
+                "to_port": 0
+              }
+            ],
+            "id": "sg-014957b1b0ad4b0a4",
+            "ingress": [
+              {
+                "cidr_blocks": [],
+                "description": "App port from ALB only",
+                "from_port": 8080,
+                "ipv6_cidr_blocks": [],
+                "prefix_list_ids": [],
+                "protocol": "tcp",
+                "security_groups": [
+                  "sg-06e6164e8751be2eb"
+                ],
+                "self": false,
+                "to_port": 8080
+              }
+            ],
+            "name": "reportiq-tasks-sg",
+            "name_prefix": "",
+            "owner_id": "610639371721",
+            "revoke_rules_on_delete": false,
+            "tags": {
+              "Name": "reportiq-tasks-sg"
+            },
+            "tags_all": {
+              "AppID": "ASP0017650",
+              "CreatedBy": "Abhay.Lunkad",
+              "Environment": "NonProd",
+              "Name": "reportiq-tasks-sg",
+              "Owner": "anuthama.c@spglobal.com",
+              "contact": "askdevopscloud@spglobal.com"
+            },
+            "timeouts": null,
+            "vpc_id": "vpc-0ddfa2c6e06a4bc99"
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjo2MDAwMDAwMDAwMDAsImRlbGV0ZSI6OTAwMDAwMDAwMDAwfSwic2NoZW1hX3ZlcnNpb24iOiIxIn0=",
+          "dependencies": [
+            "aws_security_group.alb"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "aws_security_group",
+      "name": "vpce",
+      "provider": "provider[\"registry.terraform.io/hashicorp/aws\"]",
+      "instances": [
+        {
+          "index_key": 0,
+          "schema_version": 1,
+          "attributes": {
+            "arn": "arn:aws:ec2:us-east-1:610639371721:security-group/sg-05270094caba6a55b",
+            "description": "Report IQ VPC interface endpoints",
+            "egress": [
+              {
+                "cidr_blocks": [
+                  "0.0.0.0/0"
+                ],
+                "description": "",
+                "from_port": 0,
+                "ipv6_cidr_blocks": [],
+                "prefix_list_ids": [],
+                "protocol": "-1",
+                "security_groups": [],
+                "self": false,
+                "to_port": 0
+              }
+            ],
+            "id": "sg-05270094caba6a55b",
+            "ingress": [
+              {
+                "cidr_blocks": [
+                  "10.0.0.0/8",
+                  "172.16.0.0/12",
+                  "192.168.0.0/16"
+                ],
+                "description": "HTTPS from ECS tasks",
+                "from_port": 443,
+                "ipv6_cidr_blocks": [],
+                "prefix_list_ids": [],
+                "protocol": "tcp",
+                "security_groups": [],
+                "self": false,
+                "to_port": 443
+              }
+            ],
+            "name": "reportiq-vpce-sg",
+            "name_prefix": "",
+            "owner_id": "610639371721",
+            "revoke_rules_on_delete": false,
+            "tags": {
+              "Name": "reportiq-vpce-sg"
+            },
+            "tags_all": {
+              "AppID": "ASP0017650",
+              "CreatedBy": "Abhay.Lunkad",
+              "Environment": "NonProd",
+              "Name": "reportiq-vpce-sg",
+              "Owner": "anuthama.c@spglobal.com",
+              "contact": "askdevopscloud@spglobal.com"
+            },
+            "timeouts": null,
+            "vpc_id": "vpc-0ddfa2c6e06a4bc99"
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjo2MDAwMDAwMDAwMDAsImRlbGV0ZSI6OTAwMDAwMDAwMDAwfSwic2NoZW1hX3ZlcnNpb24iOiIxIn0="
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "aws_vpc_endpoint",
+      "name": "interface",
+      "provider": "provider[\"registry.terraform.io/hashicorp/aws\"]",
+      "instances": [
+        {
+          "index_key": "ecr_api",
+          "schema_version": 0,
+          "attributes": {
+            "arn": "arn:aws:ec2:us-east-1:610639371721:vpc-endpoint/vpce-07851caa171450936",
+            "auto_accept": null,
+            "cidr_blocks": [],
+            "dns_entry": [
+              {
+                "dns_name": "vpce-07851caa171450936-8mtwtqim.api.ecr.us-east-1.vpce.amazonaws.com",
+                "hosted_zone_id": "Z7HUB22UULQXV"
+              },
+              {
+                "dns_name": "vpce-07851caa171450936-8mtwtqim-us-east-1a.api.ecr.us-east-1.vpce.amazonaws.com",
+                "hosted_zone_id": "Z7HUB22UULQXV"
+              },
+              {
+                "dns_name": "vpce-07851caa171450936-8mtwtqim-us-east-1b.api.ecr.us-east-1.vpce.amazonaws.com",
+                "hosted_zone_id": "Z7HUB22UULQXV"
+              },
+              {
+                "dns_name": "api.ecr.us-east-1.amazonaws.com",
+                "hosted_zone_id": "Z06856841QATF3X692KYQ"
+              },
+              {
+                "dns_name": "ecr.us-east-1.api.aws",
+                "hosted_zone_id": "Z06856912DS3ZJJV1Z43X"
+              }
+            ],
+            "dns_options": [
+              {
+                "dns_record_ip_type": "ipv4",
+                "private_dns_only_for_inbound_resolver_endpoint": false
+              }
+            ],
+            "id": "vpce-07851caa171450936",
+            "ip_address_type": "ipv4",
+            "network_interface_ids": [
+              "eni-081b4a5ebe26deedf",
+              "eni-09b8b1149e7ccf0bc"
+            ],
+            "owner_id": "610639371721",
+            "policy": "{\"Statement\":[{\"Action\":\"*\",\"Effect\":\"Allow\",\"Principal\":\"*\",\"Resource\":\"*\"}]}",
+            "prefix_list_id": null,
+            "private_dns_enabled": true,
+            "requester_managed": false,
+            "resource_configuration_arn": "",
+            "route_table_ids": [],
+            "security_group_ids": [
+              "sg-05270094caba6a55b"
+            ],
+            "service_name": "com.amazonaws.us-east-1.ecr.api",
+            "service_network_arn": "",
+            "service_region": "us-east-1",
+            "state": "available",
+            "subnet_configuration": [
+              {
+                "ipv4": "10.164.56.100",
+                "ipv6": "",
+                "subnet_id": "subnet-0ccac81dc574f7dee"
+              },
+              {
+                "ipv4": "10.164.56.233",
+                "ipv6": "",
+                "subnet_id": "subnet-0eb319a33bfde7293"
+              }
+            ],
+            "subnet_ids": [
+              "subnet-0ccac81dc574f7dee",
+              "subnet-0eb319a33bfde7293"
+            ],
+            "tags": {
+              "Name": "reportiq-ecr_api"
+            },
+            "tags_all": {
+              "AppID": "ASP0017650",
+              "CreatedBy": "Abhay.Lunkad",
+              "Environment": "NonProd",
+              "Name": "reportiq-ecr_api",
+              "Owner": "anuthama.c@spglobal.com",
+              "contact": "askdevopscloud@spglobal.com"
+            },
+            "timeouts": null,
+            "vpc_endpoint_type": "Interface",
+            "vpc_id": "vpc-0ddfa2c6e06a4bc99"
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjo2MDAwMDAwMDAwMDAsImRlbGV0ZSI6NjAwMDAwMDAwMDAwLCJ1cGRhdGUiOjYwMDAwMDAwMDAwMH19",
+          "dependencies": [
+            "aws_security_group.vpce"
+          ]
+        },
+        {
+          "index_key": "ecr_dkr",
+          "schema_version": 0,
+          "attributes": {
+            "arn": "arn:aws:ec2:us-east-1:610639371721:vpc-endpoint/vpce-0fe5863b2b9b901f9",
+            "auto_accept": null,
+            "cidr_blocks": [],
+            "dns_entry": [
+              {
+                "dns_name": "vpce-0fe5863b2b9b901f9-fpg5m479.dkr.ecr.us-east-1.vpce.amazonaws.com",
+                "hosted_zone_id": "Z7HUB22UULQXV"
+              },
+              {
+                "dns_name": "vpce-0fe5863b2b9b901f9-fpg5m479-us-east-1b.dkr.ecr.us-east-1.vpce.amazonaws.com",
+                "hosted_zone_id": "Z7HUB22UULQXV"
+              },
+              {
+                "dns_name": "vpce-0fe5863b2b9b901f9-fpg5m479-us-east-1a.dkr.ecr.us-east-1.vpce.amazonaws.com",
+                "hosted_zone_id": "Z7HUB22UULQXV"
+              },
+              {
+                "dns_name": "dkr.ecr.us-east-1.amazonaws.com",
+                "hosted_zone_id": "Z067568433FKXT8IJXPCR"
+              },
+              {
+                "dns_name": "*.dkr.ecr.us-east-1.amazonaws.com",
+                "hosted_zone_id": "Z067568433FKXT8IJXPCR"
+              },
+              {
+                "dns_name": "dkr-ecr.us-east-1.on.aws",
+                "hosted_zone_id": "Z0457257129X4ZL3G6KCP"
+              },
+              {
+                "dns_name": "*.dkr-ecr.us-east-1.on.aws",
+                "hosted_zone_id": "Z0457257129X4ZL3G6KCP"
+              }
+            ],
+            "dns_options": [
+              {
+                "dns_record_ip_type": "ipv4",
+                "private_dns_only_for_inbound_resolver_endpoint": false
+              }
+            ],
+            "id": "vpce-0fe5863b2b9b901f9",
+            "ip_address_type": "ipv4",
+            "network_interface_ids": [
+              "eni-0c8b6171c74c501f8",
+              "eni-0faabf85746f598a7"
+            ],
+            "owner_id": "610639371721",
+            "policy": "{\"Statement\":[{\"Action\":\"*\",\"Effect\":\"Allow\",\"Principal\":\"*\",\"Resource\":\"*\"}]}",
+            "prefix_list_id": null,
+            "private_dns_enabled": true,
+            "requester_managed": false,
+            "resource_configuration_arn": "",
+            "route_table_ids": [],
+            "security_group_ids": [
+              "sg-05270094caba6a55b"
+            ],
+            "service_name": "com.amazonaws.us-east-1.ecr.dkr",
+            "service_network_arn": "",
+            "service_region": "us-east-1",
+            "state": "available",
+            "subnet_configuration": [
+              {
+                "ipv4": "10.164.56.114",
+                "ipv6": "",
+                "subnet_id": "subnet-0ccac81dc574f7dee"
+              },
+              {
+                "ipv4": "10.164.56.253",
+                "ipv6": "",
+                "subnet_id": "subnet-0eb319a33bfde7293"
+              }
+            ],
+            "subnet_ids": [
+              "subnet-0ccac81dc574f7dee",
+              "subnet-0eb319a33bfde7293"
+            ],
+            "tags": {
+              "Name": "reportiq-ecr_dkr"
+            },
+            "tags_all": {
+              "AppID": "ASP0017650",
+              "CreatedBy": "Abhay.Lunkad",
+              "Environment": "NonProd",
+              "Name": "reportiq-ecr_dkr",
+              "Owner": "anuthama.c@spglobal.com",
+              "contact": "askdevopscloud@spglobal.com"
+            },
+            "timeouts": null,
+            "vpc_endpoint_type": "Interface",
+            "vpc_id": "vpc-0ddfa2c6e06a4bc99"
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjo2MDAwMDAwMDAwMDAsImRlbGV0ZSI6NjAwMDAwMDAwMDAwLCJ1cGRhdGUiOjYwMDAwMDAwMDAwMH19",
+          "dependencies": [
+            "aws_security_group.vpce"
+          ]
+        },
+        {
+          "index_key": "logs",
+          "schema_version": 0,
+          "attributes": {
+            "arn": "arn:aws:ec2:us-east-1:610639371721:vpc-endpoint/vpce-06b17094bfa027965",
+            "auto_accept": null,
+            "cidr_blocks": [],
+            "dns_entry": [
+              {
+                "dns_name": "vpce-06b17094bfa027965-46636nw5.logs.us-east-1.vpce.amazonaws.com",
+                "hosted_zone_id": "Z7HUB22UULQXV"
+              },
+              {
+                "dns_name": "vpce-06b17094bfa027965-46636nw5-us-east-1a.logs.us-east-1.vpce.amazonaws.com",
+                "hosted_zone_id": "Z7HUB22UULQXV"
+              },
+              {
+                "dns_name": "vpce-06b17094bfa027965-46636nw5-us-east-1b.logs.us-east-1.vpce.amazonaws.com",
+                "hosted_zone_id": "Z7HUB22UULQXV"
+              },
+              {
+                "dns_name": "logs.us-east-1.amazonaws.com",
+                "hosted_zone_id": "Z06756791DSHCEXQJ8TUJ"
+              },
+              {
+                "dns_name": "streaming-logs.us-east-1.amazonaws.com",
+                "hosted_zone_id": "Z06751412GIOR2A2T9BIA"
+              },
+              {
+                "dns_name": "streaming-logs.us-east-1.api.aws",
+                "hosted_zone_id": "Z067567415A69803VXYM"
+              },
+              {
+                "dns_name": "logs.us-east-1.api.aws",
+                "hosted_zone_id": "Z070821212670D5R9H0UL"
+              }
+            ],
+            "dns_options": [
+              {
+                "dns_record_ip_type": "ipv4",
+                "private_dns_only_for_inbound_resolver_endpoint": false
+              }
+            ],
+            "id": "vpce-06b17094bfa027965",
+            "ip_address_type": "ipv4",
+            "network_interface_ids": [
+              "eni-01f50f4190cee3c63",
+              "eni-0d43cd9bbd8365374"
+            ],
+            "owner_id": "610639371721",
+            "policy": "{\"Statement\":[{\"Action\":\"*\",\"Effect\":\"Allow\",\"Principal\":\"*\",\"Resource\":\"*\"}]}",
+            "prefix_list_id": null,
+            "private_dns_enabled": true,
+            "requester_managed": false,
+            "resource_configuration_arn": "",
+            "route_table_ids": [],
+            "security_group_ids": [
+              "sg-05270094caba6a55b"
+            ],
+            "service_name": "com.amazonaws.us-east-1.logs",
+            "service_network_arn": "",
+            "service_region": "us-east-1",
+            "state": "available",
+            "subnet_configuration": [
+              {
+                "ipv4": "10.164.56.234",
+                "ipv6": "",
+                "subnet_id": "subnet-0eb319a33bfde7293"
+              },
+              {
+                "ipv4": "10.164.56.73",
+                "ipv6": "",
+                "subnet_id": "subnet-0ccac81dc574f7dee"
+              }
+            ],
+            "subnet_ids": [
+              "subnet-0ccac81dc574f7dee",
+              "subnet-0eb319a33bfde7293"
+            ],
+            "tags": {
+              "Name": "reportiq-logs"
+            },
+            "tags_all": {
+              "AppID": "ASP0017650",
+              "CreatedBy": "Abhay.Lunkad",
+              "Environment": "NonProd",
+              "Name": "reportiq-logs",
+              "Owner": "anuthama.c@spglobal.com",
+              "contact": "askdevopscloud@spglobal.com"
+            },
+            "timeouts": null,
+            "vpc_endpoint_type": "Interface",
+            "vpc_id": "vpc-0ddfa2c6e06a4bc99"
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjo2MDAwMDAwMDAwMDAsImRlbGV0ZSI6NjAwMDAwMDAwMDAwLCJ1cGRhdGUiOjYwMDAwMDAwMDAwMH19",
+          "dependencies": [
+            "aws_security_group.vpce"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "aws_vpc_endpoint",
+      "name": "s3",
+      "provider": "provider[\"registry.terraform.io/hashicorp/aws\"]",
+      "instances": [
+        {
+          "index_key": 0,
+          "schema_version": 0,
+          "attributes": {
+            "arn": "arn:aws:ec2:us-east-1:610639371721:vpc-endpoint/vpce-0cf928e522dc9ec51",
+            "auto_accept": null,
+            "cidr_blocks": [
+              "16.15.176.0/20",
+              "16.182.0.0/16",
+              "18.34.0.0/19",
+              "52.216.0.0/15",
+              "54.231.0.0/16",
+              "3.5.0.0/19",
+              "18.34.232.0/21",
+              "16.15.192.0/18"
+            ],
+            "dns_entry": [],
+            "dns_options": [
+              {
+                "dns_record_ip_type": "service-defined",
+                "private_dns_only_for_inbound_resolver_endpoint": false
+              }
+            ],
+            "id": "vpce-0cf928e522dc9ec51",
+            "ip_address_type": "ipv4",
+            "network_interface_ids": [],
+            "owner_id": "610639371721",
+            "policy": "{\"Statement\":[{\"Action\":\"*\",\"Effect\":\"Allow\",\"Principal\":\"*\",\"Resource\":\"*\"}],\"Version\":\"2008-10-17\"}",
+            "prefix_list_id": "pl-63a5400a",
+            "private_dns_enabled": false,
+            "requester_managed": false,
+            "resource_configuration_arn": "",
+            "route_table_ids": [
+              "rtb-017ab1cfe1259120d",
+              "rtb-06fdfafd7178f3e23",
+              "rtb-0a9ccc5e601c29663"
+            ],
+            "security_group_ids": [],
+            "service_name": "com.amazonaws.us-east-1.s3",
+            "service_network_arn": "",
+            "service_region": "us-east-1",
+            "state": "available",
+            "subnet_configuration": [],
+            "subnet_ids": [],
+            "tags": {
+              "Name": "reportiq-s3-gw"
+            },
+            "tags_all": {
+              "AppID": "ASP0017650",
+              "CreatedBy": "Abhay.Lunkad",
+              "Environment": "NonProd",
+              "Name": "reportiq-s3-gw",
+              "Owner": "anuthama.c@spglobal.com",
+              "contact": "askdevopscloud@spglobal.com"
+            },
+            "timeouts": null,
+            "vpc_endpoint_type": "Gateway",
+            "vpc_id": "vpc-0ddfa2c6e06a4bc99"
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjo2MDAwMDAwMDAwMDAsImRlbGV0ZSI6NjAwMDAwMDAwMDAwLCJ1cGRhdGUiOjYwMDAwMDAwMDAwMH19",
+          "dependencies": [
+            "data.aws_route_tables.selected"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "tls_private_key",
+      "name": "cert",
+      "provider": "provider[\"registry.terraform.io/hashicorp/tls\"]",
+      "instances": [
+        {
+          "schema_version": 1,
+          "attributes": {
+            "algorithm": "RSA",
+            "ecdsa_curve": "P224",
+            "id": "51280c56646f033d2d54403fce2e458632cb314c",
+            "private_key_openssh": "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAABFwAAAAdz\nc2gtcnNhAAAAAwEAAQAAAQEAw5kVPdVF2qJo5xkR0tbIZlxtI6UNNQmcLldOy8A8\n7GWF6IwkKHbsqAdS1PR0kIXyRHFut4gqpfCAl064e/bR9s1BDlHr8TzyUAOQyGWD\nGiTzW/jeJa1MDcSnpHnee+mj46aH60E9uK1Jf7tb/7G6VU+dXcgc+7s8nIRCOOWy\nbB4qCO9Ktkwp/gDZ776/o0+Bhyu5lQz92c30ZaafGpscTq99MUi+Kp5Ur44zLnxS\nTDCV5oLPpMqNVXEDUsxKwp87F0Ct+I2gy/7mQrdTZj/F8FpdXRZz/FDOYRj/8NGt\n9EusuRucvX7X/F3T57klvW4cWYLr3jsuuc1HP7KFsP11OwAAA7gEuEwnBLhMJwAA\nAAdzc2gtcnNhAAABAQDDmRU91UXaomjnGRHS1shmXG0jpQ01CZwuV07LwDzsZYXo\njCQoduyoB1LU9HSQhfJEcW63iCql8ICXTrh79tH2zUEOUevxPPJQA5DIZYMaJPNb\n+N4lrUwNxKeked576aPjpofrQT24rUl/u1v/sbpVT51dyBz7uzychEI45bJsHioI\n70q2TCn+ANnvvr+jT4GHK7mVDP3ZzfRlpp8amxxOr30xSL4qnlSvjjMufFJMMJXm\ngs+kyo1VcQNSzErCnzsXQK34jaDL/uZCt1NmP8XwWl1dFnP8UM5hGP/w0a30S6y5\nG5y9ftf8XdPnuSW9bhxZguveOy65zUc/soWw/XU7AAAAAwEAAQAAAQBPGjHE9+Nw\nMA5Mp47VvZb+DpL0v2M/98r50sVDEVOSJtyo10QoOTAsJAoTpWkeqYz4sQcdoivd\nQA5BIszpFUCEly2gJPFOdl9ojIiZArSqdhcVMuhkRFllmApUMhUP98UX49lEAvZ7\nIVmAFr12AuJgbfouWyedhnNUuQgvCnXF0xeMY5lzJksHV5J18WZlbrIx+N0/yyCl\nNU7sCsEeGMOLy/Qm5FiRsgUboQ+YVov9KVZSW7tr591LyRnoNOANCWW7xymx2cSO\n4NFuPuTqHu2dUGx29eJdP8IJ5g7oymHQF2VWzzVrGmQqIR00T3Xzm6hXCLxnIWC3\n3mLNxZR6ADbBAAAAgDRYWScWJLZ3TroX0DA5QwQM/DCF1j3znTGVyYf0zeT/u2gM\nLGc4aO5ivi8E9xxZ+Ci9wD/xgLJqJiavhndMl8jWV/EG7R9UTputoBMmZvS4Gx6u\nFguhKj+VKxDyq60GcasWK9Taetj4j+hSiootV3/51mGVsjxKTmHk3jXE5aZcAAAA\ngQDOsfYuybOc8ERkpo/Kx40GuYY2BO0k1nHTSXXACJ10pUvzC1iAvRFcI0bA9NBi\njItClZ97bgsZtZOi/j11IzZfdvx4zPWyi3L4yU9BRX31ecveJ92uhK6dsDsnCaY0\nH8Zx6ky4Zfj/3wO/FPZMyeo0vrz+UrR45TI0elpNSLOytQAAAIEA8kF2E+Zqq13r\nMJ2ajbZjcIUPJsD0zaanbdPZRekE00akD8zW+jiEe4utuOpBLtfvUVk2ph//k0U9\nrb5arH7xD4CdewOIkazAeBusWSFqWH8630MboJQgTc5iIMbH2RTz/ADp0Z6xC8P5\npzM6XUmUetuX6xLZi+/37XxlkQqqzi8AAAAAAQID\n-----END OPENSSH PRIVATE KEY-----\n",
+            "private_key_pem": "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEAw5kVPdVF2qJo5xkR0tbIZlxtI6UNNQmcLldOy8A87GWF6Iwk\nKHbsqAdS1PR0kIXyRHFut4gqpfCAl064e/bR9s1BDlHr8TzyUAOQyGWDGiTzW/je\nJa1MDcSnpHnee+mj46aH60E9uK1Jf7tb/7G6VU+dXcgc+7s8nIRCOOWybB4qCO9K\ntkwp/gDZ776/o0+Bhyu5lQz92c30ZaafGpscTq99MUi+Kp5Ur44zLnxSTDCV5oLP\npMqNVXEDUsxKwp87F0Ct+I2gy/7mQrdTZj/F8FpdXRZz/FDOYRj/8NGt9EusuRuc\nvX7X/F3T57klvW4cWYLr3jsuuc1HP7KFsP11OwIDAQABAoIBAE8aMcT343AwDkyn\njtW9lv4OkvS/Yz/3yvnSxUMRU5Im3KjXRCg5MCwkChOlaR6pjPixBx2iK91ADkEi\nzOkVQISXLaAk8U52X2iMiJkCtKp2FxUy6GREWWWYClQyFQ/3xRfj2UQC9nshWYAW\nvXYC4mBt+i5bJ52Gc1S5CC8KdcXTF4xjmXMmSwdXknXxZmVusjH43T/LIKU1TuwK\nwR4Yw4vL9CbkWJGyBRuhD5hWi/0pVlJbu2vn3UvJGeg04A0JZbvHKbHZxI7g0W4+\n5Ooe7Z1QbHb14l0/wgnmDujKYdAXZVbPNWsaZCohHTRPdfObqFcIvGchYLfeYs3F\nlHoANsECgYEAzrH2LsmznPBEZKaPyseNBrmGNgTtJNZx00l1wAiddKVL8wtYgL0R\nXCNGwPTQYoyLQpWfe24LGbWTov49dSM2X3b8eMz1soty+MlPQUV99XnL3ifdroSu\nnbA7JwmmNB/GcepMuGX4/98DvxT2TMnqNL68/lK0eOUyNHpaTUizsrUCgYEA8kF2\nE+Zqq13rMJ2ajbZjcIUPJsD0zaanbdPZRekE00akD8zW+jiEe4utuOpBLtfvUVk2\nph//k0U9rb5arH7xD4CdewOIkazAeBusWSFqWH8630MboJQgTc5iIMbH2RTz/ADp\n0Z6xC8P5pzM6XUmUetuX6xLZi+/37XxlkQqqzi8CgYEAlXl5EQjojVvr+eXCIuEA\niZZtCm+xl2xFUIjVUJRqWcqYDCFuVVtlTH5uUmg4sqv0oahWdwpzmJoJNFwr0aQv\nVAZWOn3uSLoz4NqkKA27M2RrHDM0S1rEdGDXxjliKlu4RPUtmkSUN2Xt7aeZHpr+\ndjphroHc5XjKP80jtLQYz+kCgYAyvsOdJ4bwnpvFcz4MsUfjKfwiggjFi0NHHjlF\nC6qXFxUGukHN6EjYGEorkeZViaX3xFhONCW1E6v32QflWjHkrWxPeE4DNcybXDCd\n+wHrx7rtSYFgAadCpRipBPqX3mu9PfO8lSFA9aw1+eUf5WnU0mrgMvKe/YVRmd0s\npK9iwQKBgDRYWScWJLZ3TroX0DA5QwQM/DCF1j3znTGVyYf0zeT/u2gMLGc4aO5i\nvi8E9xxZ+Ci9wD/xgLJqJiavhndMl8jWV/EG7R9UTputoBMmZvS4Gx6uFguhKj+V\nKxDyq60GcasWK9Taetj4j+hSiootV3/51mGVsjxKTmHk3jXE5aZc\n-----END RSA PRIVATE KEY-----\n",
+            "private_key_pem_pkcs8": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDDmRU91UXaomjn\nGRHS1shmXG0jpQ01CZwuV07LwDzsZYXojCQoduyoB1LU9HSQhfJEcW63iCql8ICX\nTrh79tH2zUEOUevxPPJQA5DIZYMaJPNb+N4lrUwNxKeked576aPjpofrQT24rUl/\nu1v/sbpVT51dyBz7uzychEI45bJsHioI70q2TCn+ANnvvr+jT4GHK7mVDP3ZzfRl\npp8amxxOr30xSL4qnlSvjjMufFJMMJXmgs+kyo1VcQNSzErCnzsXQK34jaDL/uZC\nt1NmP8XwWl1dFnP8UM5hGP/w0a30S6y5G5y9ftf8XdPnuSW9bhxZguveOy65zUc/\nsoWw/XU7AgMBAAECggEATxoxxPfjcDAOTKeO1b2W/g6S9L9jP/fK+dLFQxFTkibc\nqNdEKDkwLCQKE6VpHqmM+LEHHaIr3UAOQSLM6RVAhJctoCTxTnZfaIyImQK0qnYX\nFTLoZERZZZgKVDIVD/fFF+PZRAL2eyFZgBa9dgLiYG36LlsnnYZzVLkILwp1xdMX\njGOZcyZLB1eSdfFmZW6yMfjdP8sgpTVO7ArBHhjDi8v0JuRYkbIFG6EPmFaL/SlW\nUlu7a+fdS8kZ6DTgDQllu8cpsdnEjuDRbj7k6h7tnVBsdvXiXT/CCeYO6Mph0Bdl\nVs81axpkKiEdNE9185uoVwi8ZyFgt95izcWUegA2wQKBgQDOsfYuybOc8ERkpo/K\nx40GuYY2BO0k1nHTSXXACJ10pUvzC1iAvRFcI0bA9NBijItClZ97bgsZtZOi/j11\nIzZfdvx4zPWyi3L4yU9BRX31ecveJ92uhK6dsDsnCaY0H8Zx6ky4Zfj/3wO/FPZM\nyeo0vrz+UrR45TI0elpNSLOytQKBgQDyQXYT5mqrXeswnZqNtmNwhQ8mwPTNpqdt\n09lF6QTTRqQPzNb6OIR7i6246kEu1+9RWTamH/+TRT2tvlqsfvEPgJ17A4iRrMB4\nG6xZIWpYfzrfQxuglCBNzmIgxsfZFPP8AOnRnrELw/mnMzpdSZR625frEtmL7/ft\nfGWRCqrOLwKBgQCVeXkRCOiNW+v55cIi4QCJlm0Kb7GXbEVQiNVQlGpZypgMIW5V\nW2VMfm5SaDiyq/ShqFZ3CnOYmgk0XCvRpC9UBlY6fe5IujPg2qQoDbszZGscMzRL\nWsR0YNfGOWIqW7hE9S2aRJQ3Ze3tp5kemv52OmGugdzleMo/zSO0tBjP6QKBgDK+\nw50nhvCem8VzPgyxR+Mp/CKCCMWLQ0ceOUULqpcXFQa6Qc3oSNgYSiuR5lWJpffE\nWE40JbUTq/fZB+VaMeStbE94TgM1zJtcMJ37AevHuu1JgWABp0KlGKkE+pfea709\n87yVIUD1rDX55R/ladTSauAy8p79hVGZ3Sykr2LBAoGANFhZJxYktndOuhfQMDlD\nBAz8MIXWPfOdMZXJh/TN5P+7aAwsZzho7mK+LwT3HFn4KL3AP/GAsmomJq+Gd0yX\nyNZX8QbtH1ROm62gEyZm9LgbHq4WC6EqP5UrEPKrrQZxqxYr1Np62PiP6FKKii1X\nf/nWYZWyPEpOYeTeNcTlplw=\n-----END PRIVATE KEY-----\n",
+            "public_key_fingerprint_md5": "86:9c:75:2e:63:73:18:d8:5e:fd:06:d0:d0:38:80:79",
+            "public_key_fingerprint_sha256": "SHA256:c5H6BD4s3ODo9zby8ckgPgOTS/mtde/3UEhzIC09b2M",
+            "public_key_openssh": "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDDmRU91UXaomjnGRHS1shmXG0jpQ01CZwuV07LwDzsZYXojCQoduyoB1LU9HSQhfJEcW63iCql8ICXTrh79tH2zUEOUevxPPJQA5DIZYMaJPNb+N4lrUwNxKeked576aPjpofrQT24rUl/u1v/sbpVT51dyBz7uzychEI45bJsHioI70q2TCn+ANnvvr+jT4GHK7mVDP3ZzfRlpp8amxxOr30xSL4qnlSvjjMufFJMMJXmgs+kyo1VcQNSzErCnzsXQK34jaDL/uZCt1NmP8XwWl1dFnP8UM5hGP/w0a30S6y5G5y9ftf8XdPnuSW9bhxZguveOy65zUc/soWw/XU7\n",
+            "public_key_pem": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAw5kVPdVF2qJo5xkR0tbI\nZlxtI6UNNQmcLldOy8A87GWF6IwkKHbsqAdS1PR0kIXyRHFut4gqpfCAl064e/bR\n9s1BDlHr8TzyUAOQyGWDGiTzW/jeJa1MDcSnpHnee+mj46aH60E9uK1Jf7tb/7G6\nVU+dXcgc+7s8nIRCOOWybB4qCO9Ktkwp/gDZ776/o0+Bhyu5lQz92c30ZaafGpsc\nTq99MUi+Kp5Ur44zLnxSTDCV5oLPpMqNVXEDUsxKwp87F0Ct+I2gy/7mQrdTZj/F\n8FpdXRZz/FDOYRj/8NGt9EusuRucvX7X/F3T57klvW4cWYLr3jsuuc1HP7KFsP11\nOwIDAQAB\n-----END PUBLIC KEY-----\n",
+            "rsa_bits": 2048
+          },
+          "sensitive_attributes": [
+            [
+              {
+                "type": "get_attr",
+                "value": "private_key_openssh"
+              }
+            ],
+            [
+              {
+                "type": "get_attr",
+                "value": "private_key_pem"
+              }
+            ],
+            [
+              {
+                "type": "get_attr",
+                "value": "private_key_pem_pkcs8"
+              }
+            ]
+          ],
+          "identity_schema_version": 0,
+          "create_before_destroy": true
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "tls_self_signed_cert",
+      "name": "cert",
+      "provider": "provider[\"registry.terraform.io/hashicorp/tls\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "allowed_uses": [
+              "key_encipherment",
+              "digital_signature",
+              "server_auth"
+            ],
+            "cert_pem": "-----BEGIN CERTIFICATE-----\nMIIDhzCCAm+gAwIBAgIQFkYOsUa7eGvgJJVbxm1LuzANBgkqhkiG9w0BAQsFADAx\nMRMwEQYDVQQKDApTJlAgR2xvYmFsMRowGAYDVQQDExFyZXBvcnRpcS1pbnRlcm5h\nbDAeFw0yNjA2MjUwNjQ3MzhaFw0yODA5MjcwNjQ3MzhaMDExEzARBgNVBAoMClMm\nUCBHbG9iYWwxGjAYBgNVBAMTEXJlcG9ydGlxLWludGVybmFsMIIBIjANBgkqhkiG\n9w0BAQEFAAOCAQ8AMIIBCgKCAQEAw5kVPdVF2qJo5xkR0tbIZlxtI6UNNQmcLldO\ny8A87GWF6IwkKHbsqAdS1PR0kIXyRHFut4gqpfCAl064e/bR9s1BDlHr8TzyUAOQ\nyGWDGiTzW/jeJa1MDcSnpHnee+mj46aH60E9uK1Jf7tb/7G6VU+dXcgc+7s8nIRC\nOOWybB4qCO9Ktkwp/gDZ776/o0+Bhyu5lQz92c30ZaafGpscTq99MUi+Kp5Ur44z\nLnxSTDCV5oLPpMqNVXEDUsxKwp87F0Ct+I2gy/7mQrdTZj/F8FpdXRZz/FDOYRj/\n8NGt9EusuRucvX7X/F3T57klvW4cWYLr3jsuuc1HP7KFsP11OwIDAQABo4GaMIGX\nMA4GA1UdDwEB/wQEAwIFoDATBgNVHSUEDDAKBggrBgEFBQcDATAMBgNVHRMBAf8E\nAjAAMGIGA1UdEQRbMFmCEXJlcG9ydGlxLWludGVybmFsgkRpbnRlcm5hbC1yZXBv\ncnRpcS1pbnRlcm5hbC1hbGItNDY2MDIxMDg1LnVzLWVhc3QtMS5lbGIuYW1hem9u\nYXdzLmNvbTANBgkqhkiG9w0BAQsFAAOCAQEAYT+eX44RqKcjvCe3jIbHRopRlKYD\nvZo//m4/PNLgMr2IvhUwHFFd+ReuIuv1yLxnCNPO7fisMDF4aBl0/RnsQRgYPHVq\nA3X4yhCeykmsXxUUQJLSXM0QaufbubKNi64UlxaCNK8Jeoom1dvzVfC4AwuJuObV\n4KsGF6M1riIZzRnfKYg7PfdwLDypj4MIXT69NPqQM91VmKH4FVSd6PSIWsms7JGT\n07UXaS65WQwA2EaMXauEvloyimvvRr/0PkCKpIdZJumjnIgY05uTQ/bu6CmlyIbd\nfnPWZxzjRKAayu2/KZi+xGVMU20IWuLzBVWRNJmixGIPOCDb5uhIpH0Emw==\n-----END CERTIFICATE-----\n",
+            "dns_names": [
+              "reportiq-internal",
+              "internal-reportiq-internal-alb-466021085.us-east-1.elb.amazonaws.com"
+            ],
+            "early_renewal_hours": 720,
+            "id": "29606774686375391775747428483823651771",
+            "ip_addresses": null,
+            "is_ca_certificate": false,
+            "key_algorithm": "RSA",
+            "max_path_length": null,
+            "private_key_pem": "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEAw5kVPdVF2qJo5xkR0tbIZlxtI6UNNQmcLldOy8A87GWF6Iwk\nKHbsqAdS1PR0kIXyRHFut4gqpfCAl064e/bR9s1BDlHr8TzyUAOQyGWDGiTzW/je\nJa1MDcSnpHnee+mj46aH60E9uK1Jf7tb/7G6VU+dXcgc+7s8nIRCOOWybB4qCO9K\ntkwp/gDZ776/o0+Bhyu5lQz92c30ZaafGpscTq99MUi+Kp5Ur44zLnxSTDCV5oLP\npMqNVXEDUsxKwp87F0Ct+I2gy/7mQrdTZj/F8FpdXRZz/FDOYRj/8NGt9EusuRuc\nvX7X/F3T57klvW4cWYLr3jsuuc1HP7KFsP11OwIDAQABAoIBAE8aMcT343AwDkyn\njtW9lv4OkvS/Yz/3yvnSxUMRU5Im3KjXRCg5MCwkChOlaR6pjPixBx2iK91ADkEi\nzOkVQISXLaAk8U52X2iMiJkCtKp2FxUy6GREWWWYClQyFQ/3xRfj2UQC9nshWYAW\nvXYC4mBt+i5bJ52Gc1S5CC8KdcXTF4xjmXMmSwdXknXxZmVusjH43T/LIKU1TuwK\nwR4Yw4vL9CbkWJGyBRuhD5hWi/0pVlJbu2vn3UvJGeg04A0JZbvHKbHZxI7g0W4+\n5Ooe7Z1QbHb14l0/wgnmDujKYdAXZVbPNWsaZCohHTRPdfObqFcIvGchYLfeYs3F\nlHoANsECgYEAzrH2LsmznPBEZKaPyseNBrmGNgTtJNZx00l1wAiddKVL8wtYgL0R\nXCNGwPTQYoyLQpWfe24LGbWTov49dSM2X3b8eMz1soty+MlPQUV99XnL3ifdroSu\nnbA7JwmmNB/GcepMuGX4/98DvxT2TMnqNL68/lK0eOUyNHpaTUizsrUCgYEA8kF2\nE+Zqq13rMJ2ajbZjcIUPJsD0zaanbdPZRekE00akD8zW+jiEe4utuOpBLtfvUVk2\nph//k0U9rb5arH7xD4CdewOIkazAeBusWSFqWH8630MboJQgTc5iIMbH2RTz/ADp\n0Z6xC8P5pzM6XUmUetuX6xLZi+/37XxlkQqqzi8CgYEAlXl5EQjojVvr+eXCIuEA\niZZtCm+xl2xFUIjVUJRqWcqYDCFuVVtlTH5uUmg4sqv0oahWdwpzmJoJNFwr0aQv\nVAZWOn3uSLoz4NqkKA27M2RrHDM0S1rEdGDXxjliKlu4RPUtmkSUN2Xt7aeZHpr+\ndjphroHc5XjKP80jtLQYz+kCgYAyvsOdJ4bwnpvFcz4MsUfjKfwiggjFi0NHHjlF\nC6qXFxUGukHN6EjYGEorkeZViaX3xFhONCW1E6v32QflWjHkrWxPeE4DNcybXDCd\n+wHrx7rtSYFgAadCpRipBPqX3mu9PfO8lSFA9aw1+eUf5WnU0mrgMvKe/YVRmd0s\npK9iwQKBgDRYWScWJLZ3TroX0DA5QwQM/DCF1j3znTGVyYf0zeT/u2gMLGc4aO5i\nvi8E9xxZ+Ci9wD/xgLJqJiavhndMl8jWV/EG7R9UTputoBMmZvS4Gx6uFguhKj+V\nKxDyq60GcasWK9Taetj4j+hSiootV3/51mGVsjxKTmHk3jXE5aZc\n-----END RSA PRIVATE KEY-----\n",
+            "ready_for_renewal": false,
+            "set_authority_key_id": false,
+            "set_subject_key_id": false,
+            "subject": [
+              {
+                "common_name": "reportiq-internal",
+                "country": null,
+                "email_address": null,
+                "locality": null,
+                "organization": "S\u0026P Global",
+                "organizational_unit": null,
+                "postal_code": null,
+                "province": null,
+                "serial_number": null,
+                "street_address": null
+              }
+            ],
+            "uris": null,
+            "validity_end_time": "2028-09-27T12:17:38.418495+05:30",
+            "validity_period_hours": 19800,
+            "validity_start_time": "2026-06-25T12:17:38.418495+05:30"
+          },
+          "sensitive_attributes": [
+            [
+              {
+                "type": "get_attr",
+                "value": "private_key_pem"
+              }
+            ]
+          ],
+          "identity_schema_version": 0,
+          "dependencies": [
+            "aws_lb.app",
+            "aws_security_group.alb",
+            "tls_private_key.cert"
+          ],
+          "create_before_destroy": true
+        }
+      ]
+    }
+  ],
+  "check_results": null
+}

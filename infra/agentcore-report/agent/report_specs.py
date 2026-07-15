@@ -75,10 +75,13 @@ REPORT_SPECS: dict[str, dict] = {
         "year_required": False,
         "registries": {},
         "validation_prompt": (
-            "The document must BE {company}'s general Code of Conduct / Code of "
-            "Business Conduct and Ethics. A Supplier/Vendor Code of Conduct, a "
-            "code for non-executive or independent directors only, or a "
-            "governance overview page is NOT a match."
+            "The document must BE {company}'s official Code of Conduct / Code of "
+            "Business Conduct and Ethics. It may apply company-wide or to the "
+            "Board, senior management, executive leadership and corporate "
+            "officers. A Supplier/Vendor Code of Conduct, a code limited only "
+            "to non-executive or independent directors, a director appointment "
+            "or familiarisation document, or a governance overview page is NOT "
+            "a match."
         ),
     },
     "supplier code of conduct": {

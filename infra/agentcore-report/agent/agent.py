@@ -1,4 +1,8 @@
-"""Report download agent (single AgentCore Runtime) — v41.
+"""Report download agent (single AgentCore Runtime) — v42.
+
+v42 bridges relevant HTML landing pages discovered through sitemaps to the
+documents they link, reserves search sampling capacity for official-domain
+results, and rejects LLM query variants that invent or drop report years.
 
 v41 adds completed-fiscal-year targeting for undated Annual Report requests,
 browser-first resolution for filing classes, reserved cross-tier verification
@@ -52,7 +56,7 @@ import registry_tier
 
 app = BedrockAgentCoreApp()
 
-CODE_VERSION = "v41"
+CODE_VERSION = "v42"
 
 # Tier 2 (official registry fallback) master switch. registry_tier.py reads its
 # own EDGAR_* / CH_* configuration from the environment.
@@ -143,6 +147,8 @@ SEARCH_ALL_ALIASES = os.environ.get("SEARCH_ALL_ALIASES", "true").lower() != "fa
 ALIAS_REGION = os.environ.get("ALIAS_REGION", "all").strip().lower()
 ALIAS_MODE = os.environ.get("ALIAS_MODE", "fallback").strip().lower()
 TOP_N_FOR_LLM     = int(os.environ.get("TOP_N_FOR_LLM", "6"))
+SEARCH_OFFICIAL_DOMAIN_RESERVE = int(os.environ.get(
+    "SEARCH_OFFICIAL_DOMAIN_RESERVE", "3"))
 ALIAS_HIT_BOOST   = int(os.environ.get("ALIAS_HIT_BOOST", "1"))
 ENABLE_LLM_CLASS_MATCH = os.environ.get("ENABLE_LLM_CLASS_MATCH", "true").lower() != "false"
 ENFORCE_COMPANY_SAMPLE_EVIDENCE = os.environ.get(
@@ -173,6 +179,10 @@ SITEMAP_MAX_URLS = int(os.environ.get("SITEMAP_MAX_URLS", "5000"))
 SITEMAP_MAX_NESTED = int(os.environ.get("SITEMAP_MAX_NESTED", "50"))
 SITEMAP_FETCH_TIMEOUT = int(os.environ.get("SITEMAP_FETCH_TIMEOUT", "20"))
 SITEMAP_MAX_CANDIDATES = int(os.environ.get("SITEMAP_MAX_CANDIDATES", "40"))
+SITEMAP_MAX_LANDING_PAGES = int(os.environ.get(
+    "SITEMAP_MAX_LANDING_PAGES", "12"))
+SITEMAP_MAX_DOC_LINKS_PER_PAGE = int(os.environ.get(
+    "SITEMAP_MAX_DOC_LINKS_PER_PAGE", "30"))
 FILING_FALLBACK_ALL_CLASSES = os.environ.get("FILING_FALLBACK_ALL_CLASSES", "true").lower() != "false"
 FILING_REGISTRY_HOSTS = [
     h.strip().lower() for h in os.environ.get(
@@ -2907,7 +2917,7 @@ def _find_best_document(search_queries: list[str], limit: int, company: str = ""
             probe_only = True
 
     ranked = _rank(merged, primary, qdomain)
-    ranked_urls = [p.get("url", "") for _, p in ranked[:TOP_N_FOR_LLM + 4] if p.get("url")]
+    ranked_urls = _ranked_probe_urls(ranked, qdomain, TOP_N_FOR_LLM + 4)
     print(f"[find] domain_mode={domain_mode} | HEAD pre-filtering {len(ranked_urls)} "
           f"candidates for: {primary[:80]}")
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
@@ -2943,6 +2953,30 @@ def _find_best_document(search_queries: list[str], limit: int, company: str = ""
     }
 
 
+def _ranked_probe_urls(ranked: list[tuple[int, dict]],
+                       official_domain: str | None,
+                       cap: int) -> list[str]:
+    """Return bounded search probes while reserving slots for official hits.
+
+    Soft-domain mode intentionally retains registry/CDN candidates, but those
+    results must not crowd every official-company result out of the small and
+    expensive sample sent to the verifier.
+    """
+    all_urls = [c.get("url", "") for _, c in ranked if c.get("url")]
+    if not official_domain or SEARCH_OFFICIAL_DOMAIN_RESERVE <= 0:
+        return all_urls[:cap]
+    official = [u for u in all_urls if _host_matches(u, official_domain)]
+    selected = official[:min(SEARCH_OFFICIAL_DOMAIN_RESERVE, cap)]
+    selected_set = set(selected)
+    for url in all_urls:
+        if url not in selected_set:
+            selected.append(url)
+            selected_set.add(url)
+        if len(selected) >= cap:
+            break
+    return selected
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # LLM multi-query generation
 # ═══════════════════════════════════════════════════════════════════════════
@@ -2954,6 +2988,11 @@ def _parse_llm_json_array(text):
     if start > 0:
         text = text[start:]
     return json.JSONDecoder().raw_decode(text)[0]
+
+
+def _query_variant_preserves_years(original: str, variant: str) -> bool:
+    """LLM search aliases may rephrase a query, but may not alter its years."""
+    return _extract_year_intent(original) == _extract_year_intent(variant)
 
 
 def _llm_generate_search_queries(query, company, domain):
@@ -2991,6 +3030,7 @@ def _llm_generate_search_queries(query, company, domain):
         text = _converse(prompt, max_tokens=500)
         arr = _parse_llm_json_array(text)
         out = []
+        rejected_year_variants = 0
         seen = {query.strip().lower()}
         for q in arr:
             if not isinstance(q, str):
@@ -2998,11 +3038,17 @@ def _llm_generate_search_queries(query, company, domain):
             q = _demarkdown(q.replace(chr(34), "")).strip()
             if not q or q.lower() in seen:
                 continue
+            if not _query_variant_preserves_years(query, q):
+                rejected_year_variants += 1
+                continue
             seen.add(q.lower())
             out.append(q[:200])
         out = out[:LLM_QUERY_GEN_MAX]
         _LLM_QUERY_GEN_CACHE[cache_key] = out
         print("[llm-querygen] generated " + str(len(out)) + " variants for " + repr(query))
+        if rejected_year_variants:
+            print("[llm-querygen] rejected " + str(rejected_year_variants)
+                  + " variant(s) that invented or dropped a year")
         return out
     except Exception as exc:
         print("[llm-querygen] failed (" + str(exc) + "); using regex aliases only")
@@ -3119,15 +3165,115 @@ def _harvest_sitemap(domain, query):
     return out
 
 
+def _sitemap_landing_score(url: str, query: str) -> int:
+    """Prioritize likely report/policy hubs without company-specific routes."""
+    path = unquote(urlparse(url or "").path).lower()
+    query_terms = [t for t in _keywords(query) if len(t) > 3]
+    score = sum(10 for term in query_terms if term in path)
+    query_text = " ".join(query_terms)
+
+    policy_query = any(term in query_text for term in (
+        "conduct", "ethic", "policy", "whistlebl", "bribery", "corruption",
+        "remuneration", "human rights", "modern slavery", "tax strategy"))
+    sustainability_query = any(term in query_text for term in (
+        "sustainab", "environment", "social", "esg", "brsr", "safety"))
+    filing_query = any(term in query_text for term in (
+        "annual", "financial", "proxy", "filing", "accounts", "statement"))
+
+    if policy_query:
+        route_weights = (("policies", 20), ("policy", 16), ("governance", 7),
+                         ("compliance", 6), ("investor", 3))
+    elif sustainability_query:
+        route_weights = (("sustainability", 12), ("esg", 10), ("brsr", 10),
+                         ("reports", 5), ("investor", 3))
+    elif filing_query:
+        route_weights = (("annual-report", 12), ("financial", 10),
+                         ("reports", 8), ("filings", 7), ("investor", 4))
+    else:
+        route_weights = (("investor", 4), ("reports", 3),
+                         ("governance", 3), ("policies", 3))
+    score += sum(weight for marker, weight in route_weights if marker in path)
+    return score
+
+
+_RECURRING_DOCUMENT_CLASSES = {
+    "annual report", "proxy statement", "remuneration report",
+    "sustainability report",
+}
+
+
+def _query_needs_recency_scan(query: str) -> bool:
+    return any(canonical in _RECURRING_DOCUMENT_CLASSES
+               for canonical, _ in _matched_doc_classes(query))
+
+
+def _strong_sitemap_doc_match(url: str, query: str) -> bool:
+    """True when every meaningful query term is present in the document path."""
+    path = unquote(urlparse(url or "").path).lower()
+    terms = [term for term in _keywords(query) if len(term) > 3]
+    return bool(terms) and all(term in path for term in terms)
+
+
 def _sitemap_resolve(domain, query, verify_fn, known_bad=None, budget=None,
                      reserve_verifies=0):
     cands = _harvest_sitemap(domain, query)
     if not cands:
         return None
+
+    # Sitemaps commonly list an HTML policy/report hub but omit the documents
+    # linked from it. Fetch a bounded set of the most relevant landing pages,
+    # extract safe document URLs, and merge them with direct sitemap documents.
+    direct_docs = [u for u in cands
+                   if _is_doc_url(u) and _is_safe_remote_document_url(u)]
+    landing_pages = [u for u in cands if not _is_doc_url(u)]
+    landing_pages.sort(key=lambda u: _sitemap_landing_score(u, query), reverse=True)
+    landing_pages = landing_pages[:SITEMAP_MAX_LANDING_PAGES]
+    discovered_sources: dict[str, str] = {}
+    landing_pages_inspected = 0
+    for page_url in landing_pages:
+        if budget is not None and not budget.can_verify(reserve_verifies):
+            break
+        try:
+            page_body, page_ctype = _fetch(page_url)
+        except Exception as exc:
+            if known_bad is not None:
+                known_bad[page_url] = "sitemap landing GET failed: " + type(exc).__name__
+            continue
+        landing_pages_inspected += 1
+        if "html" not in (page_ctype or "").lower():
+            continue
+        page_docs, _ = _page_doc_candidates(
+            page_body, page_url, query, official_domain=domain)
+        for doc_url in page_docs[:SITEMAP_MAX_DOC_LINKS_PER_PAGE]:
+            if (_is_safe_remote_document_url(doc_url)
+                    and not _is_junk_host(doc_url)):
+                discovered_sources.setdefault(doc_url, page_url)
+        if any(_strong_sitemap_doc_match(doc_url, query)
+               for doc_url in discovered_sources):
+            # The highest-ranked landing page exposed an exact-looking file.
+            # Let the class verifier decide it now instead of fetching every
+            # remaining broad sitemap hub first.
+            break
+
+    candidate_urls = list(dict.fromkeys(
+        list(discovered_sources) + direct_docs))
+    ranked_docs = _rank(
+        [{"url": u, "title": "", "snippet": ""} for u in candidate_urls],
+        query, domain)
+    candidate_urls = [c["url"] for _, c in ranked_docs]
+    print("[sitemap] inspected " + str(landing_pages_inspected)
+          + " landing page(s), discovered " + str(len(discovered_sources))
+          + " linked document(s); " + str(len(candidate_urls))
+          + " total document candidate(s)")
+    if not candidate_urls:
+        return None
+
     verified_hits = []
     tried = 0
     tbudget = BROWSER_MAX_VERIFY_CANDIDATES if verify_fn else 1
-    for cand in cands:
+    target_years = _extract_year_intent(query)
+    scan_for_recency = not target_years and _query_needs_recency_scan(query)
+    for cand in candidate_urls:
         if budget is not None and not budget.can_verify(reserve_verifies):
             print("[sitemap] stopped: " + budget.why_stopped(reserve_verifies))
             break
@@ -3149,11 +3295,14 @@ def _sitemap_resolve(domain, query, verify_fn, known_bad=None, budget=None,
             continue
         cd["verified"] = True
         cd["_verified_for"] = query
-        cd["via"] = "sitemap"
+        source_page = discovered_sources.get(cand)
+        cd["via"] = "sitemap_landing_page" if source_page else "sitemap"
+        if source_page:
+            cd["source_page"] = source_page
         verified_hits.append(cd)
-        target_years = _extract_year_intent(query)
         if (verify_fn is None
-                or target_years.intersection(_extract_year_intent(cand))):
+                or target_years.intersection(_extract_year_intent(cand))
+                or not scan_for_recency):
             break
     if not verified_hits:
         return None

@@ -46,7 +46,7 @@ locals {
     DEEP_STATIC_MAX_DOC_CANDIDATES_PER_PAGE = "20"
     LATEST_COMPLETED_FISCAL_YEAR_LAG        = "1"
     LATEST_COMPLETED_FISCAL_YEAR_CLASSES    = "annual report"
-    TRUSTED_DOCUMENT_CDN_DOMAINS            = "q4cdn.com"
+    KNOWN_DOCUMENT_CDN_DOMAINS              = "q4cdn.com"
     EDGAR_USER_AGENT                        = "EDO-CoAnalyst/1.0 compliance-research askdevopscloud@spglobal.com"
     ENABLE_REGISTRY_TIER                    = "true"
     EDGAR_MAX_REQ_PER_SEC                   = "8"

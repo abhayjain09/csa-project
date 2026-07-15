@@ -145,11 +145,12 @@ requests FY2026. An explicitly requested historical year is never changed.
 
 For filing classes, the rendered investor-relations path runs before a broad
 corporate-site crawl. Static discovery is capped per page, preserves verification
-capacity for the browser, and may accept a configured document CDN only when the
-link originates on an official investor-relations page. The deployment defaults
-are controlled by `LATEST_COMPLETED_FISCAL_YEAR_LAG`,
+capacity for the browser, and may accept any safe remote document URL when the
+link originates directly on the requested company's official investor-relations
+page. Known CDN domains are ranking hints only, never acceptance requirements.
+The deployment defaults are controlled by `LATEST_COMPLETED_FISCAL_YEAR_LAG`,
 `DEEP_STATIC_MAX_DOC_CANDIDATES_PER_PAGE`, `BROWSER_RESERVED_VERIFIES`, and
-`TRUSTED_DOCUMENT_CDN_DOMAINS` in `locals.tf`.
+`KNOWN_DOCUMENT_CDN_DOMAINS` in `locals.tf`.
 
 ## How it handles your minimal JSON
 No `company` field is needed — it's derived from the `site:` domain

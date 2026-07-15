@@ -2,7 +2,7 @@
 
 v41 adds completed-fiscal-year targeting for undated Annual Report requests,
 browser-first resolution for filing classes, reserved cross-tier verification
-capacity, bounded static candidates, and investor-scoped trusted CDN discovery.
+capacity, bounded static candidates, and investor-page-attested CDN discovery.
 
 v40 builds on v39's Gateway/Vertex search + deterministic AgentCore Browser DOM
 fallback and restructures the resolver into an explicit, ordered tier chain:
@@ -29,6 +29,7 @@ rejected set, cross-company gate, capped-recency year alignment.
 import asyncio
 import concurrent.futures
 import datetime as dt
+import ipaddress
 import random
 import threading
 import time
@@ -1459,10 +1460,11 @@ _BROWSER_HEADERS = {
     "Upgrade-Insecure-Requests": "1",
 }
 
-TRUSTED_DOCUMENT_CDN_DOMAINS = {
+KNOWN_DOCUMENT_CDN_DOMAINS = {
     d.strip().lower()
     for d in os.environ.get(
-        "TRUSTED_DOCUMENT_CDN_DOMAINS", "q4cdn.com",
+        "KNOWN_DOCUMENT_CDN_DOMAINS",
+        os.environ.get("TRUSTED_DOCUMENT_CDN_DOMAINS", "q4cdn.com"),
     ).split(",")
     if d.strip()
 }
@@ -1503,14 +1505,49 @@ def _is_investor_page(url: str) -> bool:
             or "/investor_relations/" in path)
 
 
-def _is_trusted_document_cdn(url: str) -> bool:
+def _is_known_document_cdn(url: str) -> bool:
+    """Ranking hint only; never an acceptance requirement."""
     host = urlparse(url or "").netloc.lower().split(":")[0]
     reg = _registrable(host)
     return any(host == d or host.endswith("." + d) or reg == _registrable(d)
-               for d in TRUSTED_DOCUMENT_CDN_DOMAINS)
+               for d in KNOWN_DOCUMENT_CDN_DOMAINS)
 
 
-def _doc_links(html: bytes, base_url: str, domain: str) -> list[str]:
+def _is_safe_remote_document_url(url: str) -> bool:
+    """Reject non-web, credential-bearing, local, and private-network targets."""
+    try:
+        parsed = urlparse(url or "")
+        host = (parsed.hostname or "").lower().rstrip(".")
+        if parsed.scheme.lower() not in {"http", "https"} or not host:
+            return False
+        if parsed.username is not None or parsed.password is not None:
+            return False
+        if host == "localhost" or host.endswith((".localhost", ".local")):
+            return False
+        try:
+            ip = ipaddress.ip_address(host)
+            if (ip.is_private or ip.is_loopback or ip.is_link_local
+                    or ip.is_reserved or ip.is_multicast or ip.is_unspecified):
+                return False
+        except ValueError:
+            if "." not in host:
+                return False
+        return _is_doc_url(url)
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _is_official_investor_source(page_url: str,
+                                 official_domain: str | None) -> bool:
+    """True only when an investor page belongs to the requested official site."""
+    if not official_domain or not _is_investor_page(page_url):
+        return False
+    page_host = urlparse(page_url or "").netloc.lower().split(":")[0]
+    return _registrable(page_host) == _registrable(official_domain)
+
+
+def _doc_links(html: bytes, base_url: str, domain: str,
+               official_domain: str | None = None) -> list[str]:
     txt = html.decode("utf-8", "ignore")
     found = []
     for m in re.finditer(r'href=["\']([^"\']+\.(?:pdf|docx?|rtf|xlsx?)(?:\?[^"\']*)?)["\']', txt, re.I):
@@ -1522,8 +1559,12 @@ def _doc_links(html: bytes, base_url: str, domain: str) -> list[str]:
     out = []
     for u in found:
         same_site = _registrable(urlparse(u).netloc) == _registrable(domain)
-        trusted_ir_cdn = _is_investor_page(base_url) and _is_trusted_document_cdn(u)
-        if (same_site or trusted_ir_cdn) and u not in out:
+        source_attested_document = (
+            _is_official_investor_source(base_url, official_domain)
+            and _is_safe_remote_document_url(u)
+            and not _is_junk_host(u)
+        )
+        if (same_site or source_attested_document) and u not in out:
             out.append(u)
     return out
 
@@ -1544,8 +1585,11 @@ def _site_root(query: str) -> str | None:
     return f"{p.scheme}://{p.netloc}/"
 
 
-def _page_doc_candidates(page_body: bytes, page_url: str, ctx: str) -> tuple[list[str], list[str]]:
-    links = _doc_links(page_body, page_url, urlparse(page_url).netloc.lower())
+def _page_doc_candidates(page_body: bytes, page_url: str, ctx: str,
+                         official_domain: str | None = None
+                         ) -> tuple[list[str], list[str]]:
+    links = _doc_links(page_body, page_url, urlparse(page_url).netloc.lower(),
+                       official_domain=official_domain)
     ext   = [u for u in links if _is_doc_url(u)]
     other = [u for u in links if not _is_doc_url(u)]
     pool  = _rank([{"url": u, "title": ""} for u in (ext or other)], ctx, None)
@@ -1818,7 +1862,7 @@ def _verify_priority(url: str, query: str) -> int:
             score += 20
         if re.search(r"(?:^|[/_.-])ar[_-]?20\d{2}(?:\.|$)", path):
             score += 16
-        if _is_trusted_document_cdn(url):
+        if _is_known_document_cdn(url):
             score += 6
         if any(marker in path for marker in (
                 "sustainab", "climate", "assurance", "modern_slavery",
@@ -2272,6 +2316,7 @@ def _browser_resolve_document_uncached(page_url: str, domain: str | None,
 
                     doc_links = [h for h in harvested
                                  if _is_doc_url(h.get("url", ""))
+                                 and _is_safe_remote_document_url(h["url"])
                                  and _domain_ok(h["url"])
                                  and not _is_junk_host(h["url"])
                                  and not _is_press_release_url(h["url"], h.get("text", ""))]
@@ -2518,7 +2563,9 @@ def _browser_resolve_document_uncached(page_url: str, domain: str | None,
                                 continue
                             sub_docs = sorted(
                                 [h for h in sub if _is_doc_url(h.get("url", ""))
-                                 and _domain_ok(h["url"]) and not _is_junk_host(h["url"])
+                                 and _is_safe_remote_document_url(h["url"])
+                                 and _domain_ok(h["url"])
+                                 and not _is_junk_host(h["url"])
                                  and not _is_press_release_url(h["url"], h.get("text", ""))],
                                 key=lambda h: (_verify_priority(h["url"], query),
                                                _doc_candidate_score(h["url"], h.get("text", ""),
@@ -3170,7 +3217,8 @@ def _deep_static_crawl(seed_url: str, domain: str | None, query: str,
             continue
         if "html" not in (ctype or "").lower():
             continue
-        cands, _ = _page_doc_candidates(body, url, query)
+        cands, _ = _page_doc_candidates(
+            body, url, query, official_domain=domain)
         doc_cands = [u for u in cands if _is_doc_url(u) and not _is_junk_host(u)]
 
         def _uy(u):
@@ -3328,7 +3376,8 @@ def _invoke_sync(payload: dict) -> dict:
 
     def _resolve_from_html(page_url: str, page_body: bytes, dom: str | None,
                            query: str, vfn, budget) -> dict | None:
-        cands, _ = _page_doc_candidates(page_body, page_url, query)
+        cands, _ = _page_doc_candidates(
+            page_body, page_url, query, official_domain=dom)
         doc_cands = [u for u in cands
                      if _is_doc_url(u) and not _is_junk_host(u)
                      and not _is_press_release_url(u)]

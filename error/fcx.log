@@ -1,0 +1,614 @@
+[class-parity] OK — 11 document classes aligned across _DOC_CLASS_RULES and report_specs.REPORT_SPECS
+WARNING:  Invalid HTTP request received.
+[llm-querygen] generated 7 variants for 'site:fcx.com Annual Report'
+[find][query] 'site:fcx.com Annual Report' -> 8 hits via=gateway(native-site)
+[find][query] 'site:fcx.com annual report and accounts' -> 9 hits via=gateway(native-site)
+[find][query] 'site:fcx.com universal registration document' -> 8 hits via=gateway(native-site)
+[find][query] 'site:fcx.com integrated annual report' -> 9 hits via=gateway(native-site)
+[find][query] 'Freeport McMoRan Annual Report 2026 filetype:pdf' -> 9 hits via=gateway(native-site)
+[find][query] 'site:investors.fcx.com Annual Report' -> 8 hits via=gateway(stripped-site)
+[find][query] 'site:sec.gov Freeport McMoRan 10-K' -> 10 hits via=gateway(native-site)
+[find][query] 'site:fcx.com Integrated Annual Report' -> 9 hits via=gateway(native-site)
+[find][query] 'Freeport McMoRan Integrated Annual Report 2026 filetype:pdf' -> 9 hits via=gateway(native-site)
+[find][query] 'site:sustainability.fcx.com Annual Report' -> 8 hits via=gateway(stripped-site)
+[find][query] 'site:companieshouse.gov.uk Freeport McMoRan annual report and accounts' -> 9 hits via=gateway(native-site)
+[find] dropped 2 junk-host candidate(s) (app store / media / social / aggregator subdomains — generic, not company-specific)
+[find] domain_mode=soft(on_domain=31,off_domain_kept=19) | HEAD pre-filtering 10 candidates for: site:fcx.com Annual Report
+[find] 10/10 passed HEAD pre-filter
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=No exact Annual Report found among candidates
+[edgar] could not resolve CIK for 'Freeport McMoRan'/''; skipping
+[ch] no API key configured (CH_SECRET_NAME); skipping
+[deep-crawl] https://fcx.com/ (depth=0, page=1): 4 doc candidates
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Not an Annual Report, only sustainability report
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/2025-annual-report-on-sustainability.pdf): Not an Annual Report, only sustainability report
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Document is Modern Slavery Act Statement, not Annual Report
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/UK_Modern_Slavery_Act_Statement_2025.pdf): Document is Modern Slavery Act Statement, not Annual Report
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report, irrelevant content
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/homepage/STAKEHOLDER-COVID19-2020.pdf): Not an Annual Report, irrelevant content
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not an Annual Report, policy document only.
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/policies/bpcc_eng.pdf): Not an Annual Report, policy document only.
+[deep-crawl] http://investors.fcx.com/investors/financial-information/annual-reports-and-proxy/default.aspx (depth=1, page=2): 2 doc candidates
+[verify] already rejected earlier this query, skipping: https://fcx.com/sites/fcx/files/documents/sustainability/UK_Modern_Slavery_Act_Statement_2025.pdf
+[verify] already rejected earlier this query, skipping: https://fcx.com/sites/fcx/files/documents/policies/bpcc_eng.pdf
+[deep-crawl] http://investors.fcx.com/investors/financial-information/quarterly-earnings-reports/default.aspx (depth=1, page=3): 2 doc candidates
+[verify] already rejected earlier this query, skipping: https://fcx.com/sites/fcx/files/documents/sustainability/UK_Modern_Slavery_Act_Statement_2025.pdf
+[verify] already rejected earlier this query, skipping: https://fcx.com/sites/fcx/files/documents/policies/bpcc_eng.pdf
+[deep-crawl] https://fcx.com/sustainability/reports-and-documents (depth=1, page=4): 123 doc candidates
+[verify] already rejected earlier this query, skipping: https://fcx.com/sites/fcx/files/documents/sustainability/2025-annual-report-on-sustainability.pdf
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Document is a sustainability report, not an annual report
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/2024-annual-report-on-sustainability_sp.pdf): Document is a sustainability report, not an annual report
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Document is a sustainability report, not an annual report.
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/2024-annual-report-on-sustainability.pdf): Document is a sustainability report, not an annual report.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not an Annual Report, wrong company
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/PTFI_Sustainability_Report_DEC2024.pdf): Not an Annual Report, wrong company
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report, but a Sustainability Report.
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/2023-annual-report-on-sustainability.pdf): Not an Annual Report, but a Sustainability Report.
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report, it's a Sustainability Report
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/2023-annual-report-on-sustainability_sp.pdf): Not an Annual Report, it's a Sustainability Report
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report, it's a Climate Report
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/2023-Climate-Report.pdf): Not an Annual Report, it's a Climate Report
+[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Not an Annual Report, but a Sustainability Report
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/2022-annual-report-on-sustainability.pdf): Not an Annual Report, but a Sustainability Report
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report, just sustainability report
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/2022-annual-report-on-sustainability_sp.pdf): Not an Annual Report, just sustainability report
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report, it's a Climate Report
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/2022-Climate-Report.pdf): Not an Annual Report, it's a Climate Report
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report, just sustainability report
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/2021-annual-report-on-sustainability.pdf): Not an Annual Report, just sustainability report
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report, just sustainability report
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/2021-annual-report-on-sustainability_sp.pdf): Not an Annual Report, just sustainability report
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report, but a Climate Report
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/2021-Climate-Report.pdf): Not an Annual Report, but a Climate Report
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report, just sustainability report
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/2020-annual-report-on-sustainability.pdf): Not an Annual Report, just sustainability report
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is sustainability report, not annual report
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/2020-annual-report-on-sustainability_sp.pdf): Document is sustainability report, not annual report
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report, just a climate report.
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/2020-Climate-Report.pdf): Not an Annual Report, just a climate report.
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report, it's an OECD report
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/2020_OECD-step5_report.pdf): Not an Annual Report, it's an OECD report
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report, it's a sustainability report
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/2019-annual-report-on-sustainability.pdf): Not an Annual Report, it's a sustainability report
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not an Annual Report, it's a Sustainability Report
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/2019-annual-report-on-sustainability_SP.pdf): Not an Annual Report, it's a Sustainability Report
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not an Annual Report, it's a climate report
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/2019-climate-report.pdf): Not an Annual Report, it's a climate report
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an annual report, water report only
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/2019-water-report.pdf): Not an annual report, water report only
+[verify] already rejected earlier this query, skipping: https://fcx.com/sites/fcx/files/documents/sustainability/UK_Modern_Slavery_Act_Statement_2025.pdf
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not an Annual Report; it's a sustainability principle PDF.
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/vol_principle_2025.pdf): Not an Annual Report; it's a sustainability principle PDF.
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report, just an ESG deck.
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/FCX-ESG-Investor-Deck-June2025.pdf): Not an Annual Report, just an ESG deck.
+[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Document is a sustainability principle, not an annual report.
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/vol_principle_2024.pdf): Document is a sustainability principle, not an annual report.
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report; it's a Modern Slavery Act Statement
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/UK_Modern_Slavery_Act_Statement_2024.pdf): Not an Annual Report; it's a Modern Slavery Act Statement
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report, it's a CDP Response
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/CDP-Reponse-FY2024.pdf): Not an Annual Report, it's a CDP Response
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is not an annual report
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/Keberlanjutan_PTFI_DEC2024.pdf): Document is not an annual report
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report, it's a CDP response
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/2024_cdp_response.pdf): Not an Annual Report, it's a CDP response
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is a sustainability principle, not annual report
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/vol_principle_2023.pdf): Document is a sustainability principle, not annual report
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Document is Modern Slavery Act Statement, not Annual Report
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/UK_Modern_Slavery_Act_Statement_2023.pdf): Document is Modern Slavery Act Statement, not Annual Report
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report; it's a CDP response PDF.
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/2023-cdp-response.pdf): Not an Annual Report; it's a CDP response PDF.
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an annual report, it's a GHG verification opinion
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/2022_ghg_verification_opinion.pdf): Not an annual report, it's a GHG verification opinion
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Document is a sustainability principle, not an annual report.
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/vol_principle_2022.pdf): Document is a sustainability principle, not an annual report.
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report; Modern Slavery Statement
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/UK_Modern_Slavery_Act_Statement_2022.pdf): Not an Annual Report; Modern Slavery Statement
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report; it's an OECD due diligence PDF.
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/2022_OECD_due_diligence.pdf): Not an Annual Report; it's an OECD due diligence PDF.
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report; it's a GHG verification.
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/2021_ghg_verification_state.pdf): Not an Annual Report; it's a GHG verification.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is a sustainability principle, not annual report
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/vol_principle_2021.pdf): Document is a sustainability principle, not annual report
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report, wrong document class
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/UK_Modern_Slavery_Act_Statement_2021.pdf): Not an Annual Report, wrong document class
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report, wrong document class
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/2021_OECD_due_diligence.pdf): Not an Annual Report, wrong document class
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report, just GHG verification
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/2020_ghg_verification_state.pdf): Not an Annual Report, just GHG verification
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not an Annual Report, it's a sustainability principle document.
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/vol_principle_2020.pdf): Not an Annual Report, it's a sustainability principle document.
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report, wrong document class
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/UK_Modern_Slavery_Act_Statement_2020.pdf): Not an Annual Report, wrong document class
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report; it's a water monitoring summary.
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/2020_PT-FI_Water_Monitor_%20Sum_Sept.pdf): Not an Annual Report; it's a water monitoring summary.
+[verify] STRICT reject (near-neighbor filename, no LLM): https://fcx.com/sites/fcx/files/documents/sustainability/2019-assurance-statement.pdf
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report, just GHG verification
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/2019_ghg_verification_state.PDF): Not an Annual Report, just GHG verification
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is a sustainability principle, not an annual report
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/vol_principle_2019.pdf): Document is a sustainability principle, not an annual report
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Document is Modern Slavery Act Statement, not Annual Report
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/uk_modern_slavery_act_statement_2019.pdf): Document is Modern Slavery Act Statement, not Annual Report
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not an annual report, wrong class
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/wtsd_2018.pdf): Not an annual report, wrong class
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is a sustainability report, not an annual report
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/wtsd_span_2018.pdf): Document is a sustainability report, not an annual report
+[verify] STRICT reject (near-neighbor filename, no LLM): https://fcx.com/sites/fcx/files/documents/sustainability/assurance-statement-2018.pdf
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an annual report, wrong document class
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/vol_principle_2018.pdf): Not an annual report, wrong document class
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=PDF is GHG verification, not Annual Report
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/2018_ghg_verification_state.PDF): PDF is GHG verification, not Annual Report
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report; it's a Modern Slavery Act Statement.
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/uk_modern_slavery_act_statement_2018.pdf): Not an Annual Report; it's a Modern Slavery Act Statement.
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report, just CDP info request PDF
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/2018_cdp_info_req.pdf): Not an Annual Report, just CDP info request PDF
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not an Annual Report, unrelated content
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/program_response_water_2018.pdf): Not an Annual Report, unrelated content
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not an Annual Report, wrong document type
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/wtsd_2017.pdf): Not an Annual Report, wrong document type
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is not an Annual Report
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/wtsd_span_2017.pdf): Document is not an Annual Report
+[verify] STRICT reject (near-neighbor filename, no LLM): https://fcx.com/sites/fcx/files/documents/sustainability/assurance_2017.pdf
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report, unrelated content
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/vol_principle_2017.pdf): Not an Annual Report, unrelated content
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is GHG verification, not Annual Report.
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/2017_ghg_verification_state.pdf): Document is GHG verification, not Annual Report.
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report; it's a Modern Slavery Act Statement
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/uk_modern_slavery_act_statement_2017.pdf): Not an Annual Report; it's a Modern Slavery Act Statement
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report, just CDP info
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/2017_cdp_info_req.pdf): Not an Annual Report, just CDP info
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report, just a water program response
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/program_response_water_2017.pdf): Not an Annual Report, just a water program response
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not an Annual Report, wrong class
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/wtsd_2016.pdf): Not an Annual Report, wrong class
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is not an Annual Report
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/wtsd_span_2016.pdf): Document is not an Annual Report
+[verify] STRICT reject (near-neighbor filename, no LLM): https://fcx.com/sites/fcx/files/documents/sustainability/assurance_2016.pdf
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report, wrong document type
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/vol_principle_2016.pdf): Not an Annual Report, wrong document type
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report, just GHG verification
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/2016_ghg_verification_state.pdf): Not an Annual Report, just GHG verification
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Document is a Modern Slavery Act Statement, not an Annual Report.
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/uk_modern_slavery_act_statement_2016.pdf): Document is a Modern Slavery Act Statement, not an Annual Report.
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report, just CDP info request PDF.
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/2016_cdp_info_req.pdf): Not an Annual Report, just CDP info request PDF.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not an Annual Report, wrong content type.
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/program_response_water_2016.pdf): Not an Annual Report, wrong content type.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not an Annual Report, it's a sustainability report.
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/wtsd_2015.pdf): Not an Annual Report, it's a sustainability report.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not an Annual Report, just sustainability
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/wtsd_span_2015.pdf): Not an Annual Report, just sustainability
+[verify] STRICT reject (near-neighbor filename, no LLM): https://fcx.com/sites/fcx/files/documents/sustainability/assurance_2015.pdf
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not an annual report, irrelevant content
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/vol_principle_2015.pdf): Not an annual report, irrelevant content
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not an annual report, just GHG verification
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/2015_ghg_verification_state.pdf): Not an annual report, just GHG verification
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report; it's a CDP response
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/2015_cdp_info_req.pdf): Not an Annual Report; it's a CDP response
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not an Annual Report, wrong content type
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/program_response_water_2015.pdf): Not an Annual Report, wrong content type
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not an Annual Report, wrong year and type
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/wtsd_2014.pdf): Not an Annual Report, wrong year and type
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is sustainability report, not annual report
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/wtsd_span_2014.pdf): Document is sustainability report, not annual report
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report, wrong year and type
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/wtsd_fr_2014.pdf): Not an Annual Report, wrong year and type
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not an annual report, wrong language and year
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/wtsd_bahasa_2014.pdf): Not an annual report, wrong language and year
+[verify] STRICT reject (near-neighbor filename, no LLM): https://fcx.com/sites/fcx/files/documents/sustainability/assurance_2014.pdf
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report, just a sustainability principle PDF.
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/vol_principle_2014.pdf): Not an Annual Report, just a sustainability principle PDF.
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report, just GHG verification
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/2014_ghg_verification_state.pdf): Not an Annual Report, just GHG verification
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report, just CDP info request PDF.
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/2014_cdp_info_req.pdf): Not an Annual Report, just CDP info request PDF.
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report, wrong content type
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/program_response_water_2014.pdf): Not an Annual Report, wrong content type
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not an Annual Report, wrong year and type
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/wtsd_2013.pdf): Not an Annual Report, wrong year and type
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is a sustainability report, not an annual report
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/wtsd_span_2013.pdf): Document is a sustainability report, not an annual report
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not an Annual Report, wrong language and year
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/wtsd_Fr_2013.pdf): Not an Annual Report, wrong language and year
+[verify] STRICT reject (near-neighbor filename, no LLM): https://fcx.com/sites/fcx/files/documents/sustainability/assurance_2013.pdf
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not an Annual Report, wrong content type.
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/vol_principle_2013.pdf): Not an Annual Report, wrong content type.
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an annual report; GHG verification document.
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/2013_ghg_verification_state.pdf): Not an annual report; GHG verification document.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is a sustainability report, not an annual report.
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/wtsd_2012.pdf): Document is a sustainability report, not an annual report.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is not an Annual Report
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/wtsd_Span2012.pdf): Document is not an Annual Report
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is sustainability report, not annual report
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/wtsd_fr_2012.pdf): Document is sustainability report, not annual report
+[verify] STRICT reject (near-neighbor filename, no LLM): https://fcx.com/sites/fcx/files/documents/sustainability/assurance_2012.pdf
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an annual report, wrong document type
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/vol_principle_2012.pdf): Not an annual report, wrong document type
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not an Annual Report, wrong document type
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/2012_ghg_verification_state.pdf): Not an Annual Report, wrong document type
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report; it's a sustainability report.
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/wtsd_2011.pdf): Not an Annual Report; it's a sustainability report.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not an annual report, wrong year and type
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/wtsd_span_2011.pdf): Not an annual report, wrong year and type
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is sustainability report, not annual report.
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/wtsd_fr_2011.pdf): Document is sustainability report, not annual report.
+[verify] STRICT reject (near-neighbor filename, no LLM): https://fcx.com/sites/fcx/files/documents/sustainability/assurance_2011.pdf
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is a sustainability principle, not an annual report.
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/vol_principle_2011.pdf): Document is a sustainability principle, not an annual report.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not an Annual Report, just GHG verification
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/2011_ghg_verification_state.pdf): Not an Annual Report, just GHG verification
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not an annual report; wrong document type.
+[browser] candidate REJECTED by class check (https://fcx.com/sites/fcx/files/documents/sustainability/wtsd_2010.pdf): Not an annual report; wrong document type.
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/wtsd_span_2010.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/wtsd_fr_2010.pdf
+[verify] STRICT reject (near-neighbor filename, no LLM): https://fcx.com/sites/fcx/files/documents/sustainability/assurance_2010.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/vol_principle_2010.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/2010_ghg_verification_state.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/wtsd_2009.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/wtsd_span_2009.pdf
+[verify] STRICT reject (near-neighbor filename, no LLM): https://fcx.com/sites/fcx/files/documents/sustainability/assurance_2009.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/vol_principle_2009.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/wtsd_2008.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/wtsd_span_2008.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/wtsd_fr_2008.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/tsf_inventory_data.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/FCX_Biodiversity_Management.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/EEO-1.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/wtsd_fr_009.pdf
+[deep-crawl] https://investors.fcx.com/investors/financial-information/annual-reports-and-proxy/default.aspx (depth=2, page=5): 2 doc candidates
+[verify] already rejected earlier this query, skipping: https://fcx.com/sites/fcx/files/documents/sustainability/UK_Modern_Slavery_Act_Statement_2025.pdf
+[verify] already rejected earlier this query, skipping: https://fcx.com/sites/fcx/files/documents/policies/bpcc_eng.pdf
+[deep-crawl] https://investors.fcx.com/investors/financial-information/quarterly-earnings-reports/default.aspx (depth=2, page=6): 2 doc candidates
+[verify] already rejected earlier this query, skipping: https://fcx.com/sites/fcx/files/documents/sustainability/UK_Modern_Slavery_Act_Statement_2025.pdf
+[verify] already rejected earlier this query, skipping: https://fcx.com/sites/fcx/files/documents/policies/bpcc_eng.pdf
+[deep-crawl] https://www.fcx.com/sustainability/reports-and-documents (depth=2, page=7): 123 doc candidates
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2025-annual-report-on-sustainability.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2024-annual-report-on-sustainability_sp.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2024-annual-report-on-sustainability.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/PTFI_Sustainability_Report_DEC2024.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2023-annual-report-on-sustainability.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2023-annual-report-on-sustainability_sp.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2023-Climate-Report.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2022-annual-report-on-sustainability.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2022-annual-report-on-sustainability_sp.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2022-Climate-Report.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2021-annual-report-on-sustainability.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2021-annual-report-on-sustainability_sp.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2021-Climate-Report.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2020-annual-report-on-sustainability.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2020-annual-report-on-sustainability_sp.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2020-Climate-Report.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2020_OECD-step5_report.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2019-annual-report-on-sustainability.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2019-annual-report-on-sustainability_SP.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2019-climate-report.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2019-water-report.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/UK_Modern_Slavery_Act_Statement_2025.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/vol_principle_2025.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/FCX-ESG-Investor-Deck-June2025.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/vol_principle_2024.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/UK_Modern_Slavery_Act_Statement_2024.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/CDP-Reponse-FY2024.pdf
+[verify] already rejected earlier this query, skipping: https://fcx.com/sites/fcx/files/documents/sustainability/Keberlanjutan_PTFI_DEC2024.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2024_cdp_response.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/vol_principle_2023.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/UK_Modern_Slavery_Act_Statement_2023.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2023-cdp-response.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2022_ghg_verification_opinion.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/vol_principle_2022.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/UK_Modern_Slavery_Act_Statement_2022.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2022_OECD_due_diligence.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2021_ghg_verification_state.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/vol_principle_2021.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/UK_Modern_Slavery_Act_Statement_2021.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2021_OECD_due_diligence.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2020_ghg_verification_state.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/vol_principle_2020.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/UK_Modern_Slavery_Act_Statement_2020.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2020_PT-FI_Water_Monitor_%20Sum_Sept.pdf
+[verify] STRICT reject (near-neighbor filename, no LLM): https://www.fcx.com/sites/fcx/files/documents/sustainability/2019-assurance-statement.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2019_ghg_verification_state.PDF
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/vol_principle_2019.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/uk_modern_slavery_act_statement_2019.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/wtsd_2018.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/wtsd_span_2018.pdf
+[verify] STRICT reject (near-neighbor filename, no LLM): https://www.fcx.com/sites/fcx/files/documents/sustainability/assurance-statement-2018.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/vol_principle_2018.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2018_ghg_verification_state.PDF
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/uk_modern_slavery_act_statement_2018.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2018_cdp_info_req.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/program_response_water_2018.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/wtsd_2017.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/wtsd_span_2017.pdf
+[verify] STRICT reject (near-neighbor filename, no LLM): https://www.fcx.com/sites/fcx/files/documents/sustainability/assurance_2017.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/vol_principle_2017.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2017_ghg_verification_state.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/uk_modern_slavery_act_statement_2017.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2017_cdp_info_req.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/program_response_water_2017.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/wtsd_2016.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/wtsd_span_2016.pdf
+[verify] STRICT reject (near-neighbor filename, no LLM): https://www.fcx.com/sites/fcx/files/documents/sustainability/assurance_2016.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/vol_principle_2016.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2016_ghg_verification_state.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/uk_modern_slavery_act_statement_2016.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2016_cdp_info_req.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/program_response_water_2016.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/wtsd_2015.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/wtsd_span_2015.pdf
+[verify] STRICT reject (near-neighbor filename, no LLM): https://www.fcx.com/sites/fcx/files/documents/sustainability/assurance_2015.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/vol_principle_2015.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2015_ghg_verification_state.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2015_cdp_info_req.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/program_response_water_2015.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/wtsd_2014.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/wtsd_span_2014.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/wtsd_fr_2014.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/wtsd_bahasa_2014.pdf
+[verify] STRICT reject (near-neighbor filename, no LLM): https://www.fcx.com/sites/fcx/files/documents/sustainability/assurance_2014.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/vol_principle_2014.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2014_ghg_verification_state.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2014_cdp_info_req.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/program_response_water_2014.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/wtsd_2013.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/wtsd_span_2013.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/wtsd_Fr_2013.pdf
+[verify] STRICT reject (near-neighbor filename, no LLM): https://www.fcx.com/sites/fcx/files/documents/sustainability/assurance_2013.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/vol_principle_2013.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2013_ghg_verification_state.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/wtsd_2012.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/wtsd_Span2012.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/wtsd_fr_2012.pdf
+[verify] STRICT reject (near-neighbor filename, no LLM): https://www.fcx.com/sites/fcx/files/documents/sustainability/assurance_2012.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/vol_principle_2012.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2012_ghg_verification_state.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/wtsd_2011.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/wtsd_span_2011.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/wtsd_fr_2011.pdf
+[verify] STRICT reject (near-neighbor filename, no LLM): https://www.fcx.com/sites/fcx/files/documents/sustainability/assurance_2011.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/vol_principle_2011.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2011_ghg_verification_state.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/wtsd_2010.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/wtsd_span_2010.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/wtsd_fr_2010.pdf
+[verify] STRICT reject (near-neighbor filename, no LLM): https://www.fcx.com/sites/fcx/files/documents/sustainability/assurance_2010.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/vol_principle_2010.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2010_ghg_verification_state.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/wtsd_2009.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/wtsd_span_2009.pdf
+[verify] STRICT reject (near-neighbor filename, no LLM): https://www.fcx.com/sites/fcx/files/documents/sustainability/assurance_2009.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/vol_principle_2009.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/wtsd_2008.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/wtsd_span_2008.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/wtsd_fr_2008.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/tsf_inventory_data.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/FCX_Biodiversity_Management.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/EEO-1.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/wtsd_fr_009.pdf
+[deep-crawl] https://fcx.com/sustainability/governance/embedding-respect#report-section (depth=2, page=8): 7 doc candidates
+[verify] already rejected earlier this query, skipping: https://fcx.com/sites/fcx/files/documents/sustainability/2025-annual-report-on-sustainability.pdf
+[verify] already rejected earlier this query, skipping: https://fcx.com/sites/fcx/files/documents/sustainability/UK_Modern_Slavery_Act_Statement_2025.pdf
+[verify] STRICT reject (near-neighbor filename, no LLM): https://fcx.com/sites/fcx/files/documents/sustainability/HRIA-methodology.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/HRIA-ElAbra.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/HRIA-AZ-operations.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/HRIA-Grasberg.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/HRIA-CV-operations.pdf
+[deep-crawl] https://www.fcx.com/sustainability/governance/embedding-respect#report-section (depth=3, page=9): 7 doc candidates
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2025-annual-report-on-sustainability.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/UK_Modern_Slavery_Act_Statement_2025.pdf
+[verify] STRICT reject (near-neighbor filename, no LLM): https://www.fcx.com/sites/fcx/files/documents/sustainability/HRIA-methodology.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/HRIA-ElAbra.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/HRIA-AZ-operations.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/HRIA-Grasberg.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/HRIA-CV-operations.pdf
+[browser] hover-reveal: harvested grew to 128 links after menu hover
+[browser] harvested 128 links: 8 doc-file candidates, 2 download-labeled controls (verify_budget=10, click_budget=10)
+[browser] skipping candidate already class-rejected earlier this query: https://fcx.com/sites/fcx/files/documents/sustainability/2025-annual-report-on-sustainability.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_financials/annual/AR_2025.pdf
+[browser] in-session candidate 1/10 wrong class (https://s22.q4cdn.com/529358580/files/doc_financials/annual/AR_2025.pdf); trying next candidate
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_financials/10-K/10_k2025.pdf
+[browser] in-session candidate 2/10 wrong class (https://s22.q4cdn.com/529358580/files/doc_financials/10-K/10_k2025.pdf); trying next candidate
+[browser] skipping candidate already class-rejected earlier this query: https://fcx.com/sites/fcx/files/documents/sustainability/UK_Modern_Slavery_Act_Statement_2025.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_financials/proxy/FCX_Prox_2026.pdf
+[browser] in-session candidate 3/10 wrong class (https://s22.q4cdn.com/529358580/files/doc_financials/proxy/FCX_Prox_2026.pdf); trying next candidate
+[browser] skipping candidate already class-rejected earlier this query: https://fcx.com/sites/fcx/files/documents/homepage/STAKEHOLDER-COVID19-2020.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_financials/10-Q/FCX-Q126-10-Q.pdf
+[browser] in-session candidate 4/10 wrong class (https://s22.q4cdn.com/529358580/files/doc_financials/10-Q/FCX-Q126-10-Q.pdf); trying next candidate
+[browser] skipping candidate already class-rejected earlier this query: https://fcx.com/sites/fcx/files/documents/policies/bpcc_eng.pdf
+[browser] click target not visible (fast-skip): 'REGISTER Morgan Stanley 12th Annual Lagu'
+[browser] click target not visible (fast-skip): 'WEBCAST Morgan Stanley 11th Annual Lagun'
+[browser][nav] IR-prioritized frontier: 27/82 nav links (IR-nav first, query terms ['annual', 'report'] secondary)
+[browser][nav] https://fcx.com/sustainability: 2 doc candidates (depth=1, pages=1)
+[browser][nav] https://fcx.com/about/corporate-governance: 8 doc candidates (depth=1, pages=2)
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/policies/Principles_Business_Conduct-english.pdf
+[verify] STRICT reject (near-neighbor filename, no LLM): https://fcx.com/sites/fcx/files/documents/corp_gov/corp_gov_guidelines.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/policies/pbc_bahasa.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/corp_gov/amend_restated_certif_Incorporation.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/corp_gov/FCX-By-Laws.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/policies/pbc_peruvian.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/policies/pbc_dutch.pdf
+[browser][nav] https://fcx.com/about/our-view-on-governance: 20 doc candidates (depth=1, pages=3)
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/policies/Principles_Business_Conduct-english.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/policies/pbc_bahasa.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/corp_gov/stock_ownership.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/corp_gov/FCX_Insider_Trading_Policy.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/corp_gov/amend_restated_certif_Incorporation.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/corp_gov/Certificate-Amendment-Amended-Restated-Certificate.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/corp_gov/FCX-By-Laws.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/policies/Anti-Corruption_Policy.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/policies/anticorruption_policy_bahasa.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/policies/bpcc_bahasa.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/policies/envi_pol.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/policies/hr_policy.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/policies/hr_policy_bahasa.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/policies/inclusion_diversity_policy.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/policies/inclu_divers_pol_bahasa.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/policies/ResponsibleSourcingofMineralsPolicy.pdf
+[browser][nav] http://investors.fcx.com/investors/default.aspx: 10 doc candidates (depth=1, pages=4)
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_financials/10-K/10_k2025.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_financials/annual/AR_2025.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_news/2026/FCX_260624.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_news/2026/FCX_260423.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_news/2026/FCX_260325.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_presentations/2026/FCX_1Q26_CC.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_financials/proxy/FCX_Prox_2026.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_presentations/2025/FCX_4Q25_CC.pdf
+[browser][nav] http://investors.fcx.com/investors/presentations/default.aspx: 4 doc candidates (depth=1, pages=5)
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_presentations/2026/FCX_1Q26_CC.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_presentations/2025/FCX_4Q25_CC.pdf
+[browser][nav] http://investors.fcx.com/investors/stock-and-dividend-information/stock-quote/default.aspx: 2 doc candidates (depth=1, pages=6)
+[browser][nav] http://investors.fcx.com/investors/stock-and-dividend-information/dividend-history/default.aspx: 2 doc candidates (depth=1, pages=7)
+[browser][nav] http://investors.fcx.com/investors/financial-information/annual-reports-and-proxy/default.aspx: 20 doc candidates (depth=1, pages=8)
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_financials/10-K/10_k2025.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_financials/10-K/10_k2024.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_financials/10-K/10_k2023.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_financials/10-K/10_k2022.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_financials/annual/AR_2025.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_financials/10-K/10_k2021.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_financials/proxy/FCX_Prox_2026.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_financials/annual/AR_2024.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_financials/10-K/10_k2020.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_financials/proxy/FCX_Prox_2025.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_financials/annual/AR_2023.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_financials/10-K/10_k2019.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_financials/proxy/FCX_Prox_2024.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_financials/annual/AR_2022.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_financials/10-K/10_k2018.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_financials/annual/FCX-2008-Form-10-K.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_financials/annual/FCX-2007-10K.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_financials/annual/FCX-AR2004.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_financials/proxy/FCX_Prox_2023.pdf
+[browser][nav] http://investors.fcx.com/investors/financial-information/sec-filings/default.aspx: 20 doc candidates (depth=1, pages=9)
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://d18rn0p25nwr6d.cloudfront.net/CIK-0000831259/14f4f6ed-708a-486b-9f54-ae3d238a8cf4.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://d18rn0p25nwr6d.cloudfront.net/CIK-0000831259/1c175843-e8d3-40ef-b50a-5f8a1129c967.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://d18rn0p25nwr6d.cloudfront.net/CIK-0000831259/57fb8671-5ca0-40a1-be75-00efb3781dea.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://d18rn0p25nwr6d.cloudfront.net/CIK-0000831259/15ef5496-5e50-46e1-aadb-b96257ba8bba.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://d18rn0p25nwr6d.cloudfront.net/CIK-0000831259/e49ef30b-2b47-4cbc-ac19-ba75d565ad75.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://d18rn0p25nwr6d.cloudfront.net/CIK-0000831259/0e478dda-b94d-4306-bc46-fe021c816abc.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://d18rn0p25nwr6d.cloudfront.net/CIK-0000831259/51613f39-3acb-41ef-b390-59b0cf4fb2f2.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://d18rn0p25nwr6d.cloudfront.net/CIK-0000831259/56c96eb9-033d-438c-9ad8-1d9d8ea26188.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://d18rn0p25nwr6d.cloudfront.net/CIK-0000831259/d3ac73d3-abf6-42f9-b767-4c7e6f372431.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://d18rn0p25nwr6d.cloudfront.net/CIK-0000831259/6114e1e6-604c-48e3-8f79-5f88e62c9c56.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://d18rn0p25nwr6d.cloudfront.net/CIK-0000831259/13a98dc0-5174-40be-a9fc-4a4e4904ffc2.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://d18rn0p25nwr6d.cloudfront.net/CIK-0000831259/cba15d62-1105-4cf4-86a0-c6070884651c.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://d18rn0p25nwr6d.cloudfront.net/CIK-0000831259/d8ea7d9f-05d2-4626-88fe-78b84fd78e0b.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://d18rn0p25nwr6d.cloudfront.net/CIK-0000831259/8bab5f84-1e45-4414-b127-e3f85082de9b.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://d18rn0p25nwr6d.cloudfront.net/CIK-0000831259/b42391fe-c7f7-4ca2-a3f3-ab0aaa353603.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://d18rn0p25nwr6d.cloudfront.net/CIK-0000831259/8ed9ba86-7e57-4f6d-86da-cf5826bb4a0a.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://d18rn0p25nwr6d.cloudfront.net/CIK-0000831259/2c4797ee-6a15-4906-b897-f6b9babc03ca.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://d18rn0p25nwr6d.cloudfront.net/CIK-0000831259/fd58c6ce-f4e8-420d-a451-39db4978e8c5.pdf
+[browser][nav] http://investors.fcx.com/investors/financial-information/quarterly-earnings-reports/default.aspx: 5 doc candidates (depth=1, pages=10)
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_news/2026/FCX_260423.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_presentations/2026/FCX_1Q26_CC.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_financials/10-Q/FCX-Q126-10-Q.pdf
+[browser][nav] http://investors.fcx.com/investors/investor-resources/shareholder-faqs/default.aspx: 5 doc candidates (depth=1, pages=11)
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://investors.fcx.com/files/doc_downloads/FCX_161229_Form8937_debtexchange.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://investors.fcx.com/files/doc_downloads/FCX_PXP_Form_8937.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://investors.fcx.com/files/doc_downloads/MMR_Merger_Form_8937.pdf
+[browser][nav] http://investors.fcx.com/investors/investor-resources/set-email-alerts/default.aspx: 2 doc candidates (depth=1, pages=12)
+[browser][nav] http://investors.fcx.com/investors/investor-resources/request-information/default.aspx: 2 doc candidates (depth=1, pages=13)
+[browser][nav] http://investors.fcx.com/investors/investor-resources/rss-feeds/default.aspx: 2 doc candidates (depth=1, pages=14)
+[browser][nav] https://fcx.com/sustainability/approach: 2 doc candidates (depth=1, pages=15)
+[browser][nav] https://fcx.com/sustainability/governance: 10 doc candidates (depth=1, pages=16)
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_financials/annual/AR_2025.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_financials/proxy/FCX_Prox_2026.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/policies/Principles_Business_Conduct-english.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/policies/Anti-Corruption_Policy.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/policies/hr_policy.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/policies/ResponsibleSourcingofMineralsPolicy.pdf
+[browser][nav] https://fcx.com/sustainability/governance/embedding-respect: 7 doc candidates (depth=1, pages=17)
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/HRIA-ElAbra.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/HRIA-AZ-operations.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/HRIA-Grasberg.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/HRIA-CV-operations.pdf
+[browser][nav] https://fcx.com/sustainability/governance/security-human-rights: 3 doc candidates (depth=1, pages=18)
+[browser][nav] https://fcx.com/sustainability/people: 9 doc candidates (depth=1, pages=19)
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_financials/10-K/10_k2025.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/policies/saf_health_pol.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/policies/work_fatigue_policy.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/suppliers/csm.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/policies/hr_policy.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/policies/inclusion_diversity_policy.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/policies/com_pol.pdf
+[browser][nav] https://fcx.com/sustainability/people/economic-impact: 14 doc candidates (depth=1, pages=20)
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/eco_impact/arizona-2024.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/eco_impact/cochise2024.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/eco_impact/bagdad_yavapai_2024.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/eco_impact/miami_gila_2024.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/eco_impact/morenci-greenlee-2024.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/eco_impact/safford_graham_2024.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/eco_impact/sierrita_pima_2024.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/eco_impact/colorado-2024.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/eco_impact/iowa-2024.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/eco_impact/new_mexico_grant_2024.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/eco_impact/el_paso_tx_2024.pdf
+[browser][nav] https://fcx.com/sustainability/environment: 5 doc candidates (depth=1, pages=21)
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/policies/envi_pol.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/FCX_Biodiversity_Management.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/policies/envi_pol.pdf
+[browser][nav] https://fcx.com/sustainability/tailings-manage: 6 doc candidates (depth=1, pages=22)
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/policies/tailings-policy.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/policies/envi_pol.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/policies/hr_policy.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/policies/com_pol.pdf
+[browser][nav] https://fcx.com/sustainability/tailings-americas: 20 doc candidates (depth=1, pages=23)
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/Morenci_tailings_disclosure_report.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/Bagdad_tailings_disclosure_report.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/Cerro_Verde_tailings_disclosure_report.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/Chino_tailings_disclosure_report.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/Climax_tailings_disclosure_report.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/Henderson_tailings_disclosure_report.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/Sierrita_tailings_disclosure_report.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/Bruce_tailings_disclosure_report.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/Bagdad-sycamore-independent-review2024.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/Bagdad-threeTSFs-independent-review2024.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/cerro-verde-independent-review2024.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/climax-independent-review2024.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/henderson-independent-review2024.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/sierrita-independent-review2024.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/morenci-independent-review2023.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/policies/tailings-policy.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/policies/envi_pol.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/policies/hr_policy.pdf
+[browser][nav] https://fcx.com/sustainability/tailings-indonesia: 3 doc candidates (depth=1, pages=24)
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/PTFI_Sustainability_Report_DEC2024.pdf#page=54
+[browser][nav] https://fcx.com/sustainability/environment/ptfi-external-audits: 19 doc candidates (depth=1, pages=25)
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/audits/PTFIExternal_Audit_Report_UpdateJanuary2014.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/audits/2024-25_PTFI_External_Enviro_Audit_Matrix_Q1_2026.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/audits/2024-2025PTFIEnvironmentalAuditExec.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/audits/2021-22_PTFI_External_Enviro_Audit_Matrix_Q3_2024.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/audits/2021-2022PTFIEnvironmentalAuditExec.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/audits/PTFI_ExternalEnvironmenta%20Audit2017.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/audits/2017ExternalAuditMatrixFinal.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/audits/matrix_resp_ptfi_q2_2017.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/audits/Executive_Summary_2014.PDF
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/audits/Executive_Summary_Audit_PTFI_2011.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/audits/Executive_Summary_2008.PDF
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/audits/Findings_Matrix_Responses_Sept_2010.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/audits/FINALPTFIAuditExeSum.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/audits/MontWatAudit_Rec.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/audits/AERA.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/audits/HHRA.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/sustainability/audits/PWRA.pdf
+[browser][nav] https://fcx.com/sustainability/reports-and-documents: 20 doc candidates (depth=1, pages=26)
+[browser][nav] https://fcx.com/sustainability/coppermark: 2 doc candidates (depth=1, pages=27)
+[browser][nav] goto failed (https://fcx.com/sites/fcx/files/documents/sustainability/FCX2025_ESG_Performance_Data.xlsx): Page.goto: Download is starting
+Call log:
+  - navigating to "https://fcx.com/sites/fcx/files/documents/sustainability/FCX2025_ESG_Performance_Data.xlsx", waiting until "domcontentloaded"
+[browser][nav] https://fcx.com/sustainability/reports/audits-assurance: 2 doc candidates (depth=2, pages=29)
+[browser][nav] https://www.fcx.com/freeport-features?year=2026: 2 doc candidates (depth=2, pages=30)
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/2025-annual-report-on-sustainability.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://www.fcx.com/sites/fcx/files/documents/sustainability/UK_Modern_Slavery_Act_Statement_2025.pdf
+[browser][nav] https://fcx.com/freeport-mcmoran-online-privacy-notice: 3 doc candidates (depth=2, pages=31)
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://fcx.com/sites/fcx/files/documents/policies/2020-fcx-privacy-shield-pol.pdf
+[browser][nav] https://investors.fcx.com/investors/default.aspx#maincontent: 10 doc candidates (depth=2, pages=32)
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_financials/10-K/10_k2025.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_financials/annual/AR_2025.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_news/2026/FCX_260624.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_news/2026/FCX_260423.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_news/2026/FCX_260325.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_presentations/2026/FCX_1Q26_CC.pdf
+[verify] budget stop (verify budget 100 exhausted): skipping LLM verify for https://s22.q4cdn.com/529358580/files/doc_financials/proxy/FCX_Prox_2026.pdf
+No more records within selected time range 
+Auto retry paused.
+ 
+Resume
+ 

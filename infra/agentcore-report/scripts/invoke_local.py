@@ -26,15 +26,14 @@ def main():
     with open(payload_path) as f:
         payload = f.read()
 
-    # 300s read timeout — a registry/site request may take a few minutes when
-    # candidate downloads and Bedrock validation are required.
+    # 300s read timeout — the agent may take 1-3 min for 6 queries with LLM checks.
     # connect_timeout stays short (10s) so a network issue fails fast.
     client = boto3.client(
         "bedrock-agentcore",
         region_name=region,
         config=Config(connect_timeout=10, read_timeout=600),
     )
-    print(f"Invoking {arn.split('/')[-1]} …", flush=True)
+    print(f"Invoking {arn.split('/')[-1]} … (browser runs can take 3-6 min)", flush=True)
     t0 = time.time()
     resp = client.invoke_agent_runtime(
         agentRuntimeArn=arn,

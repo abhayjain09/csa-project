@@ -126,7 +126,7 @@ tr.detail-row td{padding:0}
 
 /* Badges */
 .badge{display:inline-flex;align-items:center;border-radius:14px;padding:3px 14px;font-size:12px;font-weight:700;white-space:nowrap}
-.badge.ok,.badge.complete{background:#e7f8e9;color:#147327;border:1px solid #2bde3f}
+.badge.ok,.badge.complete,.badge.downloaded{background:#e7f8e9;color:#147327;border:1px solid #2bde3f}
 .badge.running{background:#e6efff;color:#0d4ea6;border:1px solid var(--info);animation:blink 1.5s ease-in-out infinite}
 .badge.pending{background:var(--light);color:var(--muted);border:1px solid var(--border)}
 .badge.failed,.badge.no_results{background:#fdebe6;color:#a33012;border:1px solid var(--err)}
@@ -161,6 +161,8 @@ tr.detail-row td{padding:0}
 .dl-btn{display:inline-flex;align-items:center;gap:6px;background:var(--red);color:#fff;border:none;padding:6px 14px;font-size:13px;font-weight:700;cursor:pointer}
 .dl-btn:hover{background:var(--red-dark)}
 .dl-btn:disabled{opacity:.5;cursor:not-allowed}
+.dl-btn.upload{background:#0d4ea6}
+.dl-btn.upload:hover{background:#0b3d85}
 .run-result-box{background:var(--light);border:1px solid var(--border);padding:14px 18px;margin-top:10px;font-size:13px;font-family:var(--mono);max-height:320px;overflow:auto;white-space:pre-wrap;word-break:break-all}
 .info-box{background:#e6efff;border:1px solid var(--info);padding:14px 18px;font-size:14px;margin-top:16px;line-height:1.6}
 .two-col{display:grid;grid-template-columns:1.1fr .9fr;gap:32px;margin-top:20px;align-items:start}
@@ -245,7 +247,7 @@ tr.detail-row td{padding:0}
   <div class="page-body">
     <div class="breadcrumbs"><a onclick="navTo('dashboard',document.getElementById('nav-dashboard'))">Home</a> / Run Query</div>
     <h1 class="page-title">Run Query</h1>
-    <p class="page-subtitle">Enter only the company name and official website. Report IQ uses a fixed, validated document plan and never sends broad web-query batches.</p>
+    <p class="page-subtitle">Enter company and official site pairs one by one. A query payload is generated for each row and saved to DynamoDB, with optional immediate trigger.</p>
 
     <div id="bulkRunSection" style="margin-top:24px">
       <div class="form-grid" style="margin-top:0;margin-bottom:14px">
@@ -289,7 +291,7 @@ tr.detail-row td{padding:0}
     </div>
     <div class="table-wrapper">
       <table>
-        <thead><tr><th>Company</th><th>Official website</th><th>Document plan</th><th>Created</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>Company</th><th>Search query</th><th>Web queries</th><th>Created</th><th>Status</th><th></th></tr></thead>
         <tbody id="queryTable"><tr><td colspan="6" class="empty-state"><span class="spinner"></span> Loading…</td></tr></tbody>
       </table>
     </div>
@@ -301,7 +303,7 @@ tr.detail-row td{padding:0}
   <div class="page-body">
     <div class="breadcrumbs"><a onclick="navTo('dashboard',document.getElementById('nav-dashboard'))">Home</a> / Runs</div>
     <h1 class="page-title">Runs</h1>
-    <p class="page-subtitle">Each row is one AgentCore invocation. Expand to see downloaded files and diagnostics. Auto-syncs every 15s while any run is active.</p>
+    <p class="page-subtitle">Each row is one AgentCore invocation. Expand to see per-query results — download a file the agent found, or upload one manually if a query failed. Auto-syncs every 15s while any run is active.</p>
 
     <div class="toolbar">
       <div class="toolbar-left">
@@ -503,6 +505,10 @@ function heartbeatIndicator(progress) {
   </span>`;
 }
 
+// ─── Base64 helpers (used to safely thread query text through onclick attrs) ──
+function escB64(s){ try { return btoa(unescape(encodeURIComponent(String(s||'')))); } catch(e){ return ''; } }
+function decB64(s){ try { return decodeURIComponent(escape(atob(String(s||'')))); } catch(e){ return ''; } }
+
 // ─── Company filter helpers ───────────────────────────────────────────────────
 function buildCompanyOptions(items, selectId, companyField) {
   const sel = document.getElementById(selectId);
@@ -575,16 +581,16 @@ function renderQueriesTable() {
   const co   = document.getElementById('qryCompanyFilter').value;
   const items = allQueries.filter(q =>
     (!co || q.company === co) &&
-    (!txt || (q.company||'').toLowerCase().includes(txt) || (q.official_website||'').toLowerCase().includes(txt))
+    (!txt || (q.company||'').toLowerCase().includes(txt) || (q.search_query||'').toLowerCase().includes(txt))
   );
   if (!items.length) { tb.innerHTML = '<tr><td colspan="6" class="empty-state">No queries found.</td></tr>'; return; }
   const sorted = [...items].sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||''));
   tb.innerHTML = sorted.map(q => {
-    const documentTypes = Array.isArray(q.document_types) ? q.document_types.length : 0;
+    const wqs = Object.keys(q).filter(k=>k.startsWith('web_query')).length;
     return `<tr>
       <td><strong>${escH(q.company||'')}</strong></td>
-      <td style="max-width:320px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escH(q.official_website||'')}</td>
-      <td>${documentTypes || 'Default'} document types</td>
+      <td style="max-width:320px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escH(q.search_query||'')}</td>
+      <td>${wqs} quer${wqs===1?'y':'ies'}</td>
       <td>${fmtDt(q.created_at)}</td>
       <td>${statusBadge(q.status)}</td>
       <td><button class="btn-link" onclick="triggerQuery('${escH(q.query_id)}','${escH(q.company||'')}')">▶ Run</button></td>
@@ -660,9 +666,40 @@ function removeBulkRunRow(btn){
   btn.parentNode.remove();
   syncBulkPreview();
 }
+var BULK_DOC_QUERIES=[
+  'Code of Conduct',
+  'Anti-Corruption and Bribery Policy',
+  'Conflicts of Interest Policy',
+  'Insider Trading Policy',
+  'Discrimination and Harassment Policy',
+  'Supplier Code of Conduct',
+  'Whistleblowing Policy',
+  'Sustainability Report',
+  'GHG Emission Report',
+  'Annual Report',
+  'Environment Policy',
+  'Environment, Health and Safety Policy',
+  'Biodiversity Policy',
+  'Impact Report',
+  'Human Rights Policy',
+  'Human Due Diligence',
+  'Modern Slavery Statement',
+  'Remuneration Report',
+  'Proxy Statement',
+  'Risk Management Policy',
+  'Tax Strategy and Policy Document',
+  'Wolfsberg Questionnaire',
+  'Health and Safety Policy',
+];
 function _buildBulkRecord(company,site,partial){
-  // The backend owns the typed plan. The UI submits only company identity.
-  return {company,official_website:site};
+  // partial=true: include empty fields so preview shows even incomplete rows
+  const obj={company,search_query:''};
+  if(site){
+    BULK_DOC_QUERIES.forEach((q,i)=>{obj['web_query'+(i+1)]='site:'+site+' '+q;});
+  } else if(partial){
+    obj.web_query1='';
+  }
+  return obj;
 }
 function buildBulkPayload(){
   const rows=document.querySelectorAll('#bulkRunRows .bulk-row');
@@ -822,7 +859,7 @@ async function loadRuns(){
     buildCompanyOptions(allRuns,'runCompanyFilter','company');
     applyRunsFilter();
     const hasRunning=allRuns.some(r=>r.status==='running');
-    document.getElementById('runsAutoSync').textContent=hasRunning?'⟳ Auto-syncing every 15s…':'';
+    document.getElementById('runsAutoSync').textContent=hasRunning?'⟳ Auto-syncing every 60s…':'';
     setSyncStatus(hasRunning, hasRunning?'Live':fmtDt(new Date().toISOString()));
   }catch(e){
     tb.innerHTML='<tr><td colspan="7" class="empty-state">Failed to load</td></tr>';
@@ -872,6 +909,9 @@ function toggleRunDetail(rid){
   let failures=[];try{failures=JSON.parse(run.failures||'[]');}catch(e){}
   const progress=getChunkProgress(run);
 
+  // Legacy "downloaded files" list is still shown as a fallback summary when
+  // a run has no per-query rows at all (very old runs, or diagnostics trimmed
+  // for size) — the per-query table below is the primary view when available.
   let dlHtml='';
   if(downloaded.length){
     dlHtml='<strong>Downloaded files:</strong><br>'+downloaded.map(d=>{
@@ -890,31 +930,55 @@ function toggleRunDetail(rid){
   if(run.diagnostics){try{const dx=typeof run.diagnostics==='string'?JSON.parse(run.diagnostics):run.diagnostics;diagHtml=`<br><strong>Diagnostics:</strong><div class="run-result-box">${escH(JSON.stringify(dx,null,2))}</div>`;}catch(e){}}
 
   // Chunk progress line shown prominently in the detail panel header, plus a
-  // per-chunk breakdown table when available (downloaded/failed/error per chunk).
+  // per-query breakdown table when available: one row per query, showing
+  // either ⬇ Download (agent found the file) or ⬆ Upload (agent failed —
+  // manual fallback). Falls back to the older chunk-level counts table when
+  // per-query `results` weren't recorded for this run (legacy runs, or
+  // diagnostics trimmed for DynamoDB size).
   let chunkHtml='';
   if(progress){
     chunkHtml=`<div style="margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">${chunkProgressPill(progress)}${run.status==='running'?heartbeatIndicator(progress):''}</div>`;
     if(progress.trimmed){
-      chunkHtml+=`<div class="form-hint" style="margin-bottom:8px">ℹ️ Per-chunk diagnostic detail was trimmed to keep this run's record within DynamoDB's size limit — download/failure counts are still accurate.</div>`;
+      chunkHtml+=`<div class="form-hint" style="margin-bottom:8px">ℹ️ Per-chunk diagnostic detail was trimmed to keep this run's record within DynamoDB's size limit — download/failure counts are still accurate, but per-query rows aren't available below.</div>`;
     }
     if(progress.recovered){
       chunkHtml+=`<div class="info-box" style="margin-top:0;margin-bottom:14px;font-size:13px">
         ⚡ This run's tracking thread ended before it could report chunk-by-chunk progress
         (e.g. a task restart mid-run). The files below were recovered directly from S3 by
-        the reconciler — a per-chunk breakdown isn't available for this run.
+        the reconciler — a per-query breakdown isn't available for this run.
       </div>`;
     } else if(progress.perChunk && progress.perChunk.length){
+      const rowsHtml = progress.perChunk.map(pc=>{
+        const results = Array.isArray(pc.results) ? pc.results : null;
+        if(results && results.length){
+          return results.map((r,idx)=>{
+            const isDl = r.status==='downloaded' && r.s3_key;
+            const action = isDl
+              ? `<button class="dl-btn" onclick="downloadFileVerified('${escH(r.s3_key)}',this)">⬇ Download</button>`
+              : `<button class="dl-btn upload" onclick="pickUploadForQuery(this,'${escH(rid)}','${escB64(run.company||'')}','${escH(run.query_id||'')}','${escH(String(pc.chunk))}','${escB64(r.query||'')}')">⬆ Upload</button>`;
+            const badge = isDl
+              ? `<span class="badge downloaded">downloaded</span>${r.duplicate?' <span class="form-hint">(already in S3)</span>':''}${r.manual_upload?' <span class="form-hint">(manual)</span>':''}`
+              : `<span class="badge failed">failed</span>`;
+            return `<tr>
+              <td class="mono">${idx===0?('#'+escH(String(pc.chunk))):''}</td>
+              <td class="mono" style="font-size:12px">${escH(r.query||'')}</td>
+              <td>${badge}</td>
+              <td>${action}</td>
+            </tr>`;
+          }).join('');
+        }
+        // fallback: no per-query detail (legacy run or trimmed diagnostics)
+        return `<tr>
+          <td class="mono">#${escH(String(pc.chunk))}</td>
+          <td class="mono" style="font-size:12px">${(pc.queries||[]).map(q=>escH(q)).join('<br>')||'—'}</td>
+          <td>${pc.downloaded||0} ok / ${pc.failures||0} failed</td>
+          <td style="color:var(--err)">${pc.error?escH(pc.error):'—'}</td>
+        </tr>`;
+      }).join('');
       chunkHtml+=`<div class="table-wrapper" style="margin-top:0;margin-bottom:14px">
         <table>
-          <thead><tr><th style="width:70px">Chunk</th><th>Queries</th><th style="width:100px">Downloaded</th><th style="width:90px">Failures</th><th>Error</th></tr></thead>
-          <tbody>${progress.perChunk.map(pc=>`
-            <tr>
-              <td class="mono">#${escH(pc.chunk)}</td>
-              <td class="mono" style="font-size:12px">${(pc.queries||[]).map(q=>escH(q)).join('<br>')}</td>
-              <td>${pc.downloaded||0}</td>
-              <td>${pc.failures||0}</td>
-              <td style="color:var(--err)">${pc.error?escH(pc.error):'—'}</td>
-            </tr>`).join('')}</tbody>
+          <thead><tr><th style="width:70px">Chunk</th><th>Query</th><th style="width:130px">Status</th><th style="width:150px">Action</th></tr></thead>
+          <tbody>${rowsHtml}</tbody>
         </table>
       </div>`;
     }
@@ -926,11 +990,57 @@ function toggleRunDetail(rid){
       ${run.status==='running'?`<span class="badge running">Running…</span><button class="btn btn-sm" onclick="loadRuns()">↻ Refresh now</button>`:''}
     </div>
     ${chunkHtml}
-    ${dlHtml||'<span class="muted">No files downloaded.</span>'}
+    ${(!progress || !progress.perChunk || !progress.perChunk.length) ? (dlHtml||'<span class="muted">No files downloaded.</span>') : ''}
     ${failHtml}${diagHtml}
     ${run.error_msg?`<br><strong style="color:var(--err)">Error:</strong> ${escH(run.error_msg)}`:''}
   </div>`;
   row.classList.remove('hidden');
+}
+
+// ─── Per-query manual upload (PATCH #7) ───────────────────────────────────────
+// Opens a native file picker for the query row the person clicked "Upload"
+// on, then streams the chosen file to POST /api/sources/upload. company,
+// query, run_id, query_id and chunk are threaded through so the backend can
+// (a) place the file under the correct S3 slug prefix and (b) patch this
+// exact row in the run's diagnostics so it shows Download after a refresh.
+function pickUploadForQuery(btn, runId, companyB64, queryId, chunk, queryB64){
+  const company = decB64(companyB64);
+  const query   = decB64(queryB64);
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.html,.htm';
+  input.style.display = 'none';
+  document.body.appendChild(input);
+  input.addEventListener('change', async ()=>{
+    const file = input.files && input.files[0];
+    document.body.removeChild(input);
+    if(!file) return;
+    await uploadReportFile(file, btn, runId, company, queryId, chunk, query);
+  });
+  input.click();
+}
+
+async function uploadReportFile(file, btn, runId, company, queryId, chunk, query){
+  const orig = btn ? btn.textContent : '';
+  if(btn){ btn.disabled=true; btn.textContent='Uploading…'; }
+  try{
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('company',  company||'');
+    fd.append('query',    query||'');
+    fd.append('run_id',   runId||'');
+    fd.append('query_id', queryId||'');
+    fd.append('chunk',    chunk||'');
+    // Do NOT set a Content-Type header here — leaving it unset lets the
+    // browser generate the multipart boundary itself for FormData bodies.
+    const res = await apiFetch('/api/sources/upload', { method:'POST', body: fd });
+    toast('success','Uploaded', file.name+' saved to S3'+(res.run_patched?' — run updated.':'.'));
+    await loadRuns();          // refetch with the patched diagnostics
+    toggleRunDetail(runId);    // re-open detail so the row now shows Download
+    loadStats();
+  }catch(e){
+    if(btn){ btn.disabled=false; btn.textContent=orig||'⬆ Upload'; }
+  }
 }
 
 // ─── Reconcile stuck runs ────────────────────────────────────────────────────
@@ -1115,7 +1225,7 @@ function schedulSync() {
       });
       if (hasRecent) await loadSources();
     }
-  }, 15000); // every 15 seconds
+  }, 60000); // every 60 seconds
 }
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────

@@ -17,108 +17,53 @@ variable "image_tag" {
 }
 
 variable "web_search_max_results" {
-  description = "Legacy gateway setting retained for existing tfvars. The registry-first runtime does not use managed web search."
+  description = "maxResults passed to the managed Web Search tool (1-25)."
   type        = number
   default     = 10
 }
 
 variable "enforce_site_domain" {
-  description = "Legacy v1 setting retained for existing tfvars. v2 always validates against company.official_domains."
+  description = "When a query has a site: operator, only download results from that domain/subdomains (the managed Web Search tool ignores site:). Strongly recommended for compliance accuracy."
   type        = bool
   default     = true
 }
 
 variable "llm_model_id" {
-  description = "Bedrock model/inference-profile used only to confirm deterministic document candidates. Required when require_llm_validation is true."
+  description = "Optional Bedrock model/inference-profile id for LLM query rewriting (e.g. a Claude model id). Empty = deterministic query prep only (relative years still resolved)."
   type        = string
   default     = ""
-}
-
-variable "require_llm_validation" {
-  description = "Fail closed unless Bedrock confirms the deterministic company, type, and year validation. Keep true for production."
-  type        = bool
-  default     = true
-}
-
-variable "sec_user_agent" {
-  description = "Required for SEC EDGAR: organisation name plus monitored contact email, for example 'Report IQ ops@example.com'."
-  type        = string
-  default     = ""
-}
-
-variable "companies_house_api_key" {
-  description = "Optional UK Companies House API key for annual-account retrieval."
-  type        = string
-  default     = ""
-  sensitive   = true
 }
 
 variable "best_matches" {
-  description = "Legacy v1 setting retained for existing tfvars. v2 stores at most one document per requests[] item."
+  description = "How many distinct documents to download per web_query (1 = just the single best match)."
   type        = number
   default     = 1
 }
 
 variable "google_api_key" {
-  description = "Optional Google Programmable Search API key. Used only as a hard site-scoped fallback after registry and official-site discovery."
+  description = "Optional. Google Custom Search API key — enables a literal Google search (honors site:). Leave empty to use the managed Web Search tool."
   type        = string
   default     = ""
   sensitive   = true
 }
 
 variable "serper_api_key" {
-  description = "Legacy v1 setting retained for existing tfvars. The v2 runtime does not call Serper."
+  description = "Optional. Serper.dev API key — real Google SERP as JSON (returns deep PDF URLs, honors site:/filetype:). When set, this is the PRIMARY search provider. Get a key at https://serper.dev."
   type        = string
   default     = ""
   sensitive   = true
 }
 
 variable "use_browser" {
-  description = "Enable the final AgentCore Browser / Playwright tier for JavaScript-rendered company report pages. It is used only after registry, site, and scoped-search discovery miss."
+  description = "Use the AgentCore Browser tool (in-AWS headless Chromium) as the PRIMARY search provider. Renders JS and finds deep PDF links the managed search tool misses; no third-party data egress. Slower per query. Default false."
   type        = bool
   default     = false
 }
 
 variable "browser_identifier" {
-  description = "AgentCore Browser identifier. The runtime currently uses the AWS-managed default aws.browser.v1."
+  description = "AgentCore Browser identifier. Use the AWS-managed default 'aws.browser.v1' unless you've created a custom browser."
   type        = string
   default     = "aws.browser.v1"
-}
-
-variable "browser_region" {
-  description = "AWS Region hosting the AgentCore Browser. Keep this aligned with the runtime region unless Browser availability requires otherwise."
-  type        = string
-  default     = "us-east-1"
-}
-
-variable "enable_fargate_browser_worker" {
-  description = "Deploy the optional SQS-driven Fargate browser worker for long-running dynamic-site attempts. It reuses the existing Report IQ ECS cluster, task subnets, and task security group; it never bypasses login/WAF/CAPTCHA."
-  type        = bool
-  default     = false
-}
-
-variable "fargate_ecs_cluster_id" {
-  description = "Existing ECS cluster ID or ARN for the browser-worker service. Use the reportiq-ecs Terraform output ecs_cluster; no second cluster is created."
-  type        = string
-  default     = ""
-}
-
-variable "fargate_subnet_ids" {
-  description = "Subnets for the Fargate browser worker. Required when enable_fargate_browser_worker is true; use private subnets with NAT for production, or explicitly approved public subnets for proof-of-concept use."
-  type        = list(string)
-  default     = []
-}
-
-variable "fargate_security_group_ids" {
-  description = "Existing ECS task security groups for the Fargate browser worker. Use reportiq-ecs reportiq-tasks-sg; it already permits outbound HTTPS."
-  type        = list(string)
-  default     = []
-}
-
-variable "fargate_assign_public_ip" {
-  description = "Assign a public IP to the Fargate worker. Use false with private subnets and NAT in production."
-  type        = bool
-  default     = false
 }
 
 variable "google_cx" {
@@ -127,25 +72,17 @@ variable "google_cx" {
   default     = ""
 }
 
-variable "brave_search_api_key" {
-  description = "Optional Brave Search API key. Used only after registry and official-site discovery fail; returned URLs are hard-filtered to official company domains."
-  type        = string
-  default     = ""
-  sensitive   = true
-}
-
 variable "enable_web_search" {
   description = <<-EOT
-    Create the optional AgentCore Gateway + managed Web Search tool target for
-    broad discovery elsewhere in the platform. The registry-first runtime does not
-    use it because the backend cannot enforce site-scoped document retrieval. The gateway is made
+    Create the AgentCore Gateway + managed Web Search tool target and point the
+    agent at it (zero-egress, Amazon-indexed search over MCP). The gateway is made
     in Terraform; the web-search *target* is created via the AWS CLI from a
     null_resource because the provider has no connector-target resource yet.
     Requires AWS CLI v2 on the machine running `terraform apply`.
-    Set false to avoid paying for unused gateway infrastructure.
+    Set false to deploy without it (agent falls back to direct search).
   EOT
-  type        = bool
-  default     = false
+  type    = bool
+  default = true
 }
 
 variable "gateway_search_tool" {

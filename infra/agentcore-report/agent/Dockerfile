@@ -4,8 +4,8 @@ FROM public.ecr.aws/docker/library/python:3.11-slim
 WORKDIR /app
 ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
 
-# ca-certificates for HTTPS calls to registries, company sites, Bedrock, S3, and
-# DynamoDB.
+# ca-certificates for HTTPS calls (Bedrock, Gateway MCP, S3, DynamoDB, and the
+# CDP WebSocket to AgentCore Browser all go over TLS).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
  && rm -rf /var/lib/apt/lists/*
@@ -13,10 +13,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
-# Playwright connects to the remote AgentCore Browser over CDP. No local Chromium
-# binary is installed in this runtime image.
-COPY agent.py .
-COPY config ./config
+# NOTE: no `playwright install` / `install-deps` step. We only ever call
+# chromium.connect_over_cdp(...) against AWS's REMOTE managed AgentCore
+# Browser — no local browser is ever launched in this container, so no
+# browser binary and no OS-level browser dependencies are needed here.
+
+
+COPY agent.py report_specs.py registry_tier.py ./
 
 # BedrockAgentCoreApp serves /invocations and /ping on 8080.
 EXPOSE 8080

@@ -52,7 +52,6 @@ locals {
     ecr_api = "com.amazonaws.${var.region}.ecr.api"
     ecr_dkr = "com.amazonaws.${var.region}.ecr.dkr"
     logs    = "com.amazonaws.${var.region}.logs"
-    sqs     = "com.amazonaws.${var.region}.sqs"
   } : {}
 }
 

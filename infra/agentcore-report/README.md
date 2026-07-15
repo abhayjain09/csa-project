@@ -1,170 +1,186 @@
-# Report IQ document retrieval
+# AgentCore report-download agent
 
-This runtime retrieves one validated corporate document for each structured
-request. It is registry-first: it does not fan out a list of loose search
-phrases and it never stores an unverified best guess.
+Deploy one AgentCore Runtime. Invoke it from your laptop with a `web_query` JSON;
+it searches the official domain, downloads the report(s) to S3, records provenance
+in DynamoDB, and **returns the S3 key(s)**.
 
-## Retrieval policy
-
-```text
-company + document request
-  -> Tier 0: official filing registry (SEC EDGAR, Companies House)
-  -> Tier 1: verified company site paths and sitemap links
-  -> Tier 2: optional site-scoped Google PSE or Brave search
-  -> Tier 3: AgentCore Browser + Playwright for rendered navigation and downloads
-  -> deterministic PDF/HTML validation + optional Bedrock confirmation
-  -> exactly one winner written to S3 and DynamoDB
+## Project files
+```
+agent/
+  agent.py            # the agent: search -> rank -> deep-crawl -> LLM gate -> S3 + DynamoDB
+  Dockerfile          # ARM64 image; installs Playwright for the in-AWS Browser tool
+  requirements.txt    # bedrock-agentcore, boto3, mcp, httpx, playwright
+versions.tf           # required providers: aws >=6.32, null, local
+providers.tf          # aws provider + mandatory default_tags
+variables.tf          # all input vars (region, image_tag, search/browser toggles, ...)
+locals.tf             # runtime_env map = single source of truth for runtime env vars
+main.tf               # ECR, S3, DynamoDB, IAM, CloudWatch, runtime + runtime_update null_resource
+gateway.tf            # AgentCore Gateway + managed Web Search target (via AWS CLI)
+outputs.tf            # runtime ARN, bucket, table, gateway URL, region, invoke example
+terraform.tfvars.example
+scripts/
+  deploy.sh           # one-command: build + push + terraform apply
+  build_and_push.sh   # build ARM64 image, push to ECR
+  invoke_local.py     # invoke the runtime from your laptop, print S3 keys
+  payload.example.json
+  payload.xylem.json  # example: Xylem policies/reports
+README.md
 ```
 
-Each tier exits as soon as it finds a positively validated document. A URL may
-only be accepted if it is from an official registry, an official company domain,
-or an explicitly trusted document CDN linked from an official company page.
+## Resources this Terraform creates
+ECR repo · S3 reports bucket (versioned, KMS, private) · DynamoDB provenance table
+· IAM execution role · CloudWatch log group · **AgentCore Gateway + Web Search
+target** · **AgentCore Runtime (+ auto DEFAULT endpoint)** · **AgentCore Browser
+tool** (in-AWS headless Chromium, no third-party egress).
+All six mandatory tags applied via `default_tags`.
 
-## Input contract
 
-Use one item in `requests` per desired document. Do not submit 23 variations of
-the same query: that was the reason the previous runtime stored several reports.
+## Prerequisites
+- Terraform >= 1.9, AWS provider >= 6.32 (AgentCore needs 6.18+).
+- **AWS CLI v2** on the machine running `terraform apply` (used to create the
+  Web Search target — see below).
+- Docker with `buildx` (the runtime image is **ARM64/Graviton**).
+- Region: **us-east-1** — the Web Search tool is only in us-east-1 today.
+- Bedrock model access enabled in the console (one-time) if you later add model calls.
 
+## Deploy (three commands)
+First pin the region (cleaner than `-var` on every call):
+```bash
+cp terraform.tfvars.example terraform.tfvars   # already set to us-east-1
+```
+Then:
+```bash
+# 1. Create the ECR repo (and the rest of the non-runtime infra) first
+terraform init
+terraform apply -target=aws_ecr_repository.agent
+
+# 2. Build + push the ARM64 image into that repo
+./scripts/build_and_push.sh "$(aws sts get-caller-identity --query Account --output text)" \
+    us-east-1 "$(terraform output -raw ecr_repository_url)" v1
+
+# 3. Create everything else: Gateway + Web Search target + runtime + endpoint
+terraform apply
+```
+> Re-deploying new code later — one command:
+> ```bash
+> ./scripts/deploy.sh v2
+> ```
+> This builds+pushes the image and runs `terraform apply -var image_tag=v2`. The
+> `null_resource.runtime_update` then calls `update-agent-runtime` to create a NEW
+> runtime version from the new image (and current env), which the auto DEFAULT
+> endpoint tracks. You can also do it by hand: rebuild/push a new tag, then
+> `terraform apply -var image_tag=v2`.
+
+### Why the runtime update is a null_resource (provider gap)
+The `aws_bedrockagentcore_agent_runtime` provider does **not** detect image-tag or
+environment-variable changes as a diff — a second `terraform apply` reports "no
+changes" and the runtime stays pinned to its first version, so new code never goes
+live. To work around this, the runtime resource sets `lifecycle.ignore_changes` on
+the artifact + env (it only handles the INITIAL create), and
+`null_resource.runtime_update` runs `aws bedrock-agentcore-control
+update-agent-runtime` on every `image_tag`/env change. That call creates a fresh
+immutable version; the auto-created DEFAULT endpoint always tracks the latest
+version, so `--qualifier DEFAULT` invokes get the new build. The env is written to
+a git-ignored `.runtime-env.json` (sensitive) and passed via `--environment-variables file://`.
+
+## Invoke from your laptop
+Your IAM identity needs `bedrock-agentcore:InvokeAgentRuntime` on the runtime ARN.
+
+**Option A — helper script (prints the S3 keys):**
+```bash
+pip install boto3
+python scripts/invoke_local.py "$(terraform output -raw agent_runtime_arn)" \
+    scripts/payload.example.json --region=us-east-1
+```
+
+**Option B — raw AWS CLI:**
+```bash
+aws bedrock-agentcore invoke-agent-runtime \
+  --region us-east-1 \
+  --agent-runtime-arn "$(terraform output -raw agent_runtime_arn)" \
+  --qualifier DEFAULT \
+  --payload fileb://scripts/payload.example.json \
+  out.json && cat out.json
+```
+
+`payload.example.json` is your exact input:
 ```json
 {
-  "company": {
-    "legal_name": "PACCAR Inc",
-    "aliases": ["PACCAR"],
-    "cik": "0000753362",
-    "country": "US",
-    "official_domains": ["paccar.com"],
-    "trusted_document_hosts": ["q4cdn.com"]
-  },
-  "requests": [
-    {"id": "annual-2024", "document_type": "annual_report", "year": 2024, "allow_browser": true},
-    {"id": "conduct", "document_type": "code_of_conduct"}
-  ]
+  "web_query1": "site: https://www.paccar.com/ Anti-Bribery & Anti-Corruption Policy ",
+  "web_query2": " site: https://www.paccar.com/ Anti-Bribery & Anti-Corruption Policy"
 }
 ```
 
-Supported `document_type` values are defined in
-[document_types.json](agent/config/document_types.json): `annual_report`,
-`proxy_statement`, `sustainability_report`, `code_of_conduct`,
-`anti_bribery_policy`, `whistleblowing_policy`, `tax_strategy`, and
-`supplier_code_of_conduct`.
-
-The company object must include `legal_name` and either `official_domains`, a
-SEC `cik`, or a UK `companies_house_number`. Adding `cik` is strongly recommended
-for US annual reports and proxies. It turns EDGAR into the first deterministic
-source instead of relying on search.
-
-## Validation and storage
-
-Before storage a candidate must satisfy all applicable gates:
-
-- Supported PDF or HTML document content.
-- Exact document type, not a neighbouring report or policy.
-- Correct company identity from text, registry identity, or official-domain provenance.
-- Exact requested year when `year` is provided.
-- A deterministic score of at least 80.
-- Bedrock confirmation when `require_llm_validation = true`.
-
-The runtime stores only the winning document under:
-
-```text
-<company>/<document_type>/<year-or-undated>/<sha12>-<filename>
+## What you get back
+```json
+{
+  "run_id": "a1b2c3d4",
+  "company": "paccar",
+  "domain": "paccar.com",
+  "bucket": "edo-coanalyst-report-<acct>",
+  "count": 2,
+  "downloaded": [
+    {
+      "status": "stored",
+      "s3_key": "paccar/a1b2c3d4/code-of-conduct.pdf",
+      "s3_uri": "s3://edo-coanalyst-report-<acct>/paccar/a1b2c3d4/code-of-conduct.pdf",
+      "source_url": "https://www.paccar.com/.../code-of-conduct.pdf",
+      "content_type": "application/pdf",
+      "sha256": "…",
+      "report": "PACCAR Code of Conduct"
+    }
+  ],
+  "failures": []
+}
 ```
+The `s3_key` / `s3_uri` of each downloaded report is the answer you asked for.
+The same rows are written to the DynamoDB provenance table.
 
-DynamoDB receives source tier, registry metadata, validation score, reasons,
-and the S3 key. Rejected URLs remain only in the invocation diagnostics.
+## How it handles your minimal JSON
+No `company` field is needed — it's derived from the `site:` domain
+(`paccar.com` → `paccar`). The agent keeps only on-domain results and, when a hit
+is an HTML governance page, follows the same-domain **PDF** links on it (policies
+are usually PDFs), so you get the actual document, not just the landing page.
 
-## Configuration
+## Web search (managed, zero egress)
+The agent uses AWS's **managed Web Search tool** — Amazon's own web index, queries
+never leave AWS, results come back with snippets, URLs, titles, and dates. The
+agent connects to the Gateway over MCP (SigV4-signed), discovers the tool via
+`tools/list`, and calls it. If the gateway is disabled or a call fails, it falls
+back to direct search so a run still returns documents.
 
-Start from `terraform.tfvars.example`. Production needs:
+### Why part of this is AWS CLI, not pure Terraform
+The Web Search tool is a built-in Gateway **connector** (`connectorId: "web-search"`).
+The `hashicorp/aws` provider supports the **Gateway** resource but does **not** yet
+expose the connector **target** type. So:
+- the Gateway + its service role are plain Terraform, and
+- the web-search **target** is created by the AWS CLI from a `null_resource`
+  during `terraform apply` (idempotent; a "already exists" conflict is treated as
+  success; removed on `terraform destroy`).
 
-```hcl
-llm_model_id             = "us.amazon.nova-2-lite-v1:0"
-require_llm_validation   = true
-sec_user_agent           = "Your Organisation ops@example.com"
-```
+This is the standard way to bridge a provider gap without leaving `terraform apply`.
+When the provider adds a connector target resource, swap the `null_resource` in
+`gateway.tf` for the native resource — nothing else changes.
 
-`SEC_USER_AGENT` must name an organisation and monitored email address. EDGAR is
-queried at eight requests per second or less. The runtime uses the SEC submissions
-API and Archives documents, not fragile SEC HTML search.
-
-Set `companies_house_api_key` to enable UK statutory accounts. Set both
-`google_api_key` and `google_cx`, or `brave_search_api_key`, only if you need
-site-scoped web search for website-only policy classes. Search results are still
-hard-filtered to `official_domains`.
-
-The old AgentCore managed web-search gateway is disabled by default because its
-backend does not reliably honour `site:` scoping. It remains optional Terraform
-infrastructure for other broad-discovery uses, but this retrieval runtime does not
-use it.
-
-## Deploy and invoke
-
+To deploy without web search (agent falls back to direct search):
 ```bash
-terraform init
-terraform apply -target=aws_ecr_repository.agent
-./scripts/build_and_push.sh "$(aws sts get-caller-identity --query Account --output text)" \
-  us-east-1 "$(terraform output -raw ecr_repository_url)" v2
-terraform apply -var image_tag=v2
-
-python scripts/invoke_local.py "$(terraform output -raw agent_runtime_arn)" \
-  scripts/payload.example.json --region=us-east-1
+terraform apply -var enable_web_search=false
 ```
 
-The runtime has public egress because it must call official registries and company
-sites. Keep S3, DynamoDB, and Bedrock access inside AWS as configured by Terraform.
+> The AgentCore starter-toolkit CLI (`agentcore add gateway-target`) supports
+> lambda/openapi/smithy/mcp-server targets, but the **web-search connector** is
+> only documented via the AWS CLI / boto3 today — which is what this stack uses.
 
-## Browser and country adapters
+> Not to be confused with the AgentCore **Browser tool** (`aws_bedrockagentcore_browser`)
+> — that's a headless browser for live-site navigation, useful later for a
+> verifier agent, not for search.
 
-For JavaScript-only report pages, enable `use_browser = true` and add
-`"allow_browser": true` to the individual request. Tier 3 opens an AgentCore
-Browser session, follows only rendered links and buttons on approved company
-domains, selects the requested year in ordinary HTML `<select>` controls, and
-clicks a download control. It reads the rendered DOM first. A screenshot is sent
-to the configured Bedrock model only when several download controls are ambiguous.
-The browser never writes directly to S3: its candidate still passes the same
-company, class, year, and LLM validation as every other tier.
-
-For long-running, login-required, or heavily bot-protected sites, move this same
-browser candidate contract to the optional Fargate worker. Enable it only with
-approved network placement:
-
-```hcl
-enable_fargate_browser_worker = true
-fargate_ecs_cluster_id        = "reportiq-cluster"
-fargate_subnet_ids            = ["subnet-...", "subnet-..."]
-fargate_security_group_ids    = ["sg-..."]
-fargate_assign_public_ip       = false
-```
-
-Use the existing values from `reportiq-ecs`: its `ecs_cluster` output, the
-configured `subnet_ids`, and `reportiq-tasks-sg`. These resources share the
-same organisation tags through the Terraform AWS provider. The worker needs a
-NAT route from those private subnets to public company websites; AWS VPC
-endpoints alone are not sufficient.
-
-When the runtime has no validated result, it returns `queued_browser_worker` and
-a `browser_job_id`. The Fargate worker has a 10-minute / 40-page budget for normal
-rendered navigation, then writes a result to the browser-results SQS queue.
-Possible worker outcomes are `stored`, `duplicate`, `not_found`, or
-`manual_review_required`. `manual_review_required` contains `login_required` or
-`blocked_waf_or_captcha`; it does not attempt credential entry, CAPTCHA solving,
-WAF evasion, proxy rotation, or an unscoped browser search.
-
-Read completed asynchronous results with:
-
-```bash
-python scripts/read_browser_results.py "$(terraform output -raw browser_worker_results_queue_url)" \
-  --region=us-east-1 --delete
-```
-
-The first worker deployment needs both ECR repositories before building images:
-
-```bash
-terraform apply -target=aws_ecr_repository.agent -target=aws_ecr_repository.browser_worker
-./scripts/deploy.sh v4
-```
-
-SEC EDGAR and Companies House are implemented now. India BSE/NSE and EU OAM/ESEF
-should be added as separate registry adapters once their issuer identifiers and
-API behaviour are verified in your AWS account. Do not substitute an unscoped web
-search for those adapters.
+## Honesty / things to verify
+- `aws_bedrockagentcore_*` resources are new. This stack uses the verified schema
+  (`agent_runtime_name`, endpoint via `agent_runtime_id`, gateway connector target
+  via the documented CLI shape).
+- If `apply` rejects `search_type = "SEMANTIC"` on the gateway, change it to
+  `"DEFAULT"` in `gateway.tf`.
+- `count: 0` from a run usually means the site exposes no linked document for that
+  query — check `failures`, or refine the terms after `site:`.
+- Logs: `/aws/bedrock-agentcore/<name>` in CloudWatch.

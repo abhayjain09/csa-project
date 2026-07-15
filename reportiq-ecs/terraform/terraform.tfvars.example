@@ -18,9 +18,3 @@ manage_dynamo_tables = false
 # Your EC2 had no outbound internet → subnets are private with only an S3 endpoint.
 # Fargate needs ECR + logs endpoints to pull the image. Keep true unless you add NAT.
 create_vpc_endpoints = true
-
-# Optional: copy these two values from infra/agentcore-report Terraform outputs
-# when its Fargate browser worker is enabled. The portal then updates the
-# original run when the asynchronous browser job finishes.
-# browser_results_queue_url = "https://sqs.us-east-1.amazonaws.com/.../edo-coanalyst-report-browser-results"
-# browser_results_queue_arn = "arn:aws:sqs:us-east-1:...:edo-coanalyst-report-browser-results"

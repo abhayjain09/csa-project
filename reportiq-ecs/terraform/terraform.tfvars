@@ -20,5 +20,3 @@ create_vpc_endpoints = true
 
 hosted_zone_id = "Z0486311J00RNSG5XGBS"
 dns_name       = "reportiq.novavoice.spglobal.com"
-browser_results_queue_url = "https://sqs.us-east-1.amazonaws.com/610639371721/edo-coanalyst-report-browser-results"
-browser_results_queue_arn = "arn:aws:sqs:us-east-1:610639371721:edo-coanalyst-report-browser-results" #"arn:aws:sqs:us-east-1:ACCOUNT:QUEUE"

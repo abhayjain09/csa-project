@@ -1,0 +1,16 @@
+{
+  "run_id": "smoketest-v40-01",
+  "company": {
+    "name": "PACCAR Inc",
+    "domain": "paccar.com",
+    "jurisdiction": "us",
+    "ticker": "PCAR",
+    "cik": "0000075362",
+    "companies_house_number": null
+  },
+  "browser_enabled": true,
+  "reports": [
+    { "report_class": "annual report", "year": null },
+    { "report_class": "code of conduct", "year": null }
+  ]
+}

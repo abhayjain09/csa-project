@@ -2,22 +2,6 @@ output "ecr_repository_url" {
   value = aws_ecr_repository.agent.repository_url
 }
 
-output "browser_worker_ecr_repository_url" {
-  value = aws_ecr_repository.browser_worker.repository_url
-}
-
-output "browser_worker_jobs_queue_url" {
-  value = var.enable_fargate_browser_worker ? aws_sqs_queue.browser_jobs[0].id : ""
-}
-
-output "browser_worker_results_queue_url" {
-  value = var.enable_fargate_browser_worker ? aws_sqs_queue.browser_results[0].id : ""
-}
-
-output "browser_worker_results_queue_arn" {
-  value = var.enable_fargate_browser_worker ? aws_sqs_queue.browser_results[0].arn : ""
-}
-
 output "region" {
   value = local.region
 }
@@ -37,7 +21,7 @@ output "agent_runtime_arn" {
 
 output "web_search_gateway_url" {
   description = "MCP endpoint of the Web Search gateway (empty if disabled)."
-  value       = length(aws_bedrockagentcore_gateway.web_search) > 0 ? aws_bedrockagentcore_gateway.web_search[0].gateway_url : ""
+  value       = local.gateway_url
 }
 
 output "invoke_example" {

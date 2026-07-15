@@ -1,975 +1,3404 @@
-"""Registry-first corporate document retrieval runtime.
+"""Report download agent (single AgentCore Runtime) — v40.
 
-This runtime intentionally treats a request as one document need, not a set of
-web searches.  It tries authoritative registries first, then links discovered
-from verified company domains, then an optional *site-scoped* search provider.
-Only one positively validated document is stored for each request.
+v40 builds on v39's Gateway/Vertex search + deterministic AgentCore Browser DOM
+fallback and restructures the resolver into an explicit, ordered tier chain:
+
+  Tier 1  Google (Vertex grounded) web search + synonym/alias fan-out.
+  Tier 2  Official registry fallback (SEC EDGAR + Companies House) via the
+          registry_tier module — EDGAR for annual reports (10-K/20-F/40-F) and
+          proxy statements (DEF 14A), sustainability best-effort; Companies
+          House for annual accounts only. Every registry hit still passes the
+          SAME fail-closed class verifier.
+  Tier 3  Sitemap enumeration -> deep static crawl.
+  Tier 4  AgentCore Browser (Playwright) — JS nav, year selection, menu expand,
+          download-control identification. Gated per-run by browser_enabled.
+
+Per-class discovery + validation is unified in report_specs.py; Tier 2 lives in
+registry_tier.py. Input accepts a structured {company{}, reports[]} payload and
+still normalizes the legacy web_query<N> shape. Every stored document is written
+with a <key>.metadata.json sidecar for the downstream Knowledge Base.
+
+All v39.1 fail-closed fixes are preserved: press-release filter, per-query
+rejected set, cross-company gate, capped-recency year alignment.
 """
 
-from __future__ import annotations
-
-import base64
+import asyncio
+import concurrent.futures
 import datetime as dt
+import random
+import threading
+import time
 import hashlib
-import html
-import io
 import json
 import os
 import re
-import time
 import uuid
-import xml.etree.ElementTree as ET
-from collections import deque
-from dataclasses import asdict, dataclass, field
-from pathlib import Path
-from typing import Any, Iterable
-from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode, urljoin, urlparse
+import unicodedata
+from urllib.error import HTTPError
+from urllib.parse import unquote, urljoin, urlparse
 from urllib.request import Request, urlopen
 
 import boto3
+from botocore.config import Config
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 
-try:
-    from pypdf import PdfReader
-except ImportError:  # pragma: no cover - deployment installs pypdf
-    PdfReader = None
-
+import report_specs
+import registry_tier
 
 app = BedrockAgentCoreApp()
 
-BUCKET = os.environ.get("REPORTS_BUCKET", "")
-PROVENANCE_TABLE = os.environ.get("PROVENANCE_TABLE", "")
-REGION = os.environ.get("APP_REGION") or os.environ.get("AWS_REGION", "us-east-1")
-MAX_CANDIDATES_PER_TIER = int(os.environ.get("MAX_CANDIDATES_PER_TIER", "8"))
-SITEMAP_MAX_URLS = int(os.environ.get("SITEMAP_MAX_URLS", "2000"))
-FETCH_TIMEOUT_SECONDS = int(os.environ.get("FETCH_TIMEOUT_SECONDS", "45"))
-MAX_DOCUMENT_BYTES = int(os.environ.get("MAX_DOCUMENT_BYTES", str(80 * 1024 * 1024)))
-REQUIRE_LLM_VALIDATION = os.environ.get("REQUIRE_LLM_VALIDATION", "true").lower() != "false"
-LLM_MODEL_ID = os.environ.get("LLM_MODEL_ID", "").strip()
-SEC_USER_AGENT = os.environ.get("SEC_USER_AGENT", "").strip()
-GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "").strip()
-GOOGLE_CX = os.environ.get("GOOGLE_CX", "").strip()
-BRAVE_SEARCH_API_KEY = os.environ.get("BRAVE_SEARCH_API_KEY", "").strip()
-COMPANIES_HOUSE_API_KEY = os.environ.get("COMPANIES_HOUSE_API_KEY", "").strip()
-PRESIGN_EXPIRY_SECONDS = int(os.environ.get("PRESIGN_EXPIRY_SECONDS", "3600"))
-USE_BROWSER = os.environ.get("USE_BROWSER", "false").lower() == "true"
-BROWSER_REGION = os.environ.get("BROWSER_REGION", REGION)
-BROWSER_IDENTIFIER = os.environ.get("BROWSER_IDENTIFIER", "aws.browser.v1")
-BROWSER_SESSION_TIMEOUT_SECONDS = int(os.environ.get("BROWSER_SESSION_TIMEOUT_SECONDS", "180"))
-BROWSER_MAX_PAGES = int(os.environ.get("BROWSER_MAX_PAGES", "12"))
-BROWSER_MAX_SECONDS = int(os.environ.get("BROWSER_MAX_SECONDS", "120"))
-BROWSER_CLICK_TIMEOUT_MS = int(os.environ.get("BROWSER_CLICK_TIMEOUT_MS", "12000"))
-BROWSER_VISION_MODEL_ID = os.environ.get("BROWSER_VISION_MODEL_ID", LLM_MODEL_ID).strip()
-FARGATE_BROWSER_QUEUE_URL = os.environ.get("FARGATE_BROWSER_QUEUE_URL", "").strip()
+CODE_VERSION = "v40"
 
-_s3 = boto3.client("s3", region_name=REGION) if BUCKET else None
-_table = boto3.resource("dynamodb", region_name=REGION).Table(PROVENANCE_TABLE) if PROVENANCE_TABLE else None
+# Tier 2 (official registry fallback) master switch. registry_tier.py reads its
+# own EDGAR_* / CH_* configuration from the environment.
+ENABLE_REGISTRY_TIER = os.environ.get("ENABLE_REGISTRY_TIER", "true").lower() != "false"
+registry_tier.set_logger(print)
+
+# ─── Environment ──────────────────────────────────────────────────────────────
+BUCKET            = os.environ.get("REPORTS_BUCKET", "")
+PROVENANCE_TABLE  = os.environ.get("PROVENANCE_TABLE", "")
+REGION            = os.environ.get("APP_REGION") or os.environ.get("AWS_REGION", "us-east-1")
+GATEWAY_URL       = os.environ.get("GATEWAY_URL", "")
+GATEWAY_SEARCH_TOOL = os.environ.get("GATEWAY_SEARCH_TOOL", "").strip()
+GATEWAY_STRIP_SITE = os.environ.get("GATEWAY_STRIP_SITE", "true").lower() != "false"
+MAXIMIZE_RECALL = os.environ.get("MAXIMIZE_RECALL", "true").lower() != "false"
+
+# ── Tier 2 search backend: "vertex_lambda" (isolated Vertex Lambda) or "gateway" ──
+SEARCH_BACKEND = os.environ.get("SEARCH_BACKEND", "gateway").strip().lower()
+LAMBDA_SEARCH_FUNCTION = os.environ.get("LAMBDA_SEARCH_FUNCTION", "").strip()
+LAMBDA_INVOKE_TIMEOUT = int(os.environ.get("LAMBDA_INVOKE_TIMEOUT", "120"))
+VERTEX_FALLBACK_TO_GATEWAY = os.environ.get("VERTEX_FALLBACK_TO_GATEWAY", "false").lower() == "true"
+
+DEEP_STATIC_CRAWL = os.environ.get("DEEP_STATIC_CRAWL", "true").lower() != "false"
+DEEP_STATIC_MAX_DEPTH = int(os.environ.get("DEEP_STATIC_MAX_DEPTH", "3"))
+DEEP_STATIC_MAX_PAGES = int(os.environ.get("DEEP_STATIC_MAX_PAGES", "100"))
+
+BROWSER_DEEP_NAV = os.environ.get("BROWSER_DEEP_NAV", "true").lower() != "false"
+BROWSER_NAV_MAX_DEPTH = int(os.environ.get("BROWSER_NAV_MAX_DEPTH", "2"))
+BROWSER_NAV_MAX_PAGES = int(os.environ.get("BROWSER_NAV_MAX_PAGES", "60"))
+
+USE_BROWSER       = os.environ.get("USE_BROWSER", "false").lower() == "true"
+BROWSER_IDENTIFIER= os.environ.get("BROWSER_IDENTIFIER", "aws.browser.v1")
+BROWSER_REGION    = os.environ.get("BROWSER_REGION") or REGION
+BROWSER_SESSION_TIMEOUT = int(os.environ.get("BROWSER_SESSION_TIMEOUT_SECONDS", "120"))
+BROWSER_WAIT_UNTIL = os.environ.get("BROWSER_WAIT_UNTIL", "domcontentloaded").strip()
+BROWSER_SETTLE_MS = int(os.environ.get("BROWSER_SETTLE_MS", "2500"))
+
+BROWSER_ALLOW_OFFDOMAIN_DOCS = os.environ.get("BROWSER_ALLOW_OFFDOMAIN_DOCS", "true").lower() != "false"
+BROWSER_DOWNLOAD_IN_SESSION  = os.environ.get("BROWSER_DOWNLOAD_IN_SESSION", "true").lower() != "false"
+BROWSER_CLICK_FALLBACK       = os.environ.get("BROWSER_CLICK_FALLBACK", "true").lower() != "false"
+BROWSER_CLICK_TIMEOUT_MS     = int(os.environ.get("BROWSER_CLICK_TIMEOUT_MS", "10000"))
+BROWSER_MAX_DOC_BYTES        = int(os.environ.get("BROWSER_MAX_DOC_BYTES", str(80 * 1024 * 1024)))
+BROWSER_MAX_DOC_CANDIDATES   = int(os.environ.get("BROWSER_MAX_DOC_CANDIDATES", "20"))
+BROWSER_MAX_VERIFY_CANDIDATES = int(os.environ.get("BROWSER_MAX_VERIFY_CANDIDATES", "30"))
+BROWSER_MAX_CLICK_ATTEMPTS = int(os.environ.get("BROWSER_MAX_CLICK_ATTEMPTS", "12"))
+BROWSER_RESOLVE_MAX_SECONDS = float(os.environ.get("BROWSER_RESOLVE_MAX_SECONDS", "1800"))
+BROWSER_VERIFY_CLASS = os.environ.get("BROWSER_VERIFY_CLASS", "true").lower() != "false"
+BROWSER_VISION_MODEL_ID = os.environ.get("BROWSER_VISION_MODEL_ID", "").strip()
+BROWSER_SKIP_CLICK_ON_BLOCK = os.environ.get("BROWSER_SKIP_CLICK_ON_BLOCK", "true").lower() != "false"
+
+MAX_RESULTS       = int(os.environ.get("WEB_SEARCH_MAX_RESULTS", "10"))
+BEST_MATCHES      = int(os.environ.get("BEST_MATCHES", "1"))
+DOC_ONLY          = os.environ.get("DOC_ONLY", "true").lower() != "false"
+CURRENT_YEAR      = dt.date.today().year
+ENFORCE_SITE_DOMAIN = os.environ.get("ENFORCE_SITE_DOMAIN", "true").lower() != "false"
+DOMAIN_FILTER_MODE = os.environ.get("DOMAIN_FILTER_MODE", "soft").strip().lower()
+
+ENABLE_FILING_FALLBACK = os.environ.get("ENABLE_FILING_FALLBACK", "true").lower() != "false"
+FILING_FALLBACK_DOC_CLASSES = {
+    c.strip().lower()
+    for c in os.environ.get(
+        "FILING_FALLBACK_DOC_CLASSES",
+        "annual report,proxy statement,remuneration report,tax strategy and governance",
+    ).split(",")
+    if c.strip()
+}
+_NON_FILING_HUB_CLASSES = {
+    c.strip().lower()
+    for c in os.environ.get(
+        "NON_FILING_HUB_DOC_CLASSES", "tax strategy and governance",
+    ).split(",")
+    if c.strip()
+}
+LLM_MODEL_ID      = os.environ.get("LLM_MODEL_ID", "")
+MAX_ALIAS_SEARCHES = int(os.environ.get("MAX_ALIAS_SEARCHES", "3"))
+SEARCH_ALL_ALIASES = os.environ.get("SEARCH_ALL_ALIASES", "true").lower() != "false"
+ALIAS_REGION = os.environ.get("ALIAS_REGION", "all").strip().lower()
+ALIAS_MODE = os.environ.get("ALIAS_MODE", "fallback").strip().lower()
+TOP_N_FOR_LLM     = int(os.environ.get("TOP_N_FOR_LLM", "6"))
+ALIAS_HIT_BOOST   = int(os.environ.get("ALIAS_HIT_BOOST", "1"))
+ENABLE_LLM_CLASS_MATCH = os.environ.get("ENABLE_LLM_CLASS_MATCH", "true").lower() != "false"
+ENFORCE_COMPANY_SAMPLE_EVIDENCE = os.environ.get(
+    "ENFORCE_COMPANY_SAMPLE_EVIDENCE", "true").lower() != "false"
+COMPANY_SAMPLE_MIN_CHARS = int(os.environ.get("COMPANY_SAMPLE_MIN_CHARS", "40"))
+
 _bedrock = boto3.client("bedrock-runtime", region_name=REGION) if LLM_MODEL_ID else None
-_sqs = boto3.client("sqs", region_name=REGION) if FARGATE_BROWSER_QUEUE_URL else None
-_last_sec_request = 0.0
-_sec_ticker_cache: dict[str, str] | None = None
+_s3      = boto3.client("s3", region_name=REGION) if BUCKET else None
+__table   = boto3.resource("dynamodb", region_name=REGION).Table(PROVENANCE_TABLE) if PROVENANCE_TABLE else None
+_table   = __table
+_lambda  = (boto3.client(
+                "lambda", region_name=REGION,
+                config=Config(read_timeout=LAMBDA_INVOKE_TIMEOUT,
+                              connect_timeout=10,
+                              retries={"max_attempts": 2}))
+            if LAMBDA_SEARCH_FUNCTION else None)
 
-CONFIG_PATH = Path(__file__).with_name("config") / "document_types.json"
+LLM_SEND_TEMPERATURE = os.environ.get("LLM_SEND_TEMPERATURE", "false").lower() == "true"
+LLM_MAX_RETRIES = int(os.environ.get("LLM_MAX_RETRIES", "3"))
+SELECTION_MODEL_ID = os.environ.get("SELECTION_MODEL_ID", "").strip() or None
 
-
-def _load_document_rules() -> dict[str, dict[str, Any]]:
-    with CONFIG_PATH.open(encoding="utf-8") as config_file:
-        rules = json.load(config_file)
-    return {entry["id"]: entry for entry in rules["document_types"]}
-
-
-DOCUMENT_RULES = _load_document_rules()
-
-
-@dataclass(frozen=True)
-class Company:
-    legal_name: str
-    official_domains: tuple[str, ...] = ()
-    aliases: tuple[str, ...] = ()
-    ticker: str | None = None
-    cik: str | None = None
-    country: str | None = None
-    companies_house_number: str | None = None
-    trusted_document_hosts: tuple[str, ...] = ()
-
-    @property
-    def identity_terms(self) -> tuple[str, ...]:
-        values = [self.legal_name, *self.aliases]
-        return tuple(value.lower().strip() for value in values if len(value.strip()) >= 3)
-
-
-@dataclass(frozen=True)
-class DocumentRequest:
-    id: str
-    document_type: str
-    year: int | None = None
-    allow_search: bool = True
-    allow_browser: bool = False
+# ═══ v39 env (recall boosters, all AWS-only) ═══
+ENABLE_LLM_QUERY_GEN = os.environ.get("ENABLE_LLM_QUERY_GEN", "true").lower() != "false"
+LLM_QUERY_GEN_MAX = int(os.environ.get("LLM_QUERY_GEN_MAX", "8"))
+SEARCH_FANOUT_WORKERS = int(os.environ.get("SEARCH_FANOUT_WORKERS", "4"))
+ENABLE_SITEMAP = os.environ.get("ENABLE_SITEMAP", "true").lower() != "false"
+SITEMAP_MAX_URLS = int(os.environ.get("SITEMAP_MAX_URLS", "5000"))
+SITEMAP_MAX_NESTED = int(os.environ.get("SITEMAP_MAX_NESTED", "50"))
+SITEMAP_FETCH_TIMEOUT = int(os.environ.get("SITEMAP_FETCH_TIMEOUT", "20"))
+SITEMAP_MAX_CANDIDATES = int(os.environ.get("SITEMAP_MAX_CANDIDATES", "40"))
+FILING_FALLBACK_ALL_CLASSES = os.environ.get("FILING_FALLBACK_ALL_CLASSES", "true").lower() != "false"
+FILING_REGISTRY_HOSTS = [
+    h.strip().lower() for h in os.environ.get(
+        "FILING_REGISTRY_HOSTS",
+        "sec.gov,bseindia.com,nseindia.com,archives.nseindia.com,"
+        "nsearchives.nseindia.com,annualreports.com,companieshouse.gov.uk,"
+        "asx.com.au,sedar.com,sedarplus.ca").split(",") if h.strip()]
+IR_NAV_KEYWORDS = tuple(
+    k.strip().lower() for k in os.environ.get(
+        "IR_NAV_KEYWORDS",
+        "investor,investors,annual-report,annualreport,financial,financials,"
+        "results,sustainability,esg,governance,policy,policies,code-of-conduct,"
+        "ethics,compliance,reports,disclosures,shareholder,filings").split(",")
+    if k.strip())
+_LLM_QUERY_GEN_CACHE = {}
 
 
-@dataclass
-class Candidate:
-    url: str
-    source_tier: str
-    title: str = ""
-    discovered_from: str | None = None
-    registry_identity_verified: bool = False
-    body: bytes | None = None
-    content_type: str = ""
-    metadata: dict[str, Any] = field(default_factory=dict)
+# ── Model circuit breaker ──────────────────────────────────────────────────
+_MODEL_BREAKER: dict[str, float] = {}
+_MODEL_BREAKER_LOCK = threading.Lock()
+MODEL_BREAKER_COOLDOWN_SECONDS = int(os.environ.get("MODEL_BREAKER_COOLDOWN_SECONDS", "300"))
 
 
-@dataclass
-class Validation:
-    accepted: bool
-    score: int
-    reasons: list[str]
-    title: str
-    extracted_text: str
-    llm_verified: bool | None = None
+def _trip_model_breaker(model_id: str) -> None:
+    with _MODEL_BREAKER_LOCK:
+        _MODEL_BREAKER[model_id] = time.monotonic()
+    print(f"[breaker] tripped for model {model_id!r} — an account-access "
+          f"failure (not a transient error) was hit; skipping retries on this "
+          f"model for the next {MODEL_BREAKER_COOLDOWN_SECONDS}s rather than "
+          f"repeating the same doomed call on every remaining query")
 
 
-class RetrievalError(Exception):
-    """A recoverable discovery or fetch error."""
+def _model_breaker_tripped(model_id: str) -> bool:
+    with _MODEL_BREAKER_LOCK:
+        ts = _MODEL_BREAKER.get(model_id)
+    return ts is not None and (time.monotonic() - ts) < MODEL_BREAKER_COOLDOWN_SECONDS
 
 
-def _normalise_domain(value: str) -> str:
-    value = value.strip().lower()
-    value = re.sub(r"^https?://", "", value)
-    return value.split("/", 1)[0].removeprefix("www.")
-
-
-def _host_matches(url: str, allowed_domain: str) -> bool:
-    host = (urlparse(url).hostname or "").lower().removeprefix("www.")
-    domain = _normalise_domain(allowed_domain)
-    return host == domain or host.endswith("." + domain)
-
-
-def _is_allowed_candidate(candidate: Candidate, company: Company) -> bool:
-    """Allow a company host, or a trusted CDN linked from a company host."""
-    if any(_host_matches(candidate.url, domain) for domain in company.official_domains):
-        return True
-    if not candidate.discovered_from:
-        return False
-    was_discovered_on_company_site = any(
-        _host_matches(candidate.discovered_from, domain) for domain in company.official_domains
-    )
-    return was_discovered_on_company_site and any(
-        _host_matches(candidate.url, host) for host in company.trusted_document_hosts
-    )
-
-
-def _headers(extra: dict[str, str] | None = None) -> dict[str, str]:
-    headers = {
-        "User-Agent": "ReportIQ/2.0 document-retrieval",
-        "Accept": "application/pdf,text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Accept-Encoding": "identity",
-    }
-    headers.update(extra or {})
-    return headers
-
-
-def _fetch(url: str, headers: dict[str, str] | None = None) -> tuple[bytes, str]:
-    request = Request(url, headers=_headers(headers))  # noqa: S310 - URLs are validated by source tiers.
-    try:
-        with urlopen(request, timeout=FETCH_TIMEOUT_SECONDS) as response:  # noqa: S310
-            body = response.read(MAX_DOCUMENT_BYTES + 1)
-            if len(body) > MAX_DOCUMENT_BYTES:
-                raise RetrievalError(f"document exceeds {MAX_DOCUMENT_BYTES} byte limit")
-            content_type = response.headers.get("Content-Type", "application/octet-stream").split(";", 1)[0].lower()
-            return body, content_type
-    except (HTTPError, URLError, TimeoutError) as exc:
-        raise RetrievalError(f"fetch failed: {type(exc).__name__}") from exc
-
-
-def _fetch_json(url: str, headers: dict[str, str] | None = None) -> dict[str, Any]:
-    body, _ = _fetch(url, headers)
-    try:
-        return json.loads(body)
-    except json.JSONDecodeError as exc:
-        raise RetrievalError("source returned invalid JSON") from exc
-
-
-def _sec_fetch_json(url: str) -> dict[str, Any]:
-    """EDGAR requires a real contact User-Agent and limits clients to 10 req/s."""
-    global _last_sec_request
-    if not SEC_USER_AGENT or "@" not in SEC_USER_AGENT:
-        raise RetrievalError("SEC_USER_AGENT must contain organisation name and contact email")
-    wait = 0.125 - (time.monotonic() - _last_sec_request)
-    if wait > 0:
-        time.sleep(wait)
-    _last_sec_request = time.monotonic()
-    return _fetch_json(url, {"User-Agent": SEC_USER_AGENT, "Accept-Encoding": "gzip, deflate"})
-
-
-def _sec_cik_for_ticker(ticker: str | None) -> str | None:
-    """Resolve a supplied US ticker through SEC's official ticker map."""
-    global _sec_ticker_cache
-    if not ticker:
-        return None
-    if _sec_ticker_cache is None:
-        data = _sec_fetch_json("https://www.sec.gov/files/company_tickers.json")
-        _sec_ticker_cache = {
-            str(item.get("ticker", "")).upper(): str(item["cik_str"])
-            for item in data.values()
-            if item.get("ticker") and item.get("cik_str") is not None
-        }
-    return _sec_ticker_cache.get(ticker.upper().strip())
-
-
-def _slug(value: str) -> str:
-    value = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
-    return value or "unknown"
-
-
-def _safe_filename(url: str, content_type: str) -> str:
-    filename = urlparse(url).path.rsplit("/", 1)[-1] or "document"
-    if "." not in filename:
-        filename += ".pdf" if "pdf" in content_type else ".html"
-    return re.sub(r"[^A-Za-z0-9._-]+", "-", filename)[:160]
-
-
-def _plain_text(body: bytes, content_type: str) -> str:
-    if "pdf" in content_type or body.startswith(b"%PDF"):
-        if PdfReader is None:
-            return ""
-        try:
-            reader = PdfReader(io.BytesIO(body))
-            return "\n".join((page.extract_text() or "") for page in reader.pages[:8])[:30000]
-        except Exception:
-            return ""
-    raw = body.decode("utf-8", "ignore")
-    raw = re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", raw, flags=re.I | re.S)
-    raw = re.sub(r"<[^>]+>", " ", raw)
-    return html.unescape(re.sub(r"\s+", " ", raw))[:30000]
-
-
-def _contains_phrase(text: str, phrases: Iterable[str]) -> bool:
-    lowered = text.lower()
-    return any(phrase.lower() in lowered for phrase in phrases)
-
-
-def _year_matches(text: str, requested_year: int | None) -> bool:
-    if requested_year is None:
-        return True
-    years = {int(found) for found in re.findall(r"(?<!\d)(20\d{2})(?!\d)", text)}
-    return requested_year in years
-
-
-def _candidate_title(candidate: Candidate, text: str) -> str:
-    if candidate.title:
-        return candidate.title
-    match = re.search(r"<title[^>]*>(.*?)</title>", text, flags=re.I | re.S)
-    return html.unescape(re.sub(r"<[^>]+>", "", match.group(1))).strip() if match else _safe_filename(candidate.url, candidate.content_type)
-
-
-def _llm_confirms(company: Company, request: DocumentRequest, candidate: Candidate, title: str, text: str) -> bool:
+def _converse(prompt: str, max_tokens: int, model_id: str | None = None) -> str:
     if _bedrock is None:
-        return not REQUIRE_LLM_VALIDATION
-    prompt = {
-        "task": "Confirm whether this is the exact requested corporate document. Reject near matches and different companies.",
-        "company": company.legal_name,
-        "document_type": request.document_type,
-        "requested_year": request.year,
-        "candidate": {"url": candidate.url, "title": title, "source_tier": candidate.source_tier, "excerpt": text[:5000]},
-        "response_schema": {"accept": "boolean", "reason": "short string"},
+        raise RuntimeError("bedrock client not configured")
+    mid = model_id or LLM_MODEL_ID
+    if _model_breaker_tripped(mid):
+        raise RuntimeError(
+            f"model breaker open for {mid} (recent account-access failure; "
+            f"will retry automatically after {MODEL_BREAKER_COOLDOWN_SECONDS}s)")
+    infcfg: dict = {"maxTokens": max_tokens}
+    if LLM_SEND_TEMPERATURE:
+        infcfg["temperature"] = 0
+    last_exc = None
+    for attempt in range(LLM_MAX_RETRIES):
+        try:
+            resp = _bedrock.converse(
+                modelId=mid,
+                messages=[{"role": "user", "content": [{"text": prompt}]}],
+                inferenceConfig=infcfg,
+            )
+            return "".join(b.get("text", "")
+                           for b in resp["output"]["message"]["content"]).strip()
+        except Exception as exc:  # noqa: BLE001
+            last_exc = exc
+            name = type(exc).__name__
+            if "ValidationException" in name or "Validation" in str(exc):
+                raise
+            if "ResourceNotFoundException" in name or "AccessDeniedException" in name:
+                _trip_model_breaker(mid)
+                raise
+            if attempt < LLM_MAX_RETRIES - 1:
+                time.sleep(0.6 * (2 ** attempt) + random.uniform(0.0, 0.4))
+    raise last_exc  # type: ignore[misc]
+
+
+def _parse_llm_json(text: str) -> dict:
+    text = (text or "").strip()
+    text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.I)
+    text = re.sub(r"\s*```$", "", text)
+    start = text.find("{")
+    if start > 0:
+        text = text[start:]
+    return json.JSONDecoder().raw_decode(text)[0]
+
+
+UA = "EDO-CoAnalyst/1.0 (+compliance-research)"
+
+_EDGAR_UA = os.environ.get(
+    "EDGAR_USER_AGENT",
+    "EDO-CoAnalyst/1.0 compliance-research askdevopscloud@spglobal.com")
+
+def _ua_for(url: str) -> str:
+    try:
+        host = urlparse(url).netloc.lower()
+    except Exception:  # noqa: BLE001
+        return UA
+    return _EDGAR_UA if host.endswith("sec.gov") else UA
+
+SEARCH_MIN_INTERVAL = float(os.environ.get("SEARCH_MIN_INTERVAL", "1.5"))
+SEARCH_MAX_RETRIES  = int(os.environ.get("SEARCH_MAX_RETRIES", "4"))
+_search_lock = threading.Lock()
+_last_search_ts = [0.0]
+
+
+def _throttle() -> None:
+    """Block until at least SEARCH_MIN_INTERVAL has passed since the last call."""
+    with _search_lock:
+        now = time.monotonic()
+        wait = SEARCH_MIN_INTERVAL - (now - _last_search_ts[0])
+        if wait > 0:
+            time.sleep(wait + random.uniform(0.0, 0.4))
+        _last_search_ts[0] = time.monotonic()
+_DOC_CLASS_MATCH_CACHE: dict[str, list[str]] = {}
+
+
+# ─── Document class rules (canonical → aliases + near-match exclusions) ───────
+_DOC_CLASS_RULES: dict[str, dict] = {
+    "annual report": {
+        "aliases_by_region": {
+            "uk_europe": [
+                "annual report and accounts",
+                "universal registration document",
+                "integrated annual report",
+            ],
+            "india": [
+                "integrated annual report",
+                "annual report",
+            ],
+            "us": [
+                "annual report",
+                "integrated annual report",
+            ],
+        },
+        "reject": [],
+    },
+    "sustainability report": {
+        "aliases_by_region": {
+            "uk_europe": [
+                "sustainability report",
+                "csrd report",
+                "esrs report",
+                "sustainability statement",
+                "esg report",
+                "impact report",
+            ],
+            "india": [
+                "business responsibility and sustainability reporting",
+                "sustainability report",
+                "esg report",
+            ],
+            "us": [
+                "sustainability report",
+                "esg report",
+                "impact report",
+            ],
+        },
+        "reject": [],
+    },
+    "code of conduct": {
+        "aliases_by_region": {
+            "uk_europe": [
+                "code of conduct",
+                "code of business conduct and ethics",
+                "code of conduct for board of employees, directors and senior management",
+                "code of ethics",
+                "code of fair disclosure and conduct",
+                "employee code of conduct",
+            ],
+            "india": [
+                "code of conduct",
+                "code of business conduct and ethics",
+                "code of conduct for board of employees, directors and senior management",
+                "code of ethics",
+                "code of fair disclosure and conduct",
+                "employee code of conduct",
+            ],
+            "us": [
+                "code of conduct",
+                "code of business conduct and ethics",
+                "code of conduct for board of employees, directors and senior management",
+                "code of ethics",
+                "code of fair disclosure and conduct",
+                "employee code of conduct",
+            ],
+        },
+        "reject": [
+            "supplier code of conduct",
+            "vendor code of conduct",
+            "third-party code of conduct",
+            "supply chain code of conduct",
+        ],
+    },
+    "supplier code of conduct": {
+        "aliases_by_region": {
+            "uk_europe": [
+                "supplier code of conduct",
+                "vendor code of conduct",
+                "third-party code of conduct",
+                "business partner code of conduct",
+                "supply chain code of conduct",
+                "sustainable supply chain policy",
+                "responsible sourcing policy",
+                "supplier charter",
+                "procurement code of conduct",
+                "supplier esg policy",
+            ],
+            "india": [
+                "supplier code of conduct",
+                "vendor code of conduct",
+                "third-party code of conduct",
+                "business partner code of conduct",
+                "supply chain code of conduct",
+                "sustainable supply chain policy",
+                "responsible sourcing policy",
+                "supplier charter",
+                "procurement code of conduct",
+                "supplier esg policy",
+            ],
+            "us": [
+                "supplier code of conduct",
+                "vendor code of conduct",
+                "third-party code of conduct",
+                "business partner code of conduct",
+                "supply chain code of conduct",
+                "sustainable supply chain policy",
+                "responsible sourcing policy",
+                "supplier charter",
+                "procurement code of conduct",
+                "supplier esg policy",
+            ],
+        },
+        "reject": [],
+    },
+    "tax strategy and governance": {
+        "aliases_by_region": {
+            "uk_europe": [
+                "tax strategy",
+                "tax policy",
+                "tax governance policy",
+                "transfer pricing policy",
+                "related party transaction policy",
+            ],
+            "india": [
+                "tax policy",
+            ],
+            "us": [
+                "tax strategy",
+                "tax policy",
+                "tax governance policy",
+                "transfer pricing policy",
+                "related party transaction policy",
+            ],
+        },
+        "reject": [],
+    },
+    "whistleblowing mechanism": {
+        "aliases_by_region": {
+            "uk_europe": [
+                "whistleblowing policy",
+                "speak up policy",
+                "ethics hotline policy",
+                "grievance & whistleblowing policy",
+                "whistleblower policy",
+                "ethics hotline",
+            ],
+            "india": [
+                "whistleblowing policy",
+                "speak up policy",
+                "whistleblower policy",
+                "ethics hotline",
+            ],
+            "us": [
+                "whistleblowing policy",
+                "speak up policy",
+                "whistleblower policy",
+                "ethics hotline",
+            ],
+        },
+        "reject": [],
+    },
+    "occupational health & safety policy": {
+        "aliases_by_region": {
+            "uk_europe": [
+                "health and safety policy",
+                "occupational health and safety policy",
+                "ohs policy",
+                "workplace health and safety policy",
+                "health, safety and wellbeing policy",
+                "hsse policy",
+                "safety policy statement",
+            ],
+            "india": [
+                "health and safety policy",
+                "occupational health and safety policy",
+                "ohs policy",
+                "she policy",
+                "qhse policy",
+                "hsse policy",
+            ],
+            "us": [
+                "health and safety policy",
+                "occupational health and safety policy",
+                "ohs policy",
+                "she policy",
+                "health, safety and wellbeing policy",
+                "hsse policy",
+            ],
+        },
+        "reject": [],
+    },
+    "environmental policy": {
+        "aliases_by_region": {
+            "uk_europe": [
+                "environmental management policy",
+                "sustainability policy",
+                "climate change policy",
+                "climate action policy",
+            ],
+            "india": [
+                "environmental management policy",
+                "sustainability policy",
+            ],
+            "us": [
+                "environmental management policy",
+                "sustainability policy",
+                "climate change policy",
+                "climate action policy",
+            ],
+        },
+        "reject": [],
+    },
+    "anti-bribery and corruption policy": {
+        "aliases_by_region": {
+            "uk_europe": [
+                "anti-bribery and corruption policy",
+                "anti-bribery policy",
+                "anti-corruption policy",
+                "anti-bribery and anti-corruption policy",
+                "abc policy",
+            ],
+            "india": [
+                "anti-bribery and corruption policy",
+                "anti-bribery policy",
+                "anti-corruption policy",
+                "policy on prevention of bribery and corruption",
+            ],
+            "us": [
+                "anti-bribery and corruption policy",
+                "anti-corruption policy",
+                "foreign corrupt practices act policy",
+                "abc policy",
+            ],
+        },
+        "reject": [],
+    },
+    "proxy statement": {
+        "aliases_by_region": {
+            "uk_europe": [
+                "proxy statement",
+                "notice of annual general meeting",
+            ],
+            "india": [
+                "proxy statement",
+                "notice of annual general meeting",
+            ],
+            "us": [
+                "proxy statement",
+                "definitive proxy statement",
+                "def 14a",
+                "notice of annual meeting and proxy statement",
+            ],
+        },
+        "reject": [
+            "preliminary proxy statement",
+        ],
+    },
+    "remuneration report": {
+        "aliases_by_region": {
+            "uk_europe": [
+                "remuneration report",
+                "directors' remuneration report",
+                "directors remuneration report",
+                "compensation report",
+            ],
+            "india": [
+                "remuneration report",
+                "compensation report",
+            ],
+            "us": [
+                "remuneration report",
+                "compensation discussion and analysis",
+                "executive compensation report",
+            ],
+        },
+        "reject": [
+            "remuneration policy",
+        ],
+    },
+}
+
+# ── Vocabulary parity check (fail loud at import, not silently at runtime) ──
+# The proxy-statement bug existed because _DOC_CLASS_RULES (this file) and
+# report_specs.REPORT_SPECS had divergent key lists: a class in one but not the
+# other silently loses either alias/discovery + Tier-2-for-legacy-payloads or
+# its per-class validation contract + registry routing. This surfaces any
+# future drift as one grep-able log line at container start.
+def _check_class_vocabulary_parity() -> None:
+    rules = set(_DOC_CLASS_RULES)
+    specs = set(getattr(report_specs, "REPORT_SPECS", {}))
+    only_specs = sorted(specs - rules)
+    only_rules = sorted(rules - specs)
+    if only_specs:
+        print(f"[warn][class-parity] in report_specs.REPORT_SPECS but NOT in "
+              f"_DOC_CLASS_RULES (no alias/discovery; no Tier 2 for legacy "
+              f"web_query payloads): {only_specs}")
+    if only_rules:
+        print(f"[warn][class-parity] in _DOC_CLASS_RULES but NOT in "
+              f"report_specs.REPORT_SPECS (no per-class validation contract or "
+              f"registry routing): {only_rules}")
+    if not (only_specs or only_rules):
+        print(f"[class-parity] OK — {len(rules)} document classes aligned "
+              f"across _DOC_CLASS_RULES and report_specs.REPORT_SPECS")
+
+_check_class_vocabulary_parity()
+
+
+def _normalize_alias_region(region: str) -> str:
+    value = (region or "all").strip().lower().replace("-", "_").replace(" ", "_")
+    if value in {"uk", "europe", "uk_and_europe", "uk_europe"}:
+        return "uk_europe"
+    if value in {"india", "indian"}:
+        return "india"
+    if value in {"us", "usa", "american"}:
+        return "us"
+    return "all"
+
+
+_TLD_REGION_MAP: dict[str, str] = {
+    "uk": "uk_europe", "co.uk": "uk_europe", "ie": "uk_europe",
+    "de": "uk_europe", "fr": "uk_europe", "nl": "uk_europe", "es": "uk_europe",
+    "it": "uk_europe", "se": "uk_europe", "no": "uk_europe", "dk": "uk_europe",
+    "fi": "uk_europe", "pl": "uk_europe", "ch": "uk_europe", "at": "uk_europe",
+    "be": "uk_europe", "pt": "uk_europe", "eu": "uk_europe", "lu": "uk_europe",
+    "gr": "uk_europe", "cz": "uk_europe", "hu": "uk_europe", "ro": "uk_europe",
+    "in": "india", "co.in": "india",
+    "us": "us",
+}
+
+
+def _infer_alias_region_from_domain(domain: str | None) -> str | None:
+    if not domain:
+        return None
+    parts = [p for p in domain.lower().split(".") if p]
+    if len(parts) >= 2:
+        two_label = ".".join(parts[-2:])
+        if two_label in _TLD_REGION_MAP:
+            return _TLD_REGION_MAP[two_label]
+    if parts:
+        tld = parts[-1]
+        if tld in _TLD_REGION_MAP:
+            return _TLD_REGION_MAP[tld]
+    return None
+
+
+def _aliases_for_rule(rule: dict, region: str = "all") -> list[str]:
+    by_region = rule.get("aliases_by_region", {})
+    norm = _normalize_alias_region(region)
+    if norm in {"uk_europe", "india", "us"}:
+        return list(dict.fromkeys(by_region.get(norm, [])))
+
+    out: list[str] = []
+    for key in ("uk_europe", "india", "us"):
+        for alias in by_region.get(key, []):
+            if alias not in out:
+                out.append(alias)
+    return out
+
+
+def _matches_doc_class(text: str, canonical: str, aliases: list[str]) -> bool:
+    low = text.lower()
+    return canonical in low or any(a in low for a in aliases)
+
+
+def _llm_match_doc_classes(query: str) -> list[str]:
+    """Map noisy/misspelled query text to known canonical document classes."""
+    if _bedrock is None or not ENABLE_LLM_CLASS_MATCH:
+        return []
+
+    key = (query or "").strip().lower()
+    if key in _DOC_CLASS_MATCH_CACHE:
+        return _DOC_CLASS_MATCH_CACHE[key]
+
+    canonical_names = list(_DOC_CLASS_RULES.keys())
+    prompt = (
+        "You are a document-class matcher. "
+        "Given a noisy query, pick zero or more best matching canonical classes.\n"
+        "Rules:\n"
+        "- Handle spelling errors and punctuation variants.\n"
+        "- Match intent conservatively; do not guess unrelated classes.\n"
+        "- Return only classes from the provided canonical list.\n"
+        "- If no confident match, return an empty list.\n\n"
+        f"Canonical classes: {json.dumps(canonical_names, ensure_ascii=True)}\n"
+        f"Query: {query}\n\n"
+        "Output ONLY valid JSON object: {\"matched\": [\"<canonical>\", ...]}"
+    )
+    try:
+        text = _converse(prompt, max_tokens=120)
+        obj = _parse_llm_json(text)
+        matched = obj.get("matched", []) if isinstance(obj, dict) else []
+        allowed = set(canonical_names)
+        out = [name for name in matched if isinstance(name, str) and name in allowed]
+        _DOC_CLASS_MATCH_CACHE[key] = list(dict.fromkeys(out))
+        return _DOC_CLASS_MATCH_CACHE[key]
+    except Exception as exc:  # noqa: BLE001
+        print(f"[llm] class match failed ({exc}); using deterministic class match only")
+        _DOC_CLASS_MATCH_CACHE[key] = []
+        return []
+
+
+def _matched_doc_classes(query: str) -> list[tuple[str, dict]]:
+    low = (query or "").lower()
+    deterministic = [
+        (canonical, rule)
+        for canonical, rule in _DOC_CLASS_RULES.items()
+        if _matches_doc_class(query, canonical, _aliases_for_rule(rule, "all"))
+    ]
+
+    matched_names = {c for c, _ in deterministic}
+    pruned = []
+    for canonical, rule in deterministic:
+        superseded = any(
+            other != canonical and canonical in other and other in low
+            for other in matched_names
+        )
+        if not superseded:
+            pruned.append((canonical, rule))
+
+    out = list(pruned)
+    seen = {c for c, _ in pruned}
+    for canonical in _llm_match_doc_classes(query):
+        if canonical in seen:
+            continue
+        rule = _DOC_CLASS_RULES.get(canonical)
+        if rule:
+            out.append((canonical, rule))
+            seen.add(canonical)
+    return out
+
+
+def _filtered_doc_rules(query: str) -> dict[str, dict]:
+    matches = _matched_doc_classes(query)
+    return {canonical: rule for canonical, rule in matches}
+
+
+def _doc_rules_summary(query: str, region: str | None = None) -> str:
+    matches = _matched_doc_classes(query)
+    if not matches:
+        return (
+            "No explicit canonical document class matched. Infer the closest class, "
+            "accept clear regional naming variants, reject clearly different document types."
+        )
+    parts = []
+    active_region = _normalize_alias_region(region if region is not None else ALIAS_REGION)
+    for canonical, rule in matches:
+        active_aliases = _aliases_for_rule(rule, active_region)
+        alias_txt  = ", ".join(active_aliases) if active_aliases else "none"
+        reject_txt = ", ".join(rule["reject"])  if rule["reject"]  else "none"
+        parts.append(
+            f"Canonical class: {canonical}. "
+            f"Alias region: {active_region}. "
+            f"Accepted aliases: {alias_txt}. "
+            f"Near-match exclusions (return NO for these): {reject_txt}."
+        )
+    return " ".join(parts)
+
+
+def _alias_queries(original_query: str, region: str | None = None) -> list[str]:
+    low = original_query.lower()
+    alt_queries: list[str] = []
+    active_region = _normalize_alias_region(region if region is not None else ALIAS_REGION)
+    matched_classes = _matched_doc_classes(original_query)
+    if not matched_classes:
+        return alt_queries
+
+    for canonical, rule in matched_classes:
+        source_phrase = canonical if canonical in low else ""
+        if not source_phrase:
+            for a in _aliases_for_rule(rule, "all"):
+                if a in low:
+                    source_phrase = a
+                    break
+        targets = [canonical] + list(_aliases_for_rule(rule, active_region))
+        if not source_phrase:
+            for target in targets:
+                if target in low:
+                    continue
+                alt = f"{original_query.strip()} {target}".strip()
+                if alt != original_query and alt not in alt_queries:
+                    alt_queries.append(alt)
+            continue
+
+        for target in targets:
+            if target in low:
+                continue
+            alt = re.sub(re.escape(source_phrase), target, original_query, flags=re.I)
+            if alt != original_query and alt not in alt_queries:
+                alt_queries.append(alt)
+
+    if SEARCH_ALL_ALIASES:
+        return alt_queries
+    return alt_queries[:MAX_ALIAS_SEARCHES]
+
+
+# ─── Basic helpers ────────────────────────────────────────────────────────────
+def _domain(query: str) -> str | None:
+    m = re.search(r"site:\s*(\S+)", query or "")
+    if not m:
+        return None
+    raw = _demarkdown(m.group(1))
+    raw = raw.strip("[]() ")
+    if "://" not in raw:
+        raw = "https://" + raw
+    try:
+        host = urlparse(raw).netloc.lower()
+    except ValueError:
+        return None
+    if not host or "." not in host:
+        return None
+    return host[4:] if host.startswith("www.") else host
+
+
+def _strip_site(q: str) -> str:
+    return re.sub(r"site:\s*\S+", "", q or "").strip()
+
+
+def _slug(name: str) -> str:
+    s = unicodedata.normalize("NFKD", name or "unknown")
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    return re.sub(r"[^a-z0-9]+", "-", s.lower()).strip("-") or "unknown"
+
+def _registrable(host: str) -> str:
+    """Best-effort eTLD+1 without external deps. Good enough for corp domains."""
+    host = (host or "").lower().split(":")[0]
+    if host.startswith("www."):
+        host = host[4:]
+    parts = [p for p in host.split(".") if p]
+    if len(parts) <= 2:
+        return ".".join(parts)
+    two_label_tlds = {"co.uk", "com.au", "co.in", "co.jp", "com.br", "co.za",
+                      "com.mx", "co.nz", "com.sg", "com.hk", "co.kr"}
+    if ".".join(parts[-2:]) in two_label_tlds:
+        return ".".join(parts[-3:])
+    return ".".join(parts[-2:])
+
+
+def _host_matches(url: str, domain: str) -> bool:
+    h = _registrable(urlparse(url).netloc)
+    d = _registrable(domain)
+    if not h or not d:
+        return False
+    return h == d or h.endswith("." + d) or d.endswith("." + h)
+
+
+def _resolve_relative_years(q: str) -> str:
+    y = CURRENT_YEAR
+
+    def _cy(m):
+        sign = (m.group(1) or "").strip()
+        num  = int(m.group(2)) if m.group(2) else 0
+        if sign in ("-", "\u2013", "\u2014"):
+            return str(y - num)
+        if sign == "+":
+            return str(y + num)
+        return str(y)
+
+    q = re.sub(r"current\s*year\s*([-+\u2013\u2014])?\s*(\d+)?", _cy, q, flags=re.I)
+    q = re.sub(r"\{\s*year\s*-\s*(\d+)\s*\}", lambda m: str(y - int(m.group(1))), q, flags=re.I)
+    q = re.sub(r"\{\s*year\s*\+\s*(\d+)\s*\}", lambda m: str(y + int(m.group(1))), q, flags=re.I)
+    q = re.sub(r"\{\s*year\s*\}", str(y), q, flags=re.I)
+    return q
+
+
+def _demarkdown(q: str) -> str:
+    if "[" not in q and "]" not in q:
+        return q
+    q = re.sub(r"\[([^\]]+)\]\((?:https?://)?[^)]*\)", r"\1", q)
+    for ch in "[]()":
+        q = q.replace(ch, " ")
+    return re.sub(r"\s+", " ", q).strip()
+
+
+def _clean_query(q: str) -> str:
+    q = _demarkdown(q)
+    q = q.replace("(", " ").replace(")", " ")
+    q = re.sub(r"\s*\+\s*", " ", q)
+    return re.sub(r"\s+", " ", q).strip()
+
+
+_YEAR_RE = r"(?<!\d)(20\d{2})(?!\d)"
+_YY_OR_YYYY_RE = r"(?<!\d)(\d{2}|\d{4})(?!\d)"
+
+
+def _extract_year_intent(text: str) -> set[int]:
+    out: set[int] = set()
+    t = (text or "").lower()
+    for y in re.findall(_YEAR_RE, t):
+        out.add(int(y))
+    for yy in re.findall(rf"\bfy\s*{_YY_OR_YYYY_RE}", t):
+        y = int(yy)
+        out.add(y if y >= 1000 else 2000 + y)
+    for a, b in re.findall(rf"\bfy\s*{_YY_OR_YYYY_RE}\s*[-/]\s*{_YY_OR_YYYY_RE}", t):
+        ya = int(a) if len(a) == 4 else 2000 + int(a)
+        yb = int(b) if len(b) == 4 else 2000 + int(b)
+        if abs(yb - ya) <= 1:
+            out.update({ya, yb})
+    for a, b in re.findall(rf"{_YEAR_RE}\s*[-/]\s*{_YY_OR_YYYY_RE}", t):
+        ya = int(a)
+        yb = int(b) if len(b) == 4 else (ya // 100) * 100 + int(b)
+        if abs(yb - ya) <= 1:
+            out.update({ya, yb})
+    return out
+
+
+def _year_alignment_score(query: str, candidate_text: str) -> int:
+    qy = _extract_year_intent(query)
+    if not qy:
+        cy = _extract_year_intent(candidate_text)
+        if not cy:
+            return 0
+        return max(0, min(max(cy) - (CURRENT_YEAR - 10), 10))
+    cy = _extract_year_intent(candidate_text)
+    if not cy:
+        return 0
+    return 6 if qy.intersection(cy) else -6
+
+
+# ─── LLM helpers ──────────────────────────────────────────────────────────────
+def _llm_rewrite(q: str) -> str:
+    if _bedrock is None:
+        return q
+    filtered_rules = _filtered_doc_rules(q)
+    prompt = (
+        f"Today is {dt.date.today().isoformat()} (current year {CURRENT_YEAR}).\n"
+        "Rewrite the text below into ONE concise web-search query to find the official "
+        "company document. Resolve any relative year to an actual year. "
+        "Keep any 'site:' operator and URL intact.\n"
+        "Year rule: if a year or fiscal year is present, preserve it exactly. "
+        "If no year is present, do NOT invent one.\n"
+        "International naming rule: preserve topic intent while allowing accepted aliases "
+        "but do not broaden into neighboring document types.\n"
+        "Do NOT wrap phrases in double quotes. Do NOT add words that are not in the input.\n"
+        "Do NOT format the domain or URL as a Markdown link (no [text](url) syntax, no "
+        "square brackets, no parentheses around the URL). Output the domain as plain "
+        "text exactly as given, e.g. 'site:www.example.com', never "
+        "'site:[www.example.com](https://www.example.com)'.\n"
+        + (f"Filtered document class rules (query-scoped): {json.dumps(filtered_rules, ensure_ascii=True)}\n" if filtered_rules else "")
+        + "Output ONLY the final query string, no quotes, brackets, or extra words.\n\n"
+        f"Text: {q}"
+    )
+    try:
+        text = _converse(prompt, max_tokens=150)
+        text = text.replace('"', "").strip()
+        text = _demarkdown(text)
+        return text or q
+    except Exception as exc:  # noqa: BLE001
+        print(f"[llm] rewrite failed ({exc}); using deterministic query")
+        return q
+
+
+def _llm_select_best(query: str, candidates: list[dict], company: str = "") -> dict:
+    if _bedrock is None or not candidates:
+        return {
+            "selected_url": candidates[0]["url"] if candidates else None,
+            "year_match": True, "topic_match": True, "company_match": True,
+            "confidence": "low", "reason": "llm-off",
+        }
+
+    lines = []
+    for i, c in enumerate(candidates[:TOP_N_FOR_LLM], 1):
+        lines.append(
+            f"{i}. URL: {c['url']}\n"
+            f"   Filename: {c['filename']}\n"
+            f"   Content-Type: {c['head_ctype']}\n"
+            f"   Content sample: {c['content_sample'][:400]}"
+        )
+    candidates_text = "\n".join(lines)
+    filtered_rules = _filtered_doc_rules(query)
+    target_years = _extract_year_intent(query)
+
+    if target_years:
+        year_rule = (
+            f"- Year rule: the target year(s) are {sorted(target_years)}. The chosen "
+            "candidate MUST show one of these years in its filename or content sample. "
+            "If none match, set selected_url to null and year_match to false.\n"
+        )
+    else:
+        year_rule = (
+            "- Year rule: NO specific year was requested. NEVER reject a "
+            "candidate for lacking a year, and always set year_match to true "
+            "regardless of which year is chosen. However, among candidates "
+            "that are otherwise equally strong CLASS matches: if this is a "
+            "normally-dated/recurring document (an Annual Report, Proxy "
+            "Statement, Sustainability Report, or similar periodic filing), "
+            "PREFER the one showing the MOST RECENT year in its filename or "
+            "content — do not settle for an old year (e.g. 2020-2022) when a "
+            "newer one is present among the candidates just because it "
+            "happened to rank first. If this is a policy or other typically "
+            "undated document, year is irrelevant — ignore it entirely.\n"
+        )
+
+    if company and company.lower() != "unknown":
+        company_rule = (
+            f"- Company rule: the candidate document must belong to "
+            f"'{company}' specifically. If the document is clearly about a "
+            f"DIFFERENT company — even one with a similar, overlapping, or "
+            f"confusable name (e.g. a same-surname but unrelated company) — "
+            f"reject it: set selected_url to null, topic_match to false, and "
+            f"company_match to false. Do not accept a document merely "
+            f"because it appeared among this company's search results; "
+            f"verify the document itself states or clearly implies it "
+            f"belongs to '{company}'.\n"
+        )
+    else:
+        company_rule = (
+            "- Company rule: no specific company was provided to check "
+            "against. Always set company_match to true.\n"
+        )
+
+    # v40: inject the per-class validation contract from report_specs so every
+    # document class carries an explicit "what IS / what is NOT this class"
+    # instruction into the fail-closed verifier.
+    _spec_lines = []
+    for _c, _ in _matched_doc_classes(query):
+        _sp = report_specs.validation_prompt(
+            _c, company=company,
+            year=(max(target_years) if target_years else None))
+        if _sp:
+            _spec_lines.append(_sp)
+    _spec_contract = (("- Per-class validation contract: " + " ".join(_spec_lines)
+                       + "\n") if _spec_lines else "")
+
+    prompt = (
+        f"Query: {query}\n"
+        + (f"Company: {company}\n" if company and company.lower() != "unknown" else "")
+        + f"Target year(s): {sorted(target_years) if target_years else 'none (ignore year)'}\n\n"
+        f"Candidates:\n{candidates_text}\n\n"
+        + (f"Filtered document class rules (query-scoped): {json.dumps(filtered_rules, ensure_ascii=True)}\n" if filtered_rules else "")
+        + "\nSelect the single candidate that IS the exact document class named in the "
+        "Query. Judge the document CLASS, not mere keyword overlap. Sharing a word "
+        "(e.g. 'conduct', 'report') is NOT a match.\n"
+        "Rules:\n"
+        + year_rule
+        + company_rule
+        + _spec_contract
+        + "- Class rule: the candidate must BE the requested class. Reject a "
+        "near-neighbor even when it shares words. WRONG matches to reject: a Board's "
+        "Report or Directors' Report is NOT an Annual Report and NOT a Sustainability "
+        "Report; a 'code of conduct for non-executive / independent directors' is NOT "
+        "the company's general 'code of conduct'; the general 'code of conduct' is NOT "
+        "a 'supplier code of conduct'; a governance / ethics / index / overview page is "
+        "NOT the policy document itself; a Supplier/Vendor Code of Conduct is NOT a "
+        "Conflicts of Interest Policy, Anti-Corruption Policy, Whistleblowing Policy, "
+        "or any other named policy merely because it discusses that topic in a "
+        "section — a document is only a match if it IS the named policy, not if it "
+        "MENTIONS the named policy's subject matter. A Strategic Report, an "
+        "Annual Report, an ESG Update, an ESG Supplement, an ESG Factbook, a "
+        "green/SDG bond report, a CDP score report, or an assurance report is "
+        "NOT a standalone Sustainability Report, GHG Emission Report, Impact "
+        "Report, or Environment Policy — reject it unless its filename or title "
+        "explicitly names the exact requested class.\n"
+        "- Accepted aliases from the class rules ARE equivalent and acceptable; the "
+        "listed near-match exclusions are NOT acceptable.\n"
+        "- Strongly prefer an actual document file (PDF/DOC) over an HTML landing, "
+        "index, or overview page. Pick an HTML page ONLY if no document file for the "
+        "requested class is present among the candidates.\n"
+        "- If NONE of the candidates is genuinely the requested class, set selected_url "
+        "to null and topic_match to false. Do NOT settle for the closest available "
+        "document — a correct 'no match' is better than a wrong document.\n"
+        "- If several genuinely match, prefer the most explicit title/filename match.\n\n"
+        "Respond with ONLY valid JSON (no markdown):\n"
+        '{"selected_url": "<url or null>", "year_match": true/false, '
+        '"topic_match": true/false, "company_match": true/false, '
+        '"confidence": "high/medium/low", "reason": "<max 15 words>"}'
+    )
+    try:
+        text = _converse(prompt, max_tokens=200, model_id=SELECTION_MODEL_ID)
+        decision = _parse_llm_json(text)
+        # Contamination guard: if a company was required and the SELECTED
+        # candidate has no readable content sample (e.g. the fetch 403'd, as
+        # the SEC search-tier URLs do), then company_match was decided on the
+        # filename alone — exactly how a wrong-company filing slips the
+        # cross-company gate. Fail closed rather than trust a filename.
+        if (ENFORCE_COMPANY_SAMPLE_EVIDENCE and company
+                and company.lower() != "unknown" and decision.get("selected_url")):
+            _sel = decision.get("selected_url")
+            _samp = ""
+            for _c in candidates[:TOP_N_FOR_LLM]:
+                if _c.get("url") == _sel:
+                    _samp = (_c.get("content_sample") or "").strip()
+                    break
+            if len(_samp) < COMPANY_SAMPLE_MIN_CHARS:
+                print(f"[llm] contamination guard: selected {_sel} has no "
+                      f"readable content sample ({len(_samp)} chars) but a "
+                      f"company match was required — cannot confirm company "
+                      f"identity from filename alone; FAILING CLOSED")
+                decision["selected_url"] = None
+                decision["company_match"] = False
+                decision["topic_match"] = False
+                decision["reason"] = "company-unverifiable-empty-sample-failed-closed"
+        print(f"[llm] select decision: selected={decision.get('selected_url')} "
+              f"topic={decision.get('topic_match')} company={decision.get('company_match')} "
+              f"year={decision.get('year_match')} "
+              f"conf={decision.get('confidence')} reason={decision.get('reason')}")
+        return decision
+    except Exception as exc:  # noqa: BLE001
+        print(f"[llm] grouped selection failed ({exc}); FAILING CLOSED (no selection)")
+        return {
+            "selected_url": None,
+            "year_match": False, "topic_match": False, "company_match": False,
+            "confidence": "low", "reason": f"llm-error({type(exc).__name__})-failed-closed",
+        }
+
+
+def _prepare_query(q: str) -> str:
+    """Year resolution + cleanup + optional LLM rewrite. Query stays focused."""
+    q = _clean_query(_resolve_relative_years(q.strip()))
+    if _bedrock is not None:
+        q = _llm_rewrite(q) or q
+    q = _demarkdown(q)
+    return q.strip()
+
+
+# ─── HEAD pre-filter ─────────────────────────────────────────────────────────
+_DOC_EXTS = (".pdf", ".doc", ".docx", ".rtf")
+
+
+def _head_check(url: str) -> dict:
+    headers = {"User-Agent": _ua_for(url), "Accept": "*/*"}
+    filename = unquote(urlparse(url).path).rsplit("/", 1)[-1] or ""
+    ctype = ""
+    try:
+        req = Request(url, headers=headers, method="HEAD")
+        with urlopen(req, timeout=10) as r:  # noqa: S310
+            ctype = r.headers.get("Content-Type", "").split(";")[0].lower()
+            cd = r.headers.get("Content-Disposition", "")
+            fn_m = re.search(r'filename=["\']?([^"\';\s]+)', cd)
+            if fn_m:
+                filename = fn_m.group(1)
+    except Exception:  # noqa: BLE001
+        pass
+
+    ok = (
+        any(filename.lower().endswith(e) for e in _DOC_EXTS)
+        or "pdf" in ctype
+        or "msword" in ctype
+        or "officedocument" in ctype
+        or "html" in ctype
+        or ctype == ""
+    )
+    return {"url": url, "filename": filename, "head_ctype": ctype, "ok": ok}
+
+
+# ─── Search: AgentCore Gateway managed WebSearch tool + isolated Vertex Lambda ─
+def _sigv4_auth():
+    import httpx
+    from botocore.auth import SigV4Auth
+    from botocore.awsrequest import AWSRequest
+    creds = boto3.Session().get_credentials()
+
+    class _Auth(httpx.Auth):
+        requires_request_body = True
+
+        def auth_flow(self, request):
+            aws_req = AWSRequest(
+                method=request.method, url=str(request.url),
+                data=request.content, headers=dict(request.headers),
+            )
+            SigV4Auth(creds, "bedrock-agentcore", REGION).add_auth(aws_req)
+            request.headers.update(dict(aws_req.headers))
+            yield request
+    return _Auth()
+
+
+_GW_DEBUG: dict = {}
+
+
+def _pick_search_tool(names: list[str]) -> str | None:
+    if GATEWAY_SEARCH_TOOL:
+        for n in names:
+            if n == GATEWAY_SEARCH_TOOL:
+                return n
+        for n in names:
+            if n.lower() == GATEWAY_SEARCH_TOOL.lower():
+                return n
+    for n in names:
+        norm = n.lower().replace("-", "").replace("_", "")
+        if "websearch" in norm:
+            return n
+    for n in names:
+        ln = n.lower()
+        if "search" in ln and "x_amz" not in ln and "agentcore" not in ln:
+            return n
+    return None
+
+
+def _gateway_query_form(query: str) -> str:
+    m = re.search(r"site:\s*(\S+)", query or "", re.I)
+    if not m:
+        return query[:200]
+    raw_host = m.group(1)
+    if "://" in raw_host:
+        raw_host = urlparse(raw_host if "://" in raw_host else "https://" + raw_host).netloc
+    raw_host = raw_host.strip("/")
+    terms = _strip_site(query).strip()
+    result = f"{terms} {raw_host}".strip() if terms else raw_host
+    return result[:200]
+
+
+async def _gateway_search_async(query: str, limit: int) -> tuple[list[dict], str]:
+    from mcp import ClientSession
+    from mcp.client.streamable_http import streamablehttp_client
+
+    dbg: dict = {"tools": [], "is_error": None, "result_keys": [], "raw_snippet": ""}
+    native_query = query[:200]
+    stripped_query = _gateway_query_form(query)
+    dbg["native_query"] = native_query
+    dbg["stripped_query"] = stripped_query
+
+    async with streamablehttp_client(GATEWAY_URL, auth=_sigv4_auth()) as (read, write, _):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            tools = await session.list_tools()
+            names = [t.name for t in tools.tools]
+            dbg["tools"] = names
+            name = _pick_search_tool(names)
+            dbg["picked_tool"] = name
+            if not name:
+                _GW_DEBUG.update(dbg)
+                return [], "no-search-tool-on-gateway"
+
+            forms_to_try = [("native-site", native_query)]
+            if GATEWAY_STRIP_SITE and stripped_query != native_query:
+                forms_to_try.append(("stripped-site", stripped_query))
+
+            for form_label, q in forms_to_try:
+                arg_variants = [
+                    {"query": q, "maxResults": limit},
+                    {"query": q, "count": limit},
+                    {"query": q},
+                    {"searchQuery": q, "maxResults": limit},
+                    {"q": q, "maxResults": limit},
+                ]
+                for i, args in enumerate(arg_variants):
+                    try:
+                        res = await session.call_tool(name, args)
+                    except Exception as exc:  # noqa: BLE001
+                        dbg[f"call_error_{form_label}_{i}"] = f"{type(exc).__name__}: {str(exc)[:120]}"
+                        continue
+                    dbg["is_error"] = getattr(res, "isError", None)
+                    dbg["used_args"] = list(args.keys())
+                    hits = _parse_mcp_results(res, dbg)
+                    if hits:
+                        dbg["matched_form"] = form_label
+                        _GW_DEBUG.update(dbg)
+                        return hits, f"gateway({form_label})"
+
+            _GW_DEBUG.update(dbg)
+            return [], "gateway-empty-all-forms"
+
+
+def _parse_mcp_results(res, dbg=None) -> list[dict]:
+    out, candidates = [], []
+    sc = getattr(res, "structuredContent", None)
+    if isinstance(sc, dict):
+        if dbg is not None:
+            dbg["result_keys"].append("structuredContent:" + ",".join(sc.keys()))
+        candidates.append(sc)
+    for block in getattr(res, "content", []) or []:
+        text = getattr(block, "text", None)
+        if not text:
+            continue
+        if dbg is not None and not dbg.get("raw_snippet"):
+            dbg["raw_snippet"] = text[:600]
+        try:
+            candidates.append(json.loads(text))
+        except json.JSONDecodeError:
+            pass
+
+    def _extract_items(data):
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict):
+            for key in ("results", "webPages", "items", "organic", "data",
+                        "documents", "hits"):
+                val = data.get(key)
+                if isinstance(val, list):
+                    return val
+                if isinstance(val, dict) and isinstance(val.get("value"), list):
+                    return val["value"]
+        return []
+
+    seen = set()
+    for data in candidates:
+        for it in _extract_items(data):
+            if not isinstance(it, dict):
+                continue
+            url = (it.get("url") or it.get("link") or it.get("uri")
+                   or it.get("displayUrl") or "")
+            if not url or url in seen:
+                continue
+            seen.add(url)
+            title = it.get("title") or it.get("name") or ""
+            snippet = it.get("text") or it.get("snippet") or it.get("description") or ""
+            out.append({"title": title, "url": url, "snippet": snippet})
+    if dbg is not None:
+        dbg["parsed_count"] = len(out)
+    return out
+
+
+def _vertex_lambda_search(query: str, limit: int) -> tuple[list[dict], str]:
+    """Tier 1 discovery via the ISOLATED Vertex grounded-search Lambda."""
+    if _lambda is None or not LAMBDA_SEARCH_FUNCTION:
+        return [], "no-lambda-configured"
+    site = _domain(query)
+    payload = {
+        "query": _strip_site(query) if site else query,
+        "site": site or "",
+        "max_results": limit,
     }
     try:
-        response = _bedrock.converse(
-            modelId=LLM_MODEL_ID,
-            messages=[{"role": "user", "content": [{"text": json.dumps(prompt)}]}],
-            inferenceConfig={"maxTokens": 120, "temperature": 0},
+        resp = _lambda.invoke(
+            FunctionName=LAMBDA_SEARCH_FUNCTION,
+            InvocationType="RequestResponse",
+            Payload=json.dumps(payload).encode("utf-8"),
         )
-        output = "".join(part.get("text", "") for part in response["output"]["message"]["content"])
-        output = re.sub(r"^```(?:json)?\s*|\s*```$", "", output.strip(), flags=re.I)
-        return bool(json.loads(output).get("accept"))
-    except Exception as exc:  # Fail closed when the model is required.
-        print(f"[verify] LLM validation failed closed: {type(exc).__name__}")
-        return False
+    except Exception as exc:  # noqa: BLE001
+        print(f"[vertex-lambda] invoke error: {type(exc).__name__}: {exc}")
+        return [], f"lambda-invoke-error({type(exc).__name__})"
 
-
-def _validate(candidate: Candidate, company: Company, request: DocumentRequest) -> Validation:
-    rule = DOCUMENT_RULES[request.document_type]
-    if candidate.body is None:
-        return Validation(False, 0, ["candidate was not fetched"], "", "")
-    text = _plain_text(candidate.body, candidate.content_type)
-    title = _candidate_title(candidate, text)
-    evidence = " ".join([candidate.url, title, text])
-    reasons: list[str] = []
-    score = 0
-
-    if not ("pdf" in candidate.content_type or "html" in candidate.content_type or candidate.body.startswith(b"%PDF")):
-        return Validation(False, 0, ["unsupported content type"], title, text)
-    score += 10
-    if candidate.source_tier == "registry":
-        score += 35
-        reasons.append("official registry")
-    elif _is_allowed_candidate(candidate, company):
-        score += 25
-        reasons.append("official-domain provenance")
-    else:
-        return Validation(False, 0, ["untrusted source domain"], title, text)
-
-    # A report can mention a neighbouring document in its body. Exclusions only
-    # disqualify a candidate when its own title or URL identifies it as that type.
-    if _contains_phrase(" ".join([candidate.url, title]), rule["reject_terms"]):
-        return Validation(False, score, ["contains rejected neighbouring document class"], title, text)
-    if _contains_phrase(" ".join([candidate.url, title]), rule["aliases"]):
-        score += 30
-        reasons.append("document type in URL or title")
-    if _contains_phrase(text, rule["aliases"]):
-        score += 30
-        reasons.append("document type in document text")
-    if score < 55:
-        return Validation(False, score, reasons + ["requested document class not evidenced"], title, text)
-
-    company_in_text = _contains_phrase(evidence, company.identity_terms)
-    if company_in_text:
-        score += 25
-        reasons.append("company identity in document")
-    elif candidate.registry_identity_verified:
-        score += 25
-        reasons.append("registry identity verified")
-    elif _is_allowed_candidate(candidate, company):
-        score += 10
-        reasons.append("company ownership inferred from official domain")
-    else:
-        return Validation(False, score, reasons + ["company identity not evidenced"], title, text)
-
-    if not _year_matches(evidence, request.year):
-        return Validation(False, score, reasons + ["requested year not evidenced"], title, text)
-    if request.year is not None:
-        score += 20
-        reasons.append("requested year matched")
-
-    deterministic_accept = score >= 80
-    llm_verified: bool | None = None
-    if deterministic_accept:
-        llm_verified = _llm_confirms(company, request, candidate, title, text)
-        if not llm_verified:
-            return Validation(False, score, reasons + ["LLM verification rejected or unavailable"], title, text, False)
-    return Validation(deterministic_accept, score, reasons, title, text, llm_verified)
-
-
-def _sec_candidates(company: Company, request: DocumentRequest) -> list[Candidate]:
-    if request.document_type not in {"annual_report", "proxy_statement"}:
-        return []
-    forms = {"annual_report": {"10-K", "20-F", "40-F"}, "proxy_statement": {"DEF 14A"}}[request.document_type]
-    cik_value = company.cik or _sec_cik_for_ticker(company.ticker)
-    if not cik_value:
-        return []
-    cik = str(cik_value).zfill(10)
-    data = _sec_fetch_json(f"https://data.sec.gov/submissions/CIK{cik}.json")
-    recent = data.get("filings", {}).get("recent", {})
-    candidates: list[Candidate] = []
-    for index, form in enumerate(recent.get("form", [])):
-        if form not in forms:
-            continue
-        report_date = str((recent.get("reportDate", []) or [""])[index])
-        filing_date = str((recent.get("filingDate", []) or [""])[index])
-        if request.year and str(request.year) not in {report_date[:4], filing_date[:4]}:
-            continue
-        accession = str(recent["accessionNumber"][index])
-        document = str((recent.get("primaryDocument", []) or [""])[index])
-        if not document:
-            continue
-        archive_cik = str(int(cik))
-        url = f"https://www.sec.gov/Archives/edgar/data/{archive_cik}/{accession.replace('-', '')}/{document}"
-        candidates.append(Candidate(
-            url=url,
-            source_tier="registry",
-            title=f"{form} {report_date or filing_date}",
-            registry_identity_verified=True,
-            metadata={"registry": "sec_edgar", "form": form, "accession": accession},
-        ))
-    return candidates[:MAX_CANDIDATES_PER_TIER]
-
-
-def _companies_house_candidates(company: Company, request: DocumentRequest) -> list[Candidate]:
-    if not COMPANIES_HOUSE_API_KEY or not company.companies_house_number or request.document_type != "annual_report":
-        return []
-    auth = base64.b64encode(f"{COMPANIES_HOUSE_API_KEY}:".encode()).decode()
-    headers = {"Authorization": f"Basic {auth}"}
-    number = company.companies_house_number
-    data = _fetch_json(f"https://api.company-information.service.gov.uk/company/{number}/filing-history?items_per_page=100", headers)
-    candidates: list[Candidate] = []
-    for item in data.get("items", []):
-        if item.get("category") != "accounts":
-            continue
-        date = str(item.get("date", ""))
-        if request.year and not _year_matches(date, request.year):
-            continue
-        document_link = (item.get("links") or {}).get("document_metadata")
-        if not document_link:
-            continue
-        document_id = document_link.rstrip("/").rsplit("/", 1)[-1]
-        candidates.append(Candidate(
-            url=f"https://document-api.company-information.service.gov.uk/document/{document_id}/content",
-            source_tier="registry",
-            title=str(item.get("description", "Companies House accounts")),
-            registry_identity_verified=True,
-            metadata={"registry": "companies_house", "filing_date": date, "auth": "companies_house"},
-        ))
-    return candidates[:MAX_CANDIDATES_PER_TIER]
-
-
-def _registry_candidates(company: Company, request: DocumentRequest, diagnostics: list[str]) -> list[Candidate]:
-    candidates: list[Candidate] = []
-    for provider in (_sec_candidates, _companies_house_candidates):
+    if resp.get("FunctionError"):
         try:
-            candidates.extend(provider(company, request))
-        except RetrievalError as exc:
-            diagnostics.append(f"{provider.__name__}: {exc}")
-    return candidates[:MAX_CANDIDATES_PER_TIER]
+            err = resp["Payload"].read().decode("utf-8", "ignore")[:300]
+        except Exception:  # noqa: BLE001
+            err = ""
+        print(f"[vertex-lambda] function error: {err}")
+        return [], "lambda-function-error"
+
+    try:
+        body = json.loads(resp["Payload"].read().decode("utf-8"))
+    except Exception as exc:  # noqa: BLE001
+        print(f"[vertex-lambda] payload parse failed: {exc}")
+        return [], f"lambda-parse-error({type(exc).__name__})"
+
+    raw = body.get("results", []) if isinstance(body, dict) else []
+    out, seen = [], set()
+    for it in raw:
+        if not isinstance(it, dict):
+            continue
+        u = it.get("url") or ""
+        if not u or u in seen:
+            continue
+        seen.add(u)
+        out.append({"title": it.get("title", ""), "url": u,
+                    "snippet": it.get("snippet", "")})
+    via = body.get("via", "vertex-lambda") if isinstance(body, dict) else "vertex-lambda"
+    return out, via
 
 
-def _extract_links(page: bytes, page_url: str, company: Company) -> list[Candidate]:
-    text = page.decode("utf-8", "ignore")
-    links: list[Candidate] = []
+def _single_web_search(query: str, limit: int) -> tuple[list[dict], str]:
+    # ── Tier 1: Vertex Lambda backend (no global _throttle; the Lambda + Vertex
+    # handle concurrency; fan-out is bounded by SEARCH_FANOUT_WORKERS).
+    # Optionally falls through to the Gateway path when it returns nothing. ──
+    if SEARCH_BACKEND in ("vertex", "vertex_lambda", "lambda"):
+        hits, via = _vertex_lambda_search(query, limit)
+        if hits or not (VERTEX_FALLBACK_TO_GATEWAY and GATEWAY_URL):
+            return hits, via
+        print(f"[search] vertex returned nothing ({via}); falling back to gateway")
+
+    _throttle()
+
+    if not GATEWAY_URL:
+        print("[search] GATEWAY_URL not configured — no search backend available")
+        return [], "no-gateway-configured"
+
+    # v40 (bug fix): always return a tuple — the pre-v40 tail fell off the end
+    # here and returned None when the gateway fallback was attempted, which is
+    # what produced the 'cannot unpack non-iterable NoneType' batch crash.
+    try:
+        return asyncio.run(_gateway_search_async(query, limit))
+    except Exception as exc:  # noqa: BLE001
+        print(f"[search] gateway path failed: {type(exc).__name__}: {exc}")
+        return [], f"gateway-error({type(exc).__name__})"
+
+
+# ─── Ranking ──────────────────────────────────────────────────────────────────
+_STOP = {"site", "http", "https", "www", "com", "org", "the", "a", "an", "of", "and",
+         "to", "for", "in", "on", "policy", "pdf"}
+
+
+def _keywords(query: str) -> list[str]:
+    q = _strip_site(query)
+    q = re.sub(r"https?://\S+", " ", q)
+    words = re.findall(r"[a-z0-9]+", q.lower())
+    return [w for w in words if len(w) > 2 and w not in _STOP]
+
+
+def _rank(hits: list[dict], query: str, site_domain: str | None) -> list[tuple[int, dict]]:
+    terms = _keywords(query)
+    scored = []
+    for c in hits:
+        u = (c.get("url") or "")
+        if not u:
+            continue
+        hay = (c.get("title", "") + " " + c.get("snippet", "") + " "
+               + unquote(urlparse(u).path)).lower()
+        score = sum(2 for w in terms if w in hay)
+        ul = u.lower()
+        if ul.endswith(".pdf"):
+            score += 4
+        elif ul.endswith((".doc", ".docx")):
+            score += 3
+        if site_domain and _registrable(urlparse(u).netloc) == _registrable(site_domain):
+            score += 2
+        host_label = urlparse(u).netloc.lower().split(".")[0]
+        if re.match(r"^(staging|stage|qa|dev|test|uat|preprod|sandbox)[-.]?", host_label):
+            score -= 5
+        if not urlparse(u).path.strip("/"):
+            score -= 3
+        score += _year_alignment_score(query, hay)
+        if c.get("_from_alias"):
+            score += ALIAS_HIT_BOOST
+        if "english" in hay:
+            score += 3
+        if any(lang in hay for lang in (
+                "german", "french", "spanish", "italian", "norwegian", "swedish",
+                "danish", "dutch", "polish", "portuguese", "chinese", "japanese",
+                "korean", "turkish", "czech", "finnish", "hungarian", "romanian",
+                "deutsch", "espanol", "francais", "verhaltenskodex")):
+            score -= 4
+        scored.append((score, c))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return scored
+
+
+# ─── Fetch helpers ────────────────────────────────────────────────────────────
+_BROWSER_HEADERS = {
+    "User-Agent": ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                   "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"),
+    "Accept": ("text/html,application/xhtml+xml,application/xml;q=0.9,"
+               "application/pdf,image/avif,image/webp,*/*;q=0.8"),
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "identity",
+    "Connection": "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
+}
+
+
+def _fetch(url: str) -> tuple[bytes, str]:
+    headers = dict(_BROWSER_HEADERS)
+    headers["User-Agent"] = _ua_for(url)
+    try:
+        with urlopen(Request(url, headers=headers), timeout=60) as r:  # noqa: S310
+            return r.read(), r.headers.get("Content-Type", "application/octet-stream").split(";")[0]
+    except HTTPError as exc:
+        if exc.code in (403, 401, 406, 429):
+            parts = urlparse(url)
+            headers["Referer"] = f"{parts.scheme}://{parts.netloc}/"
+            with urlopen(Request(url, headers=headers), timeout=60) as r:  # noqa: S310
+                return r.read(), r.headers.get("Content-Type", "application/octet-stream").split(";")[0]
+        raise
+
+
+def _is_doc_url(u: str) -> bool:
+    return urlparse(u).path.lower().endswith(_DOC_EXTS)
+
+
+def _is_doc_ctype(ctype: str) -> bool:
+    c = (ctype or "").lower()
+    return ("pdf" in c or "msword" in c or "officedocument" in c
+            or "ms-excel" in c or "application/octet-stream" in c or "rtf" in c)
+
+
+def _doc_links(html: bytes, base_url: str, domain: str) -> list[str]:
+    txt = html.decode("utf-8", "ignore")
+    found = []
+    for m in re.finditer(r'href=["\']([^"\']+\.(?:pdf|docx?|rtf|xlsx?)(?:\?[^"\']*)?)["\']', txt, re.I):
+        found.append(urljoin(base_url, m.group(1)))
+    for m in re.finditer(r'<a\b[^>]*href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', txt, re.I | re.S):
+        href, label = m.group(1), re.sub(r"<[^>]+>", " ", m.group(2))
+        if re.search(r"download|\bpdf\b|document|report|policy|conduct|ethic", label, re.I):
+            found.append(urljoin(base_url, href))
+    out = []
+    for u in found:
+        if _registrable(urlparse(u).netloc) == _registrable(domain) and u not in out:
+            out.append(u)
+    return out
+
+
+def _safe_name(url: str) -> str:
+    p = urlparse(url).path.rsplit("/", 1)[-1] or "document"
+    return p if "." in p else p + ".html"
+
+
+def _site_root(query: str) -> str | None:
+    m = re.search(r"site:\s*(\S+)", query or "", re.I)
+    if not m:
+        return None
+    raw = m.group(1).rstrip("/")
+    if "://" not in raw:
+        raw = "https://" + raw
+    p = urlparse(raw)
+    return f"{p.scheme}://{p.netloc}/"
+
+
+def _page_doc_candidates(page_body: bytes, page_url: str, ctx: str) -> tuple[list[str], list[str]]:
+    links = _doc_links(page_body, page_url, urlparse(page_url).netloc.lower())
+    ext   = [u for u in links if _is_doc_url(u)]
+    other = [u for u in links if not _is_doc_url(u)]
+    pool  = _rank([{"url": u, "title": ""} for u in (ext or other)], ctx, None)
+    return [c["url"] for _, c in pool], links
+
+
+def _subpage_links(page_body: bytes, page_url: str, query: str, domain: str) -> list[str]:
+    txt = page_body.decode("utf-8", "ignore")
+    q = re.sub(r"site:\s*\S+", "", query, flags=re.I)
+    terms = [t for t in re.findall(r"[a-z]+", q.lower()) if len(t) > 3]
+    if not terms:
+        return []
+    scored: list[tuple[int, str]] = []
     seen: set[str] = set()
-    for match in re.finditer(r"<a\b[^>]*href=[\"']([^\"'#]+)[\"'][^>]*>(.*?)</a>", text, flags=re.I | re.S):
-        url = urljoin(page_url, html.unescape(match.group(1)).strip())
-        label = re.sub(r"<[^>]+>", " ", match.group(2))
-        label = html.unescape(re.sub(r"\s+", " ", label)).strip()
-        if url in seen or not url.startswith(("https://", "http://")):
+    for m in re.finditer(r'<a\b[^>]*href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', txt, re.I | re.S):
+        href, label = m.group(1), re.sub(r"<[^>]+>", " ", m.group(2)).lower()
+        full = urljoin(page_url, href)
+        if _registrable(urlparse(full).netloc) != _registrable(domain) or _is_doc_url(full):
             continue
-        candidate = Candidate(url=url, source_tier="official_site", title=label, discovered_from=page_url)
-        if _is_allowed_candidate(candidate, company):
-            seen.add(url)
-            links.append(candidate)
-    return links
+        if full in seen or full.rstrip("/") == page_url.rstrip("/"):
+            continue
+        haystack = (href + " " + label).lower()
+        score = sum(1 for t in terms if t in haystack)
+        if score:
+            seen.add(full)
+            scored.append((score, full))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [u for _, u in scored[:3]]
 
 
-def _score_link(candidate: Candidate, request: DocumentRequest) -> int:
-    rule = DOCUMENT_RULES[request.document_type]
-    haystack = (candidate.url + " " + candidate.title).lower()
-    score = sum(10 for alias in rule["aliases"] if alias in haystack)
-    if ".pdf" in urlparse(candidate.url).path.lower():
-        score += 8
-    if request.year and str(request.year) in haystack:
-        score += 8
-    if any(term in haystack for term in rule["reject_terms"]):
-        score -= 100
-    return score
-
-
-def _sitemap_urls(domain: str) -> list[str]:
-    root = f"https://{_normalise_domain(domain)}"
-    try:
-        body, _ = _fetch(root + "/sitemap.xml")
-        root_xml = ET.fromstring(body)
-    except (RetrievalError, ET.ParseError):
-        return []
-    locations = [element.text.strip() for element in root_xml.iter() if element.tag.endswith("loc") and element.text]
-    if locations and all(location.endswith(".xml") for location in locations[: min(5, len(locations))]):
-        expanded: list[str] = []
-        for location in locations[:10]:
-            try:
-                nested, _ = _fetch(location)
-                nested_xml = ET.fromstring(nested)
-                expanded.extend(element.text.strip() for element in nested_xml.iter() if element.tag.endswith("loc") and element.text)
-            except (RetrievalError, ET.ParseError):
-                continue
-        locations = expanded
-    return [location for location in locations if _host_matches(location, domain)][:SITEMAP_MAX_URLS]
-
-
-def _official_site_candidates(company: Company, request: DocumentRequest, diagnostics: list[str]) -> list[Candidate]:
-    all_candidates: list[Candidate] = []
-    rule = DOCUMENT_RULES[request.document_type]
-    for domain in company.official_domains:
-        root = f"https://{_normalise_domain(domain)}"
-        seed_paths = ["/", *rule["site_paths"]]
-        pages = [urljoin(root, path) for path in seed_paths]
-        try:
-            pages.extend(_sitemap_urls(domain))
-        except Exception as exc:  # Sitemap is a recall aid, never a reason to fail the request.
-            diagnostics.append(f"sitemap {domain}: {type(exc).__name__}")
-        for page_url in pages[:SITEMAP_MAX_URLS]:
-            haystack = page_url.lower()
-            if page_url not in pages[:len(seed_paths)] and not _contains_phrase(haystack, rule["aliases"]):
-                continue
-            try:
-                body, content_type = _fetch(page_url)
-            except RetrievalError:
-                continue
-            if "html" in content_type:
-                all_candidates.extend(_extract_links(body, page_url, company))
-            else:
-                all_candidates.append(Candidate(page_url, "official_site", discovered_from=page_url))
-    unique = {candidate.url: candidate for candidate in all_candidates}
-    return sorted(unique.values(), key=lambda item: _score_link(item, request), reverse=True)[:MAX_CANDIDATES_PER_TIER]
-
-
-_BROWSER_NAV_TERMS = (
-    "investor", "financial", "annual report", "annual reports", "reports",
-    "filing", "results", "sustainability", "governance", "ethics",
-    "compliance", "policy", "policies", "download",
+# ─── AgentCore Browser fallback: deterministic DOM extraction ─────────────────
+_WAF_BLOCK_MARKERS = (
+    "attention required", "sorry, you have been blocked", "access denied",
+    "are you a human", "captcha", "cloudflare", "request blocked",
+    "reference #", "akamai", "incapsula", "perimeterx", "unusual traffic",
+    "enable javascript and cookies",
 )
-_BROWSER_DOCUMENT_EXTENSIONS = (".pdf", ".doc", ".docx", ".rtf")
 
 
-def _browser_control_score(text: str, request: DocumentRequest) -> int:
-    """Score a rendered control without asking an LLM to drive the site."""
-    lowered = text.lower()
-    rule = DOCUMENT_RULES[request.document_type]
-    score = sum(8 for alias in rule["aliases"] if alias in lowered)
-    score += sum(2 for term in _BROWSER_NAV_TERMS if term in lowered)
-    if "download" in lowered:
-        score += 8
-    if request.year and str(request.year) in lowered:
-        score += 8
-    if any(term in lowered for term in rule["reject_terms"]):
-        score -= 100
-    return score
+def _looks_like_block_page(html: str | None) -> str | None:
+    if not html:
+        return None
+    low = html.lower()
+    for marker in _WAF_BLOCK_MARKERS:
+        if marker in low:
+            return marker
+    return None
 
 
-def _browser_controls(page) -> list[dict[str, str]]:
-    """Return the rendered controls, including links injected after page load."""
-    return page.locator("a, button, [role='link'], [role='button']").evaluate_all(
-        """elements => elements.slice(0, 200).map((element, index) => ({
-          index: String(index),
-          tag: element.tagName.toLowerCase(),
-          text: (element.innerText || element.getAttribute('aria-label') || '').trim().replace(/\\s+/g, ' '),
-          href: element.href || element.getAttribute('data-href') || '',
-          download: element.hasAttribute('download') ? 'true' : ''
-        }))"""
-    )
+_JS_HARVEST_LINKS = """
+() => {
+  const out = [];
+  const seen = new Set();
+  const push = (u, t) => {
+    if (!u) return;
+    try { u = new URL(u, document.baseURI).href; } catch (e) { return; }
+    if (!/^https?:/i.test(u) || seen.has(u)) return;
+    seen.add(u);
+    out.push({ url: u, text: (t || '').replace(/\\s+/g, ' ').trim().slice(0, 160) });
+  };
+  document.querySelectorAll('a[href]').forEach(e => push(e.href, e.textContent));
+  document.querySelectorAll('[data-href],[data-url],[data-file],[data-download],[data-pdf]').forEach(e => {
+    push(e.getAttribute('data-href') || e.getAttribute('data-url') ||
+         e.getAttribute('data-file') || e.getAttribute('data-download') ||
+         e.getAttribute('data-pdf'), e.textContent);
+  });
+  document.querySelectorAll('[onclick]').forEach(e => {
+    const oc = e.getAttribute('onclick') || '';
+    const m = oc.match(/https?:\\/\\/[^'"\\)\\s]+/);
+    if (m) push(m[0], e.textContent);
+  });
+  return out;
+}
+"""
+
+_DOWNLOAD_TEXT_RE = re.compile(
+    r"download|\bpdf\b|\breport\b|annual|10-?k|financial|statement|policy|"
+    r"conduct|sustainab|proxy|filing|document|view\s+report",
+    re.I,
+)
+
+_GENERIC_FOOTER_TEXT_RE = re.compile(
+    r"^\s*(privacy( policy| notice)?|cookie( policy| notice| settings|s)?|"
+    r"terms( of (use|service))?|legal( information)?|"
+    r"accessibility( statement)?|site\s*map|do not sell my (personal )?"
+    r"info(rmation)?|your (privacy|california privacy) (choices|rights)|"
+    r"trademark|copyright)\s*$",
+    re.I,
+)
 
 
-def _browser_document_candidates(page, company: Company, request: DocumentRequest) -> list[Candidate]:
-    candidates: list[Candidate] = []
-    for control in _browser_controls(page):
-        href = urljoin(page.url, control.get("href", ""))
-        label = control.get("text", "")
-        if not href:
-            continue
-        path = urlparse(href).path.lower()
-        is_file = path.endswith(_BROWSER_DOCUMENT_EXTENSIONS)
-        is_download = control.get("download") == "true" or "download" in label.lower()
-        if not (is_file or is_download):
-            continue
-        candidate = Candidate(
-            url=href,
-            source_tier="browser",
-            title=label,
-            discovered_from=page.url,
-            metadata={"browser_path": page.url, "discovery": "rendered_dom"},
-        )
-        if _is_allowed_candidate(candidate, company) and _browser_control_score(label + " " + href, request) >= 0:
-            candidates.append(candidate)
-    unique = {candidate.url: candidate for candidate in candidates}
-    return sorted(unique.values(), key=lambda item: _browser_control_score(item.title + " " + item.url, request), reverse=True)[:MAX_CANDIDATES_PER_TIER]
-
-
-def _browser_navigation_urls(page, company: Company, request: DocumentRequest) -> list[str]:
-    urls: list[tuple[int, str]] = []
-    for control in _browser_controls(page):
-        href = urljoin(page.url, control.get("href", ""))
-        if not href or urlparse(href).path.lower().endswith(_BROWSER_DOCUMENT_EXTENSIONS):
-            continue
-        if not any(_host_matches(href, domain) for domain in company.official_domains):
-            continue
-        score = _browser_control_score(control.get("text", "") + " " + href, request)
-        if score > 0:
-            urls.append((score, href))
-    return [url for _, url in sorted(set(urls), reverse=True)[:BROWSER_MAX_PAGES]]
-
-
-def _browser_select_requested_year(page, request: DocumentRequest) -> bool:
-    if request.year is None:
+def _is_plausible_download_control(text: str) -> bool:
+    """Positive doc-intent match MINUS generic legal/footer boilerplate."""
+    t = (text or "").strip()
+    if not t or _GENERIC_FOOTER_TEXT_RE.match(t):
         return False
-    selected = False
-    selects = page.locator("select")
-    for index in range(min(selects.count(), 10)):
-        select = selects.nth(index)
-        try:
-            options = select.locator("option").evaluate_all(
-                "options => options.map(option => ({value: option.value, text: option.textContent.trim()}))"
-            )
-            match = next((option for option in options if str(request.year) in option["text"]), None)
-            if match and match.get("value"):
-                select.select_option(value=match["value"], timeout=BROWSER_CLICK_TIMEOUT_MS)
-                page.wait_for_timeout(750)
-                selected = True
-        except Exception as exc:  # A disabled or custom select is a normal browser fallback case.
-            print(f"[browser] year selector skipped: {type(exc).__name__}")
-    return selected
+    return bool(_DOWNLOAD_TEXT_RE.search(t))
 
+_WRONG_CLASS_FILENAME_MARKERS = tuple(
+    m.strip().lower() for m in os.environ.get(
+        "WRONG_CLASS_FILENAME_MARKERS",
+        "assurance,pricewaterhousecoopers,-pwc-,pwc-,deloitte,ey-,kpmg,"
+        "guidance,guidelines,methodology,-key-facts,key-facts-,datapack,"
+        "data-pack,data-dictionary,factbook,fact-book,-sasb-index,-wef-index,"
+        "-index-,compliance-statement,transcript,video-,-animation,"
+        "communication-on-progress",
+    ).split(",") if m.strip()
+)
+_STRICT_REJECT_CLASSES = {
+    c.strip().lower() for c in os.environ.get(
+        "STRICT_REJECT_CLASSES",
+        "annual report,sustainability report,environmental policy,"
+        "occupational health & safety policy,anti-bribery and corruption policy,"
+        "whistleblowing mechanism,tax strategy and governance,"
+        "code of conduct,supplier code of conduct,proxy statement,"
+        "remuneration report",
+    ).split(",") if c.strip()
+}
 
-def _browser_expand_navigation(page, request: DocumentRequest) -> None:
-    """Open rendered menu buttons before reading the DOM again.
+_CLASS_SCOPED_WRONG_MARKERS: dict[str, tuple[str, ...]] = {
+    "sustainability report": (
+        "strategic-report", "esg-update", "esg-supplement", "esg-factbook",
+        "green-bond", "sdg-bond", "cdp-carbon-disclosure",
+        "_per_", "-per-", "product_environmental_report",
+        "product-environmental-report",
+    ),
+    "environmental policy": (
+        "strategic-report", "esg-update", "esg-supplement", "esg-factbook",
+        "cdp-carbon-disclosure",
+        "_per_", "-per-", "product_environmental_report",
+        "product-environmental-report",
+        "environmental_progress_report", "environmental_responsibility_report",
+    ),
+    "_query_text_scoped": {
+        "impact report": (
+            "strategic-report", "esg-update", "esg-supplement",
+            "green-bond", "sdg-bond",
+        ),
+        "ghg emission report": (
+            "strategic-report", "esg-update", "esg-supplement", "esg-factbook",
+            "cdp-carbon-disclosure",
+        ),
+    },
+}
 
-    Only labels relevant to the requested document may be clicked. The browser
-    never fills forms, signs in, or leaves an approved company domain.
+def _is_wrong_class_filename(url: str, query: str) -> bool:
+    name = unquote(urlparse(url).path).rsplit("/", 1)[-1].lower()
+    low_query = (query or "").lower()
+    matched = [c for c, _ in _matched_doc_classes(query)]
+
+    if any(c in _STRICT_REJECT_CLASSES for c in matched):
+        for marker in _WRONG_CLASS_FILENAME_MARKERS:
+            if marker and marker in name:
+                return True
+
+    for canonical in matched:
+        for marker in _CLASS_SCOPED_WRONG_MARKERS.get(canonical, ()):
+            if marker and marker in name:
+                return True
+
+    for phrase, markers in _CLASS_SCOPED_WRONG_MARKERS.get("_query_text_scoped", {}).items():
+        if phrase in low_query:
+            for marker in markers:
+                if marker and marker in name:
+                    return True
+
+    return False
+
+QUERY_MAX_VERIFIES = int(os.environ.get("QUERY_MAX_VERIFIES", "100"))
+QUERY_MAX_SECONDS = float(os.environ.get("QUERY_MAX_SECONDS", "900"))
+
+class _QueryBudget:
+    """Shared per-query counter threaded through every resolver tier.
+
+    `rejected`: URLs that FAILED CLASS VERIFICATION for THIS query are recorded
+    here so a later nav page that re-links the same junk PDF skips it on sight.
+    Deliberately PER-QUERY, not per-run like `known_bad`.
     """
-    controls = page.locator("button, [role='button']")
-    for index in range(min(controls.count(), 40)):
-        control = controls.nth(index)
+    def __init__(self):
+        self.verifies = 0
+        self.deadline = time.monotonic() + QUERY_MAX_SECONDS
+        self.rejected: set[str] = set()
+
+    def can_verify(self) -> bool:
+        return (self.verifies < QUERY_MAX_VERIFIES
+                and time.monotonic() < self.deadline)
+
+    def note_verify(self) -> None:
+        self.verifies += 1
+
+    def time_left(self) -> bool:
+        return time.monotonic() < self.deadline
+
+    def why_stopped(self) -> str:
+        if self.verifies >= QUERY_MAX_VERIFIES:
+            return f"verify budget {QUERY_MAX_VERIFIES} exhausted"
+        return f"wall-clock {QUERY_MAX_SECONDS}s exceeded"
+
+    def is_rejected(self, url: str) -> bool:
+        return url in self.rejected
+
+    def mark_rejected(self, url: str) -> None:
+        self.rejected.add(url)
+
+def _strip_fragment(url: str) -> str:
+    try:
+        p = urlparse(url)
+        return f"{p.scheme}://{p.netloc}{p.path}".rstrip("/") or url
+    except Exception:  # noqa: BLE001
+        return url
+
+
+def _is_navigation_href(url: str, domain: str | None) -> bool:
+    if not url:
+        return False
+    if _is_doc_url(url) or "download=1" in url.lower():
+        return False
+    if domain and _registrable(urlparse(url).netloc) != _registrable(domain):
+        return False
+    return url.lower().startswith(("http://", "https://"))
+
+
+_COOKIE_MODAL_SELECTORS = (
+    "#__tealiumGDPRecModal", "#onetrust-banner-sdk", "#onetrust-consent-sdk",
+    "#truste-consent-track", ".cookie-modal", "#cookie-banner", "#cookieConsent",
+    "[aria-label*='cookie' i]", "[id*='cookie' i][role='dialog']",
+)
+_COOKIE_ACCEPT_TEXTS = (
+    "Accept all", "Accept All", "Accept all cookies", "I accept", "Accept",
+    "Agree", "Allow all", "Got it", "Continue", "OK",
+)
+
+def _dismiss_cookie_modals(page) -> None:
+    for label in _COOKIE_ACCEPT_TEXTS:
         try:
-            label = (control.inner_text(timeout=1000) or control.get_attribute("aria-label") or "").strip()
-            if _browser_control_score(label, request) < 2 or "download" in label.lower():
-                continue
-            control.click(timeout=BROWSER_CLICK_TIMEOUT_MS)
-            page.wait_for_timeout(300)
-        except Exception:
+            btn = page.get_by_role("button", name=label, exact=False).first
+            btn.click(timeout=800)
+            page.wait_for_timeout(150)
+            break
+        except Exception:  # noqa: BLE001
+            continue
+    for sel in _COOKIE_MODAL_SELECTORS:
+        try:
+            page.evaluate(
+                "(s)=>{document.querySelectorAll(s).forEach(e=>e.remove());}", sel)
+        except Exception:  # noqa: BLE001
             continue
 
-
-def _browser_vision_choice(page, request: DocumentRequest) -> str | None:
-    """Use one screenshot only when DOM labels leave download controls ambiguous."""
-    if _bedrock is None or not BROWSER_VISION_MODEL_ID:
-        return None
-    controls = [item for item in _browser_controls(page) if item.get("text")][:20]
-    if not controls:
-        return None
+def _click_target_visible(page, text: str, timeout_ms: int = 1500) -> bool:
     try:
-        screenshot = page.screenshot(type="jpeg", quality=70, full_page=False)
-        prompt = (
-            "Choose the one visible control that downloads the requested corporate document. "
-            "Do not choose navigation, login, search, or a different report type. "
-            f"Requested document type: {request.document_type}; year: {request.year}.\n"
-            f"Rendered controls: {json.dumps([item['text'] for item in controls])}\n"
-            'Return only JSON: {"label":"exact control text or null"}.'
-        )
-        response = _bedrock.converse(
+        loc = page.get_by_text(text, exact=False).first
+        loc.wait_for(state="visible", timeout=timeout_ms)
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+def _verify_priority(url: str, query: str) -> int:
+    name = unquote(urlparse(url).path).rsplit("/", 1)[-1].lower()
+    terms = [t for t in _keywords(query) if len(t) > 3]
+    if not terms:
+        return 0
+    return 3 if any(t in name for t in terms) else 0
+
+def _sort_for_verify(urls: list[str], query: str) -> list[str]:
+    return sorted(urls, key=lambda u: _verify_priority(u, query), reverse=True)
+
+def _doc_candidate_score(url: str, text: str, query: str, domain: str | None) -> int:
+    ranked = _rank([{"url": url, "title": text, "snippet": text}], query, domain)
+    base = ranked[0][0] if ranked else 0
+    return base + _filing_type_score_adjustment(url, text, query)
+
+
+_FILING_TYPE_HINTS: dict[str, dict[str, list[str]]] = {
+    "annual report": {
+        "boost": ["10-k", "10k", "form10-k", "form 10-k", "annual report",
+                  "ar20", "integrated annual report", "annual-report"],
+        "penalize": ["10-q", "10q", "quarterly", "8-k", "8k",
+                     "consolidated_financial_statements", "current report"],
+    },
+    "proxy statement": {
+        "boost": ["def 14a", "def14a", "proxy statement", "proxy-statement",
+                  "definitive proxy"],
+        "penalize": ["10-q", "10-k", "8-k", "quarterly", "current report"],
+    },
+    "remuneration report": {
+        "boost": ["remuneration report", "directors' remuneration",
+                  "remuneration-report"],
+        "penalize": ["10-q", "10-k", "8-k"],
+    },
+}
+
+
+def _filing_type_score_adjustment(url: str, text: str, query: str) -> int:
+    matched = [c for c, _ in _matched_doc_classes(query)]
+    if not matched:
+        return 0
+    hay = (unquote(urlparse(url).path) + " " + (text or "")).lower()
+    adj = 0
+    for canonical in matched:
+        hints = _FILING_TYPE_HINTS.get(canonical)
+        if not hints:
+            continue
+        if any(k in hay for k in hints.get("boost", [])):
+            adj += 6
+        if any(k in hay for k in hints.get("penalize", [])):
+            adj -= 6
+    return adj
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Generic junk-host filter (NOT company-specific)
+# ═══════════════════════════════════════════════════════════════════════════
+_JUNK_HOST_LABELS = {
+    l.strip().lower() for l in os.environ.get(
+        "JUNK_HOST_LABELS",
+        "apps,itunes,books,book,podcasts,podcast,music,tv,store,shop,play,"
+        "games,gaming,maps,translate,developer,developers,support,community,"
+        "forums,forum,help,careers,jobs",
+    ).split(",") if l.strip()
+}
+_JUNK_REGISTRABLE_DOMAINS = {
+    d.strip().lower() for d in os.environ.get(
+        "JUNK_REGISTRABLE_DOMAINS",
+        "play.google.com,facebook.com,twitter.com,x.com,linkedin.com,"
+        "instagram.com,youtube.com,wikipedia.org,glassdoor.com,indeed.com,"
+        "crunchbase.com,tiktok.com,pinterest.com,reddit.com",
+    ).split(",") if d.strip()
+}
+
+
+def _is_junk_host(url: str) -> bool:
+    try:
+        host = urlparse(url).netloc.lower().split(":")[0]
+    except Exception:  # noqa: BLE001
+        return False
+    if not host:
+        return False
+    if _registrable(host) in _JUNK_REGISTRABLE_DOMAINS:
+        return True
+    label = (host[4:] if host.startswith("www.") else host).split(".")[0]
+    return label in _JUNK_HOST_LABELS
+
+
+def _is_ir_nav_link(url: str, text: str = "") -> bool:
+    hay = (unquote(urlparse(url or "").path) + " " + (text or "")).lower()
+    return any(k in hay for k in IR_NAV_KEYWORDS)
+
+
+_PRESS_RELEASE_PATH_MARKERS = tuple(
+    m.strip().lower() for m in os.environ.get(
+        "PRESS_RELEASE_PATH_MARKERS",
+        "news-details,news-detail,press-release,press-releases,newsroom,"
+        "news-release,media-release,media-releases,news-and-media,"
+        "media-center/news",
+    ).split(",") if m.strip()
+)
+_PRESS_RELEASE_FILENAME_MARKERS = tuple(
+    m.strip().lower() for m in os.environ.get(
+        "PRESS_RELEASE_FILENAME_MARKERS",
+        "press-release,press_release,pressrelease,earnings-release,"
+        "earnings_release,media-release,news-release,fact-sheet,"
+        "patent-table,earnings-invitation",
+    ).split(",") if m.strip()
+)
+_PRESS_RELEASE_TEXT_VERB_MARKERS = tuple(
+    m.strip().lower() for m in os.environ.get(
+        "PRESS_RELEASE_TEXT_VERB_MARKERS",
+        "announces,appoints,presents new,reports results,declares dividend,"
+        "approval for,receives fda,receives approval",
+    ).split(",") if m.strip()
+)
+
+
+def _is_press_release_url(url: str, text: str = "") -> bool:
+    """True if a harvested link is almost certainly a press release / news item
+    rather than an official policy/report document. Runs BEFORE any LLM call."""
+    try:
+        path = unquote(urlparse(url or "").path).lower()
+    except Exception:  # noqa: BLE001
+        path = (url or "").lower()
+    if any(m in path for m in _PRESS_RELEASE_PATH_MARKERS):
+        return True
+    filename = path.rsplit("/", 1)[-1]
+    if any(m in filename for m in _PRESS_RELEASE_FILENAME_MARKERS):
+        return True
+    low_text = (text or "").lower()
+    if any(m in low_text for m in _PRESS_RELEASE_TEXT_VERB_MARKERS):
+        return True
+    return False
+
+
+def _browser_resolve_document(page_url: str, domain: str | None, query: str,
+                              cache: dict | None = None,
+                              verify_fn=None,
+                              known_bad: dict[str, str] | None = None,
+                              budget: "_QueryBudget | None" = None) -> dict | None:
+    """Thin caching wrapper around _browser_resolve_document_uncached."""
+    if cache is not None and page_url in cache:
+        cached = cache[page_url]
+        if cached and cached.get("body"):
+            if verify_fn is None or cached.get("_verified_for") == query:
+                print(f"[browser] cache hit for {page_url} — reusing previous "
+                      f"render/resolution result for this run, no new browser session")
+                return cached
+            if verify_fn(cached):
+                out = dict(cached)
+                out["verified"] = True
+                out["_verified_for"] = query
+                print(f"[browser] cache hit for {page_url}; re-verified OK for "
+                      f"this query's document class")
+                return out
+            print(f"[browser] cache hit for {page_url} but cached document is "
+                  f"the WRONG class for this query; resolving fresh instead of "
+                  f"reusing it")
+            result = _browser_resolve_document_uncached(page_url, domain, query,
+                                                         verify_fn, known_bad, budget)
+            cache[page_url] = result
+            return result
+        if cached and cached.get("_had_candidates"):
+            print(f"[browser] cache: {page_url} had candidates on a prior query "
+                  f"but none matched that class; resolving fresh for this "
+                  f"query's class rather than assuming the same miss")
+            result = _browser_resolve_document_uncached(page_url, domain, query,
+                                                         verify_fn, known_bad, budget)
+            cache[page_url] = result
+            return result
+        print(f"[browser] cache hit for {page_url} — no resolvable document on "
+              f"this page (no candidates at all), reusing miss, no new browser session")
+        return cached
+
+    result = _browser_resolve_document_uncached(page_url, domain, query, verify_fn, known_bad, budget)
+    if cache is not None:
+        cache[page_url] = result
+    return result
+
+
+_HTML_SCRIPT_STYLE_RE = re.compile(r"<(script|style)[^>]*>.*?</\1>", re.I | re.S)
+_HTML_IX_HEADER_CLOSED_RE = re.compile(r"<ix:header\b.*?</ix:header>", re.I | re.S)
+_HTML_IX_HEADER_UNCLOSED_RE = re.compile(r"<ix:header\b.*", re.I | re.S)
+_HTML_HIDDEN_STYLE_RE = re.compile(
+    r"<(div|span)\b[^>]*style\s*=\s*[\"'][^\"']*display\s*:\s*none[^\"']*[\"'][^>]*>.*?</\1>",
+    re.I | re.S)
+_HTML_ANY_TAG_RE = re.compile(r"<[^>]+>")
+_HTML_WS_RE = re.compile(r"\s+")
+_PROSE_RUN_RE = re.compile(r"(?:[A-Za-z]{3,}\s+){12,}[A-Za-z]{3,}")
+_HTML_ANCHOR_MARKERS = (b"FORM 10-K", b"FORM 10-Q", b"FORM 20-F", b"FORM 40-F",
+                        b"ANNUAL REPORT", b"DEF 14A", b"PROXY STATEMENT")
+
+
+def _extract_visible_text(raw_html: bytes, company: str = "",
+                          raw_window: int = 1_000_000, max_chars: int = 1800,
+                          anchor_scan_span: int = 5_000_000) -> str:
+    """Best-effort plain-text extraction from HTML bytes for LLM verification
+    sampling.
+
+    Real inline-XBRL SEC filings (10-K/20-F/DEF 14A) put an <ix:header>
+    <ix:hidden>...</ix:hidden></ix:header> block at the very TOP of the
+    document containing raw XBRL context/unit/fact definitions — CIKs, dates,
+    numbers, zero prose. For a large filer this block can run into the
+    hundreds of KB or more, which defeats any FIXED decode/strip window: if
+    the block is bigger than the window, the closing tag never appears in the
+    truncated text, the strip regex silently finds no match, and the entire
+    sample is unstripped hidden-block noise (this was confirmed reproducing
+    the exact failure against a synthetic filing shaped like the real one).
+
+    Rather than betting on a window being big enough, this does a fast raw
+    BYTE scan (no decoding — just bytes.find, cheap even across megabytes)
+    across a much larger span for markers that only appear in the real,
+    visible document ("FORM 10-K", "ANNUAL REPORT", the company name itself),
+    jumps straight to that offset, and only decodes/strips a bounded window
+    around it. A closed/unclosed ix:header pass and a display:none pass
+    still run for defense in depth, plus a general "does this look like real
+    prose, and if not, scan forward for a run of real words" safety net that
+    catches hiding techniques the anchor scan or tag stripping don't.
+    """
+    anchor_pos = None
+    scan_span = raw_html[:anchor_scan_span]
+    scan_upper = scan_span.upper()
+    markers = list(_HTML_ANCHOR_MARKERS)
+    if company:
+        words = [w for w in re.split(r"\s+", company.strip()) if len(w) > 2][:2]
+        if words:
+            markers.append(" ".join(words).upper().encode())
+    for marker in markers:
+        idx = scan_upper.find(marker.upper())
+        if idx != -1 and (anchor_pos is None or idx < anchor_pos):
+            anchor_pos = idx
+    if anchor_pos is not None:
+        start = max(0, anchor_pos - 200)
+        raw_html = raw_html[start:start + raw_window]
+
+    try:
+        chunk = raw_html[:raw_window].decode("utf-8", "ignore")
+    except Exception:  # noqa: BLE001
+        return ""
+    if _HTML_IX_HEADER_CLOSED_RE.search(chunk):
+        chunk = _HTML_IX_HEADER_CLOSED_RE.sub(" ", chunk)
+    elif re.search(r"<ix:header\b", chunk, re.I):
+        # Closing tag fell outside this window — the rest of the window is
+        # still inside the hidden block. Drop from the opening tag onward
+        # rather than leak unstripped hidden content into the sample.
+        chunk = _HTML_IX_HEADER_UNCLOSED_RE.sub(" ", chunk)
+    chunk = _HTML_HIDDEN_STYLE_RE.sub(" ", chunk)
+    chunk = _HTML_HIDDEN_STYLE_RE.sub(" ", chunk)
+    chunk = _HTML_SCRIPT_STYLE_RE.sub(" ", chunk)
+    chunk = _HTML_ANY_TAG_RE.sub(" ", chunk)
+    chunk = _HTML_WS_RE.sub(" ", chunk).strip()
+
+    # General safety net regardless of hiding technique: if the front of the
+    # cleaned text still looks like ID/number soup (no long run of real
+    # words), scan forward for the first genuine prose run and sample from
+    # there instead of assuming prose starts at position 0.
+    head = chunk[:max_chars]
+    if not _PROSE_RUN_RE.search(head):
+        m = _PROSE_RUN_RE.search(chunk)
+        if m:
+            chunk = chunk[m.start():]
+        else:
+            chunk = head
+    return chunk[:max_chars]
+
+
+def _make_browser_verify_fn(query: str, budget: "_QueryBudget | None" = None,
+                             company: str = ""):
+    """verify_fn(candidate_doc) -> bool. Fail-closed class+company check scoped to one candidate."""
+    if not (BROWSER_VERIFY_CLASS and _bedrock is not None):
+        return None
+
+    def _verify(cand: dict) -> bool:
+        url = cand.get("url", "")
+        if budget is not None and budget.is_rejected(url):
+            print(f"[verify] already rejected earlier this query, skipping: {url}")
+            cand["_verify_decision"] = {"selected_url": None, "topic_match": False,
+                                        "reason": "already-rejected-this-query"}
+            return False
+        if _is_press_release_url(url):
+            print(f"[verify] STRICT reject (press-release/news item, no LLM): {url}")
+            cand["_verify_decision"] = {"selected_url": None, "topic_match": False,
+                                        "reason": "strict-press-release-reject"}
+            if budget is not None:
+                budget.mark_rejected(url)
+            return False
+        if _is_wrong_class_filename(url, query):
+            print(f"[verify] STRICT reject (near-neighbor filename, no LLM): {url}")
+            cand["_verify_decision"] = {"selected_url": None, "topic_match": False,
+                                        "reason": "strict-near-neighbor-filename-reject"}
+            if budget is not None:
+                budget.mark_rejected(url)
+            return False
+        if budget is not None and not budget.can_verify():
+            print(f"[verify] budget stop ({budget.why_stopped()}): skipping "
+                  f"LLM verify for {url}")
+            cand["_verify_decision"] = {"selected_url": None, "topic_match": False,
+                                        "reason": f"query-budget:{budget.why_stopped()}"}
+            return False
+        sample = ""
+        try:
+            if "html" in (cand.get("ctype") or ""):
+                sample = _extract_visible_text(cand["body"], company=company)
+                if len(sample) < 200:
+                    # Stripped text came back too thin (rare) — fall back to
+                    # the old raw-byte behavior rather than sending an empty
+                    # sample to the verifier.
+                    sample = cand["body"].decode("utf-8", "ignore")[:1500]
+            else:
+                sample = cand["body"][:1500].decode("utf-8", "ignore").replace("\x00", " ")
+        except Exception:  # noqa: BLE001
+            sample = ""
+        info = {"url": url, "filename": _safe_name(url),
+                "head_ctype": cand.get("ctype", ""), "content_sample": sample}
+        if budget is not None:
+            budget.note_verify()
+        vdec = _llm_select_best(query, [info], company=company)
+        cand["_verify_decision"] = vdec
+        ok = _confident(vdec, query)
+        if not ok:
+            print(f"[browser] candidate REJECTED by class check "
+                  f"({url}): {vdec.get('reason')}")
+            if budget is not None:
+                budget.mark_rejected(url)
+        return ok
+
+    return _verify
+
+
+def _browser_resolve_document_uncached(page_url: str, domain: str | None,
+                              query: str, verify_fn=None,
+                              known_bad: dict[str, str] | None = None,
+                              budget: "_QueryBudget | None" = None) -> dict:
+    """Layered, GENERIC in-browser document resolver (see module docstring)."""
+    _MISS = {"_no_doc": True, "_had_candidates": False}
+    if not USE_BROWSER:
+        return _MISS
+    try:
+        from playwright.sync_api import sync_playwright
+        from bedrock_agentcore.tools.browser_client import browser_session
+    except Exception as exc:  # noqa: BLE001
+        print(f"[browser] import failed ({exc}); skipping browser fallback")
+        return _MISS
+
+    referer = f"https://{domain}/" if domain else None
+
+    def _acceptable(url: str, ctype: str) -> bool:
+        return _is_doc_ctype(ctype) or (
+            _is_doc_url(url) and "html" not in (ctype or "").lower())
+
+    def _domain_ok(url: str) -> bool:
+        if BROWSER_ALLOW_OFFDOMAIN_DOCS:
+            return True
+        return not domain or _registrable(urlparse(url).netloc) == _registrable(domain)
+
+    resolved: dict | None = None
+    had_candidates = False
+    verify_budget = BROWSER_MAX_VERIFY_CANDIDATES if verify_fn else 1
+    click_budget = min(BROWSER_MAX_CLICK_ATTEMPTS, verify_budget) if verify_fn else 1
+    pool_cap = max(BROWSER_MAX_DOC_CANDIDATES, verify_budget)
+    _deadline = time.monotonic() + BROWSER_RESOLVE_MAX_SECONDS
+
+    def _time_left() -> bool:
+        if budget is not None and not budget.time_left():
+            return False
+        return time.monotonic() < _deadline
+
+    try:
+        with browser_session(BROWSER_REGION) as client:
+            ws_url, headers = client.generate_ws_headers()
+            with sync_playwright() as pw:
+                browser = pw.chromium.connect_over_cdp(ws_url, headers=headers)
+                try:
+                    context = (browser.contexts[0] if browser.contexts
+                               else browser.new_context())
+                    page = (context.pages[0] if context.pages
+                            else context.new_page())
+
+                    # ── Tier 1: navigate + harvest ──
+                    nav_error = None
+                    try:
+                        goto_kwargs = {"wait_until": BROWSER_WAIT_UNTIL,
+                                       "timeout": BROWSER_SESSION_TIMEOUT * 1000}
+                        if referer:
+                            goto_kwargs["referer"] = referer
+                        page.goto(page_url, **goto_kwargs)
+                    except Exception as nav_exc:  # noqa: BLE001
+                        nav_error = str(nav_exc)
+                        print(f"[browser] goto warning ({page_url}): {nav_exc}")
+                    try:
+                        page.wait_for_timeout(BROWSER_SETTLE_MS)
+                    except Exception:  # noqa: BLE001
+                        pass
+
+                    _dismiss_cookie_modals(page)
+
+                    final_url = None
+                    try:
+                        final_url = page.url
+                    except Exception:  # noqa: BLE001
+                        pass
+                    if final_url and final_url.rstrip("/") != page_url.rstrip("/"):
+                        print(f"[browser] redirected: requested={page_url} "
+                              f"final={final_url} referer_sent={referer!r}")
+
+                    try:
+                        rendered_html = page.content()
+                    except Exception:  # noqa: BLE001
+                        rendered_html = None
+                    block_marker = _looks_like_block_page(rendered_html)
+                    if block_marker:
+                        print(f"[browser] possible WAF/bot-challenge page "
+                              f"(matched {block_marker!r}) at {final_url or page_url}")
+
+                    try:
+                        harvested = page.evaluate(_JS_HARVEST_LINKS) or []
+                    except Exception as exc:  # noqa: BLE001
+                        print(f"[browser] link harvest failed: {exc}")
+                        harvested = []
+
+                    if BROWSER_DEEP_NAV:
+                        try:
+                            tops = page.query_selector_all(
+                                "nav a, nav button, [role=navigation] a, "
+                                "header a, .nav__link, li[aria-haspopup]")
+                            for el in tops[:25]:
+                                try:
+                                    el.hover(timeout=800)
+                                    page.wait_for_timeout(150)
+                                except Exception:  # noqa: BLE001
+                                    continue
+                            page.wait_for_timeout(400)
+                            harvested2 = page.evaluate(_JS_HARVEST_LINKS) or []
+                            seen_u = {h.get("url") for h in harvested}
+                            for h in harvested2:
+                                if h.get("url") not in seen_u:
+                                    harvested.append(h)
+                                    seen_u.add(h.get("url"))
+                            print(f"[browser] hover-reveal: harvested grew to "
+                                  f"{len(harvested)} links after menu hover")
+                        except Exception as exc:  # noqa: BLE001
+                            print(f"[browser] hover-reveal failed: {exc}")
+
+                    doc_links = [h for h in harvested
+                                 if _is_doc_url(h.get("url", ""))
+                                 and _domain_ok(h["url"])
+                                 and not _is_junk_host(h["url"])
+                                 and not _is_press_release_url(h["url"], h.get("text", ""))]
+
+                    labeled = [h for h in harvested
+                               if not _is_doc_url(h.get("url", ""))
+                               and _is_plausible_download_control(h.get("text", ""))
+                               and _domain_ok(h.get("url", ""))
+                               and not _is_junk_host(h.get("url", ""))
+                               and not _is_press_release_url(h.get("url", ""), h.get("text", ""))
+                               and not _is_navigation_href(h.get("url", ""), domain)]
+                    nav_links = [h["url"] for h in harvested
+                                 if _is_navigation_href(h.get("url", ""), domain)
+                                 and not _is_junk_host(h.get("url", ""))
+                                 and not _is_press_release_url(h.get("url", ""), h.get("text", ""))]
+
+                    ranked_docs = sorted(
+                        doc_links,
+                        key=lambda h: (_verify_priority(h["url"], query),
+                                       _doc_candidate_score(h["url"], h.get("text", ""),
+                                                            query, domain)),
+                        reverse=True,
+                    )[:pool_cap]
+                    had_candidates = bool(ranked_docs or labeled)
+                    print(f"[browser] harvested {len(harvested)} links: "
+                          f"{len(doc_links)} doc-file candidates, "
+                          f"{len(labeled)} download-labeled controls "
+                          f"(verify_budget={verify_budget}, click_budget={click_budget})"
+                          + (f" | nav_error={nav_error}" if nav_error else "")
+                          + (f" | block_marker={block_marker}" if block_marker else ""))
+
+                    # ── Tier 2: in-session fetch, WITH in-loop class verify ──
+                    if BROWSER_DOWNLOAD_IN_SESSION:
+                        req = context.request
+                        tried = 0
+                        verified_hits: list[dict] = []
+                        for h in ranked_docs:
+                            if tried >= verify_budget or not _time_left():
+                                if not _time_left():
+                                    print(f"[browser] Tier 2 stopped: "
+                                          f"BROWSER_RESOLVE_MAX_SECONDS "
+                                          f"({BROWSER_RESOLVE_MAX_SECONDS}s) exceeded")
+                                break
+                            cand = h["url"]
+                            if known_bad is not None and cand in known_bad:
+                                print(f"[browser] skipping known-bad candidate "
+                                      f"(failed at transport layer on a prior "
+                                      f"query, not class-dependent): {cand} "
+                                      f"[{known_bad[cand]}]")
+                                continue
+                            if budget is not None and budget.is_rejected(cand):
+                                print(f"[browser] skipping candidate already "
+                                      f"class-rejected earlier this query: {cand}")
+                                continue
+                            body = None
+                            ctype = ""
+                            try:
+                                r = req.get(cand, headers={"referer": final_url or referer or cand},
+                                            timeout=BROWSER_SESSION_TIMEOUT * 1000)
+                                status = r.status
+                                ctype = (r.headers or {}).get("content-type", "").split(";")[0].lower()
+                                if status >= 400 or not _acceptable(cand, ctype):
+                                    continue
+                                body = r.body()
+                            except Exception as exc:  # noqa: BLE001
+                                if "abort" in str(exc).lower():
+                                    print(f"[browser] in-session GET aborted "
+                                          f"({cand}); retrying via navigation + "
+                                          f"native download instead")
+                                    try:
+                                        with page.expect_download(
+                                                timeout=BROWSER_CLICK_TIMEOUT_MS) as di:
+                                            page.goto(cand, timeout=BROWSER_SESSION_TIMEOUT * 1000)
+                                        dl = di.value
+                                        with open(dl.path(), "rb") as fh:
+                                            body = fh.read()
+                                        fname = dl.suggested_filename or ""
+                                        ctype = ("application/pdf" if fname.lower().endswith(".pdf")
+                                                 else "application/octet-stream")
+                                    except Exception as exc2:  # noqa: BLE001
+                                        print(f"[browser] navigation-download "
+                                              f"fallback also failed ({cand}): {exc2}")
+                                        body = None
+                                if body is None:
+                                    print(f"[browser] in-session GET failed ({cand}): {exc}")
+                                    if known_bad is not None:
+                                        known_bad[cand] = f"GET failed: {type(exc).__name__}"
+                                    continue
+                            if not body or len(body) > BROWSER_MAX_DOC_BYTES:
+                                continue
+                            tried += 1
+                            cand_doc = {"url": cand, "body": body,
+                                        "ctype": ctype or "application/pdf",
+                                        "via": "browser_in_session_fetch"}
+                            if verify_fn is not None:
+                                if not verify_fn(cand_doc):
+                                    print(f"[browser] in-session candidate "
+                                          f"{tried}/{verify_budget} wrong class "
+                                          f"({cand}); trying next candidate")
+                                    continue
+                                cand_doc["verified"] = True
+                                cand_doc["_verified_for"] = query
+                            verified_hits.append(cand_doc)
+                            if verify_fn is None:
+                                break
+
+                        if verified_hits:
+                            def _hit_year(hit: dict) -> int:
+                                years = _extract_year_intent(hit["url"])
+                                return max(years) if years else -1
+                            verified_hits.sort(key=_hit_year, reverse=True)
+                            best = verified_hits[0]
+                            if len(verified_hits) > 1:
+                                print(f"[browser] {len(verified_hits)} candidates "
+                                      f"passed class verification; picked most "
+                                      f"recent by year: {best['url']}")
+                            print(f"[browser] resolved via in-session fetch: "
+                                  f"{best['url']} ({len(best['body'])} bytes, "
+                                  f"{best['ctype']})")
+                            resolved = best
+
+                    # ── Tier 3: click-to-download, WITH in-loop class verify ──
+                    skip_clicks = bool(block_marker) and BROWSER_SKIP_CLICK_ON_BLOCK
+                    if skip_clicks and labeled:
+                        print(f"[browser] skipping Tier 3 click-fallback: WAF/bot "
+                              f"challenge marker {block_marker!r} detected on this "
+                              f"page (BROWSER_SKIP_CLICK_ON_BLOCK=true)")
+                    if resolved is None and BROWSER_CLICK_FALLBACK and labeled and not skip_clicks:
+                        clicked = 0
+                        seen_labels: set[str] = set()
+                        for h in labeled:
+                            if clicked >= click_budget or not _time_left():
+                                if not _time_left():
+                                    print(f"[browser] Tier 3 stopped: "
+                                          f"BROWSER_RESOLVE_MAX_SECONDS "
+                                          f"({BROWSER_RESOLVE_MAX_SECONDS}s) exceeded")
+                                break
+                            txt = (h.get("text") or "").strip()
+                            if not txt:
+                                continue
+                            norm_txt = txt.lower()
+                            if norm_txt in seen_labels:
+                                continue
+                            seen_labels.add(norm_txt)
+                            click_key = f"click:{page_url}:{norm_txt}"
+                            if known_bad is not None and click_key in known_bad:
+                                print(f"[browser] skipping known-bad click target "
+                                      f"(failed at transport/UI layer on a prior "
+                                      f"query, not class-dependent): {txt[:40]!r} "
+                                      f"[{known_bad[click_key]}]")
+                                continue
+                            if not _click_target_visible(page, txt):
+                                print(f"[browser] click target not visible "
+                                      f"(fast-skip): {txt[:40]!r}")
+                                if known_bad is not None:
+                                    known_bad[click_key] = "not visible (fast-skip)"
+                                continue
+                            try:
+                                loc = page.get_by_text(txt, exact=False).first
+                                with page.expect_download(
+                                        timeout=BROWSER_CLICK_TIMEOUT_MS) as di:
+                                    loc.click(timeout=8000)
+                                dl = di.value
+                                path = dl.path()
+                                with open(path, "rb") as fh:
+                                    body = fh.read()
+                                fname = dl.suggested_filename or ""
+                            except Exception as exc:  # noqa: BLE001
+                                print(f"[browser] click-download attempt failed "
+                                      f"({txt[:40]!r}): {exc}")
+                                if known_bad is not None:
+                                    known_bad[click_key] = f"click failed: {type(exc).__name__}"
+                                continue
+                            if not body or len(body) > BROWSER_MAX_DOC_BYTES:
+                                continue
+                            clicked += 1
+                            ctype = ("application/pdf" if fname.lower().endswith(".pdf")
+                                     else "application/octet-stream")
+                            dl_url = ""
+                            try:
+                                dl_url = dl.url
+                            except Exception:  # noqa: BLE001
+                                pass
+                            cand_doc = {"url": dl_url or (final_url or page_url),
+                                        "body": body, "ctype": ctype,
+                                        "via": "browser_click_download"}
+                            if verify_fn is not None:
+                                if not verify_fn(cand_doc):
+                                    print(f"[browser] click-download candidate "
+                                          f"{clicked}/{click_budget} wrong class "
+                                          f"({fname or dl_url}); trying next control")
+                                    continue
+                                cand_doc["verified"] = True
+                                cand_doc["_verified_for"] = query
+                            print(f"[browser] resolved via click-download: "
+                                  f"{fname or dl_url} ({len(body)} bytes)")
+                            resolved = cand_doc
+                            break
+
+                    # ── Tier 4: in-browser deep navigation, IR-first ──
+                    if (resolved is None and BROWSER_DEEP_NAV and nav_links
+                            and _time_left()):
+                        visited_nav: set[str] = {page_url.rstrip("/")}
+                        _nav_terms = [t for t in _keywords(query) if len(t) > 3]
+                        def _nav_relevant(u: str) -> bool:
+                            if not _nav_terms:
+                                return True
+                            path = unquote(urlparse(u).path).lower()
+                            return any(t in path for t in _nav_terms)
+                        _seed_nav, _seen_seed = [], set()
+                        for u in nav_links:
+                            sf = _strip_fragment(u)
+                            if sf in _seen_seed or sf in visited_nav:
+                                continue
+                            _seen_seed.add(sf)
+                            if _is_ir_nav_link(u) or _nav_relevant(u):
+                                _seed_nav.append(u)
+                        _seed_nav.sort(key=lambda u: 0 if _is_ir_nav_link(u) else 1)
+                        if not _seed_nav:
+                            _seed_nav = [u for u in nav_links[:5]]
+                        frontier = [(u, 1) for u in _seed_nav]
+                        print(f"[browser][nav] IR-prioritized frontier: "
+                              f"{len(_seed_nav)}/{len(nav_links)} nav links "
+                              f"(IR-nav first, query terms {_nav_terms} secondary)")
+                        nav_pages_done = 0
+                        req = context.request
+                        while frontier and resolved is None and _time_left():
+                            nav_url, depth = frontier.pop(0)
+                            key = _strip_fragment(nav_url)
+                            if key in visited_nav or depth > BROWSER_NAV_MAX_DEPTH:
+                                continue
+                            visited_nav.add(key)
+                            if nav_pages_done >= BROWSER_NAV_MAX_PAGES:
+                                break
+                            nav_pages_done += 1
+                            try:
+                                page.goto(nav_url, wait_until=BROWSER_WAIT_UNTIL,
+                                          timeout=BROWSER_SESSION_TIMEOUT * 1000)
+                                page.wait_for_timeout(BROWSER_SETTLE_MS)
+                                _dismiss_cookie_modals(page)
+                                sub = page.evaluate(_JS_HARVEST_LINKS) or []
+                            except Exception as exc:  # noqa: BLE001
+                                print(f"[browser][nav] goto failed ({nav_url}): {exc}")
+                                continue
+                            sub_docs = sorted(
+                                [h for h in sub if _is_doc_url(h.get("url", ""))
+                                 and _domain_ok(h["url"]) and not _is_junk_host(h["url"])
+                                 and not _is_press_release_url(h["url"], h.get("text", ""))],
+                                key=lambda h: (_verify_priority(h["url"], query),
+                                               _doc_candidate_score(h["url"], h.get("text", ""),
+                                                                    query, domain)),
+                                reverse=True)[:pool_cap]
+                            print(f"[browser][nav] {nav_url}: {len(sub_docs)} doc "
+                                  f"candidates (depth={depth}, pages={nav_pages_done})")
+                            nav_hits: list[dict] = []
+                            for h in sub_docs:
+                                if not _time_left():
+                                    break
+                                cand = h["url"]
+                                if known_bad is not None and cand in known_bad:
+                                    continue
+                                if budget is not None and budget.is_rejected(cand):
+                                    continue
+                                try:
+                                    r = req.get(cand, headers={"referer": nav_url},
+                                                timeout=BROWSER_SESSION_TIMEOUT * 1000)
+                                    if r.status >= 400:
+                                        continue
+                                    ct = (r.headers or {}).get("content-type", "").split(";")[0].lower()
+                                    if not _acceptable(cand, ct):
+                                        continue
+                                    body = r.body()
+                                except Exception as exc:  # noqa: BLE001
+                                    if known_bad is not None:
+                                        known_bad[cand] = f"nav GET failed: {type(exc).__name__}"
+                                    continue
+                                if not body or len(body) > BROWSER_MAX_DOC_BYTES:
+                                    continue
+                                cd = {"url": cand, "body": body,
+                                      "ctype": ct or "application/pdf",
+                                      "via": "browser_deep_nav"}
+                                if verify_fn is not None:
+                                    if not verify_fn(cd):
+                                        continue
+                                    cd["verified"] = True
+                                    cd["_verified_for"] = query
+                                nav_hits.append(cd)
+                                if verify_fn is None:
+                                    break
+                            if nav_hits:
+                                nav_hits.sort(
+                                    key=lambda d: (max(_extract_year_intent(d["url"]))
+                                                   if _extract_year_intent(d["url"]) else -1),
+                                    reverse=True)
+                                resolved = nav_hits[0]
+                                print(f"[browser][nav] resolved via deep nav: "
+                                      f"{resolved['url']}")
+                                break
+                            for h in sub:
+                                u2 = h.get("url", "")
+                                if (_is_navigation_href(u2, domain)
+                                        and not _is_junk_host(u2)
+                                        and not _is_press_release_url(u2, h.get("text", ""))
+                                        and (_is_ir_nav_link(u2, h.get("text", ""))
+                                             or _nav_relevant(u2))):
+                                    nk = u2.rstrip("/")
+                                    if nk not in visited_nav:
+                                        frontier.append((u2, depth + 1))
+
+                    # ── Tier 5: optional vision ──
+                    if (resolved is None and BROWSER_VISION_MODEL_ID
+                            and _bedrock is not None and _time_left()):
+                        vres = _browser_vision_resolve(page, query, domain,
+                                                       final_url or page_url,
+                                                       _acceptable)
+                        if vres and vres.get("body"):
+                            if verify_fn is None or verify_fn(vres):
+                                if verify_fn is not None:
+                                    vres["verified"] = True
+                                    vres["_verified_for"] = query
+                                resolved = vres
+                                had_candidates = True
+                            else:
+                                print("[browser][vision] resolved candidate "
+                                      "rejected by class check")
+                finally:
+                    try:
+                        browser.close()
+                    except Exception:  # noqa: BLE001
+                        pass
+    except Exception as exc:  # noqa: BLE001
+        print(f"[browser] resolve failed ({page_url}): {exc}")
+        return {"_no_doc": True, "_had_candidates": had_candidates}
+
+    if resolved is None:
+        print(f"[browser] {page_url}: no document resolved through any tier")
+        return {"_no_doc": True, "_had_candidates": had_candidates}
+    return resolved
+
+
+def _browser_vision_resolve(page, query: str, domain: str | None,
+                            current_url: str, acceptable_fn) -> dict | None:
+    try:
+        shot = page.screenshot(full_page=True, type="png")
+    except Exception as exc:  # noqa: BLE001
+        print(f"[browser][vision] screenshot failed: {exc}")
+        return None
+
+    import base64
+    prompt = (
+        "You are looking at a screenshot of a company web page. The user wants "
+        f"to download this document: '{query}'. Identify the single best "
+        "clickable control (link or button) on the page that leads to that "
+        "document's file (PDF/DOC). Respond with ONLY JSON: "
+        '{"link_text": "<exact visible text of the control, or null>"}. '
+        "If nothing on the page plausibly leads to the document, return "
+        '{"link_text": null}.'
+    )
+    try:
+        resp = _bedrock.converse(
             modelId=BROWSER_VISION_MODEL_ID,
             messages=[{"role": "user", "content": [
                 {"text": prompt},
-                {"image": {"format": "jpeg", "source": {"bytes": screenshot}}},
+                {"image": {"format": "png", "source": {"bytes": shot}}},
             ]}],
-            inferenceConfig={"maxTokens": 80, "temperature": 0},
+            inferenceConfig={"maxTokens": 100},
         )
-        output = "".join(part.get("text", "") for part in response["output"]["message"]["content"])
-        output = re.sub(r"^```(?:json)?\s*|\s*```$", "", output.strip(), flags=re.I)
-        label = json.loads(output).get("label")
-        return str(label).strip() if label else None
-    except Exception as exc:
-        print(f"[browser] screenshot decision unavailable: {type(exc).__name__}")
+        text = "".join(b.get("text", "")
+                       for b in resp["output"]["message"]["content"]).strip()
+        obj = _parse_llm_json(text)
+        link_text = (obj or {}).get("link_text")
+    except Exception as exc:  # noqa: BLE001
+        print(f"[browser][vision] model call failed: {exc}")
         return None
 
+    if not link_text or not isinstance(link_text, str):
+        print("[browser][vision] model found no download control")
+        return None
 
-def _browser_click_download(page, company: Company, request: DocumentRequest) -> list[Candidate]:
-    controls = page.locator("a, button, [role='link'], [role='button']")
-    available = _browser_controls(page)
-    attempts = [item for item in available if "download" in item.get("text", "").lower()]
-    if not attempts:
-        return []
-    if len(attempts) > 1:
-        selected_label = _browser_vision_choice(page, request)
-        if selected_label:
-            attempts = [item for item in available if item.get("text") == selected_label]
-    downloaded: list[Candidate] = []
-    for control_data in attempts[:3]:
-        try:
-            control = controls.nth(int(control_data["index"]))
-            with page.expect_download(timeout=BROWSER_CLICK_TIMEOUT_MS) as download_info:
-                control.click(timeout=BROWSER_CLICK_TIMEOUT_MS)
-            download = download_info.value
-            path = download.path()
-            if not path:
-                continue
-            with open(path, "rb") as document_file:
-                body = document_file.read(MAX_DOCUMENT_BYTES + 1)
-            if not body or len(body) > MAX_DOCUMENT_BYTES:
-                continue
-            source_url = download.url or page.url
-            candidate = Candidate(
-                url=source_url,
-                source_tier="browser",
-                title=download.suggested_filename or control_data.get("text", ""),
-                discovered_from=page.url,
-                body=body,
-                content_type="application/pdf" if body.startswith(b"%PDF") else "application/octet-stream",
-                metadata={"browser_path": page.url, "discovery": "rendered_click"},
-            )
-            if _is_allowed_candidate(candidate, company):
-                downloaded.append(candidate)
-        except Exception as exc:
-            print(f"[browser] download click skipped: {type(exc).__name__}")
-    return downloaded
-
-
-def _browser_candidates(company: Company, request: DocumentRequest, diagnostics: list[str]) -> list[Candidate]:
-    """Navigate approved company pages with remote Playwright as the final tier."""
-    if not USE_BROWSER or not request.allow_browser or not company.official_domains:
-        return []
+    print(f"[browser][vision] model chose control text: {link_text!r}")
     try:
-        from bedrock_agentcore.tools.browser_client import BrowserClient
-        from playwright.sync_api import sync_playwright
-    except ImportError as exc:  # Image configuration issue, not a retrieval result.
-        diagnostics.append(f"browser dependencies unavailable: {type(exc).__name__}")
-        return []
-
-    seeds: list[str] = []
-    for domain in company.official_domains:
-        root = f"https://{_normalise_domain(domain)}"
-        seeds.extend(urljoin(root, path) for path in ["/", *DOCUMENT_RULES[request.document_type]["site_paths"]])
-    queue: deque[str] = deque(dict.fromkeys(seeds))
-    visited: set[str] = set()
-    started = time.monotonic()
-    browser_client = BrowserClient(region=BROWSER_REGION)
-    try:
-        browser_client.start(
-            identifier=BROWSER_IDENTIFIER,
-            name=f"reportiq{uuid.uuid4().hex[:12]}",
-            session_timeout_seconds=BROWSER_SESSION_TIMEOUT_SECONDS,
-            viewport={"width": 1440, "height": 1000},
-        )
-        ws_url, headers = browser_client.generate_ws_headers()
-        with sync_playwright() as playwright:
-            browser = playwright.chromium.connect_over_cdp(ws_url, headers=headers)
-            context = browser.contexts[0] if browser.contexts else browser.new_context()
-            page = context.pages[0] if context.pages else context.new_page()
-            while queue and len(visited) < BROWSER_MAX_PAGES and time.monotonic() - started < BROWSER_MAX_SECONDS:
-                url = queue.popleft()
-                if url in visited or not any(_host_matches(url, domain) for domain in company.official_domains):
-                    continue
-                visited.add(url)
-                try:
-                    page.goto(url, wait_until="domcontentloaded", timeout=BROWSER_CLICK_TIMEOUT_MS)
-                    page.wait_for_timeout(750)
-                except Exception as exc:
-                    diagnostics.append(f"browser navigation {url}: {type(exc).__name__}")
-                    continue
-                _browser_select_requested_year(page, request)
-                direct = _browser_document_candidates(page, company, request)
-                if direct:
-                    browser.close()
-                    return direct
-                downloaded = _browser_click_download(page, company, request)
-                if downloaded:
-                    browser.close()
-                    return downloaded
-                _browser_expand_navigation(page, request)
-                direct = _browser_document_candidates(page, company, request)
-                if direct:
-                    browser.close()
-                    return direct
-                for next_url in _browser_navigation_urls(page, company, request):
-                    if next_url not in visited:
-                        queue.append(next_url)
-            browser.close()
-    except Exception as exc:
-        diagnostics.append(f"browser session failed: {type(exc).__name__}")
-    finally:
+        loc = page.get_by_text(link_text, exact=False).first
+        with page.expect_download(timeout=BROWSER_CLICK_TIMEOUT_MS) as di:
+            loc.click(timeout=8000)
+        dl = di.value
+        with open(dl.path(), "rb") as fh:
+            body = fh.read()
+        fname = dl.suggested_filename or ""
+        if not body or len(body) > BROWSER_MAX_DOC_BYTES:
+            return None
+        ctype = ("application/pdf" if fname.lower().endswith(".pdf")
+                 else "application/octet-stream")
+        dl_url = ""
         try:
-            browser_client.stop()
-        except Exception:
+            dl_url = dl.url
+        except Exception:  # noqa: BLE001
             pass
-    return []
-
-
-def _queue_fargate_browser_job(company: Company, request: DocumentRequest, run_id: str, diagnostics: list[str]) -> str | None:
-    """Queue a long-running normal-browser attempt; never queue a bypass task."""
-    if _sqs is None or not FARGATE_BROWSER_QUEUE_URL:
+        print(f"[browser][vision] resolved via vision-guided click: "
+              f"{fname or dl_url} ({len(body)} bytes)")
+        return {"url": dl_url or current_url, "body": body, "ctype": ctype,
+                "via": "browser_vision_click"}
+    except Exception as exc:  # noqa: BLE001
+        print(f"[browser][vision] click failed: {exc}")
         return None
-    job_id = uuid.uuid4().hex
-    message = {
-        "job_id": job_id,
-        "run_id": run_id,
-        "company": asdict(company),
-        "request": asdict(request),
-        "policy": {
-            "allow_login": False,
-            "allow_captcha_bypass": False,
-            "allow_waf_bypass": False,
-        },
+
+
+# ─── Store (idempotent, content-addressed) ────────────────────────────────────
+def _write_provenance_if_missing(item: dict) -> bool:
+    if _table is None:
+        return False
+    try:
+        _table.put_item(Item=item, ConditionExpression="attribute_not_exists(s3_key)")
+        return True
+    except _table.meta.client.exceptions.ConditionalCheckFailedException:
+        return False
+    except Exception as exc:  # noqa: BLE001
+        print(f"[provenance] write failed ({exc})")
+        return False
+
+
+def _s3_put_if_missing(key: str, body: bytes, ctype: str, meta: dict) -> None:
+    if _s3 is None:
+        return
+    try:
+        _s3.head_object(Bucket=BUCKET, Key=key)
+        return
+    except Exception:  # noqa: BLE001
+        pass
+    _s3.put_object(Bucket=BUCKET, Key=key, Body=body, ContentType=ctype, Metadata=meta)
+
+
+PRESIGN_EXPIRY_SECONDS = int(os.environ.get("PRESIGN_EXPIRY_SECONDS", "3600"))
+
+
+def _presign(s3_key: str) -> str | None:
+    if _s3 is None or not BUCKET or not s3_key:
+        return None
+    try:
+        return _s3.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": BUCKET, "Key": s3_key},
+            ExpiresIn=PRESIGN_EXPIRY_SECONDS,
+        )
+    except Exception as exc:  # noqa: BLE001
+        print(f"[presign] failed for {s3_key}: {exc}")
+        return None
+
+
+def _write_metadata_sidecar(s3_key, company, url, digest, ctype, query,
+                            report_class=None, year=None, run_id=""):
+    """Write <s3_key>.metadata.json so the downstream Bedrock Knowledge Base can
+    filter by company / doc_class / year at retrieval time."""
+    if _s3 is None or not BUCKET:
+        return
+    classes = ([report_class] if report_class
+               else [c for c, _ in _matched_doc_classes(query)])
+    yrs = ([year] if year else sorted(_extract_year_intent(query)))
+    meta = {
+        "company": _slug(company), "company_name": company,
+        "doc_class": classes[0] if classes else None,
+        "doc_classes": classes,
+        "year": (yrs[-1] if yrs else None),
+        "source_url": url, "sha256": digest, "content_type": ctype,
+        "run_id": run_id, "query": query,
     }
     try:
-        _sqs.send_message(QueueUrl=FARGATE_BROWSER_QUEUE_URL, MessageBody=json.dumps(message))
-        return job_id
-    except Exception as exc:
-        diagnostics.append(f"fargate browser queue failed: {type(exc).__name__}")
-        return None
+        _s3.put_object(Bucket=BUCKET, Key=s3_key + ".metadata.json",
+                       Body=json.dumps(meta, ensure_ascii=True).encode("utf-8"),
+                       ContentType="application/json")
+    except Exception as exc:  # noqa: BLE001
+        print(f"[metadata] sidecar write failed for {s3_key}: {exc}")
 
 
-def _google_candidates(company: Company, request: DocumentRequest) -> list[Candidate]:
-    if not GOOGLE_API_KEY or not GOOGLE_CX:
-        return []
-    rule = DOCUMENT_RULES[request.document_type]
-    query = " ".join([company.legal_name, rule["search_terms"][0], str(request.year or ""), "filetype:pdf"]).strip()
-    candidates: list[Candidate] = []
-    for domain in company.official_domains:
-        params = urlencode({"key": GOOGLE_API_KEY, "cx": GOOGLE_CX, "q": query, "siteSearch": _normalise_domain(domain), "siteSearchFilter": "i", "num": 10})
-        try:
-            data = _fetch_json(f"https://www.googleapis.com/customsearch/v1?{params}")
-        except RetrievalError:
-            continue
-        for item in data.get("items", []):
-            url = str(item.get("link", ""))
-            candidate = Candidate(url, "site_scoped_search", str(item.get("title", "")))
-            if _is_allowed_candidate(candidate, company):
-                candidates.append(candidate)
-    return candidates
-
-
-def _brave_candidates(company: Company, request: DocumentRequest) -> list[Candidate]:
-    if not BRAVE_SEARCH_API_KEY:
-        return []
-    rule = DOCUMENT_RULES[request.document_type]
-    candidates: list[Candidate] = []
-    for domain in company.official_domains:
-        query = f'site:{_normalise_domain(domain)} "{rule["search_terms"][0]}" {request.year or ""} filetype:pdf'
-        try:
-            data = _fetch_json("https://api.search.brave.com/res/v1/web/search?" + urlencode({"q": query, "count": 10}), {"X-Subscription-Token": BRAVE_SEARCH_API_KEY})
-        except RetrievalError:
-            continue
-        for item in (data.get("web") or {}).get("results", []):
-            candidate = Candidate(str(item.get("url", "")), "site_scoped_search", str(item.get("title", "")))
-            if _is_allowed_candidate(candidate, company):
-                candidates.append(candidate)
-    return candidates
-
-
-def _search_candidates(company: Company, request: DocumentRequest) -> list[Candidate]:
-    candidates = _google_candidates(company, request) or _brave_candidates(company, request)
-    unique = {candidate.url: candidate for candidate in candidates if candidate.url}
-    return sorted(unique.values(), key=lambda item: _score_link(item, request), reverse=True)[:MAX_CANDIDATES_PER_TIER]
-
-
-def _fetch_and_select(candidates: Iterable[Candidate], company: Company, request: DocumentRequest, diagnostics: list[str]) -> tuple[Candidate | None, Validation | None]:
-    accepted: list[tuple[Candidate, Validation]] = []
-    for candidate in candidates:
-        if candidate.body is None:
-            try:
-                headers = None
-                if candidate.source_tier == "registry" and "sec.gov" in candidate.url:
-                    headers = {"User-Agent": SEC_USER_AGENT}
-                elif candidate.metadata.get("auth") == "companies_house":
-                    auth = base64.b64encode(f"{COMPANIES_HOUSE_API_KEY}:".encode()).decode()
-                    headers = {"Authorization": f"Basic {auth}"}
-                candidate.body, candidate.content_type = _fetch(candidate.url, headers)
-            except RetrievalError as exc:
-                diagnostics.append(f"{candidate.source_tier} fetch {candidate.url}: {exc}")
-                continue
-        validation = _validate(candidate, company, request)
-        if validation.accepted:
-            accepted.append((candidate, validation))
-    if not accepted:
-        return None, None
-    return max(accepted, key=lambda item: item[1].score)
-
-
-def _store(company: Company, request: DocumentRequest, run_id: str, candidate: Candidate, validation: Validation) -> dict[str, Any]:
-    assert candidate.body is not None
-    digest = hashlib.sha256(candidate.body).hexdigest()
-    year = str(request.year) if request.year else "undated"
-    s3_key = f"{_slug(company.legal_name)}/{request.document_type}/{year}/{digest[:12]}-{_safe_filename(candidate.url, candidate.content_type)}"
-    if _s3 is not None:
-        _s3.put_object(Bucket=BUCKET, Key=s3_key, Body=candidate.body, ContentType=candidate.content_type, Metadata={"source_url": candidate.url[:1900], "sha256": digest, "request_id": request.id})
-    record = {
-        "company": _slug(company.legal_name), "s3_key": s3_key, "run_id": run_id,
-        "request_id": request.id, "document_type": request.document_type, "year": request.year,
-        "report": validation.title, "source_url": candidate.url, "source_tier": candidate.source_tier,
-        "source_metadata": candidate.metadata, "hash": digest, "content_type": candidate.content_type,
-        "validation_score": validation.score, "validation_reasons": validation.reasons,
-        "llm_verified": validation.llm_verified,
-        "downloaded": dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat(),
+def _store(company: str, run_id: str, url: str, body: bytes, ctype: str,
+           title: str, query: str = "") -> dict:
+    digest  = hashlib.sha256(body).hexdigest()
+    s3_key  = f"{_slug(company)}/{digest[:12]}-{_safe_name(url)}"
+    _s3_put_if_missing(s3_key, body, ctype,
+                       {"source_url": url, "sha256": digest, "run_id": run_id})
+    _write_metadata_sidecar(s3_key, company, url, digest, ctype, query, run_id=run_id)
+    wrote = _write_provenance_if_missing({
+        "company": _slug(company), "s3_key": s3_key, "run_id": run_id,
+        "report": title or _safe_name(url), "source_url": url, "query": query,
+        "hash": digest, "content_type": ctype,
+        "downloaded": dt.datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
         "rag_status": "Pending",
+    })
+    return {
+        "status": "stored" if wrote else "duplicate",
+        "s3_key": s3_key,
+        "s3_uri": f"s3://{BUCKET}/{s3_key}" if BUCKET else "(no bucket configured)",
+        "download_url": _presign(s3_key),
+        "source_url": url, "content_type": ctype, "sha256": digest,
+        "report": title or _safe_name(url),
     }
-    status = "stored"
-    if _table is not None:
-        try:
-            _table.put_item(Item=record, ConditionExpression="attribute_not_exists(s3_key)")
-        except _table.meta.client.exceptions.ConditionalCheckFailedException:
-            status = "duplicate"
-    download_url = None
-    if _s3 is not None:
-        download_url = _s3.generate_presigned_url("get_object", Params={"Bucket": BUCKET, "Key": s3_key}, ExpiresIn=PRESIGN_EXPIRY_SECONDS)
-    return {"status": status, "request_id": request.id, "document_type": request.document_type, "year": request.year, "report": validation.title, "s3_key": s3_key, "s3_uri": f"s3://{BUCKET}/{s3_key}" if BUCKET else None, "download_url": download_url, "source_url": candidate.url, "source_tier": candidate.source_tier, "validation_score": validation.score, "validation_reasons": validation.reasons}
 
 
-def _parse_company(payload: dict[str, Any]) -> Company:
-    raw = payload.get("company")
-    if not isinstance(raw, dict):
-        raise ValueError("company must be an object with legal_name and official_domains")
-    legal_name = str(raw.get("legal_name", "")).strip()
-    domains = tuple(_normalise_domain(str(value)) for value in raw.get("official_domains", []) if str(value).strip())
-    if not legal_name:
-        raise ValueError("company.legal_name is required")
-    if not domains and not raw.get("cik") and not raw.get("companies_house_number"):
-        raise ValueError("company requires official_domains, cik, or companies_house_number")
-    return Company(legal_name=legal_name, official_domains=domains, aliases=tuple(str(value) for value in raw.get("aliases", [])), ticker=raw.get("ticker"), cik=str(raw["cik"]) if raw.get("cik") else None, country=raw.get("country"), companies_house_number=raw.get("companies_house_number"), trusted_document_hosts=tuple(_normalise_domain(str(value)) for value in raw.get("trusted_document_hosts", [])))
+# ─── Confidence + single-selection search ─────────────────────────────────────
+def _confident(decision: dict, query: str = "") -> bool:
+    if not decision.get("selected_url") or not decision.get("topic_match"):
+        return False
+    if not decision.get("company_match", True):
+        return False
+    if _extract_year_intent(query):
+        return bool(decision.get("year_match"))
+    return True
 
 
-def _parse_requests(payload: dict[str, Any]) -> list[DocumentRequest]:
-    raw_requests = payload.get("requests")
-    if not isinstance(raw_requests, list) or not raw_requests:
-        raise ValueError("requests must be a non-empty list; use one item per desired document")
-    requests: list[DocumentRequest] = []
-    for index, raw in enumerate(raw_requests, 1):
-        if not isinstance(raw, dict):
-            raise ValueError("every request must be an object")
-        document_type = str(raw.get("document_type", "")).strip().lower()
-        if document_type not in DOCUMENT_RULES:
-            raise ValueError(f"unsupported document_type {document_type!r}; supported: {', '.join(DOCUMENT_RULES)}")
-        year = raw.get("year")
-        if year is not None and (not isinstance(year, int) or year < 1990 or year > dt.date.today().year + 1):
-            raise ValueError("request.year must be a four-digit integer")
-        requests.append(DocumentRequest(
-            id=str(raw.get("id") or f"request-{index}"),
-            document_type=document_type,
-            year=year,
-            allow_search=bool(raw.get("allow_search", True)),
-            allow_browser=bool(raw.get("allow_browser", USE_BROWSER)),
-        ))
-    return requests
+def _find_best_document(search_queries: list[str], limit: int, company: str = "") -> dict:
+    """Search all query variants via a bounded PARALLEL fan-out, merge/dedupe by
+    URL, rank + HEAD-filter, sample top candidates, then ONE grouped LLM
+    selection across all of them (fail-closed)."""
+    primary = search_queries[0]
+    fanout = _parallel_web_search(search_queries, limit)
+    results_map: dict[str, tuple[list[dict], str]] = {}
+    query_logs: list[dict] = []
+    for q in search_queries:
+        # v40 (bug fix): dict.get(key, default) only uses default when the key
+        # is MISSING, not when its value is None — read defensively.
+        _res = fanout.get(q)
+        hits, via = _res if _res is not None else ([], "not-run")
+        results_map[q] = (hits, via)
+        query_logs.append({"query": q, "results_found": len(hits), "via": via})
+        print(f"[find][query] {q!r} -> {len(hits)} hits via={via}")
 
+    via = results_map.get(primary, ([], "unknown"))[1]
+    by_url: dict[str, dict] = {}
+    merged: list[dict] = []
+    for q in search_queries:
+        is_alias = q != primary
+        for hit in results_map.get(q, ([], ""))[0]:
+            u = hit.get("url", "")
+            if not u:
+                continue
+            if u not in by_url:
+                h = dict(hit)
+                h["_from_alias"] = is_alias
+                h["_source_query"] = q
+                by_url[u] = h
+                merged.append(h)
+            elif by_url[u].get("_from_alias") and not is_alias:
+                by_url[u]["_from_alias"] = False
+                by_url[u]["_source_query"] = q
 
-def _run_request(company: Company, request: DocumentRequest, run_id: str, diagnostics: list[str]) -> dict[str, Any]:
-    discovery_tiers = [
-        ("registry", lambda: _registry_candidates(company, request, diagnostics)),
-        ("official_site", lambda: _official_site_candidates(company, request, diagnostics)),
-    ]
-    if request.allow_search:
-        discovery_tiers.append(("site_scoped_search", lambda: _search_candidates(company, request)))
-    if request.allow_browser:
-        discovery_tiers.append(("browser", lambda: _browser_candidates(company, request, diagnostics)))
-    for tier, discover in discovery_tiers:
-        candidates = discover()
-        candidate, validation = _fetch_and_select(candidates, company, request, diagnostics)
-        if candidate and validation:
-            return {"status": "validated", "request": asdict(request), "candidate": candidate, "validation": validation}
-        diagnostics.append(f"{request.id}: no validated result from {tier}")
-    if request.allow_browser:
-        job_id = _queue_fargate_browser_job(company, request, run_id, diagnostics)
-        if job_id:
-            return {"status": "queued", "request": asdict(request), "browser_job_id": job_id}
-    return {"status": "not_found", "request": asdict(request)}
+    qdomain = _domain(primary)
+    _pre_junk_count = len(merged)
+    merged = [h for h in merged if not _is_junk_host(h.get("url", ""))]
+    junk_dropped = _pre_junk_count - len(merged)
+    if junk_dropped:
+        print(f"[find] dropped {junk_dropped} junk-host candidate(s) "
+              f"(app store / media / social / aggregator subdomains — generic, "
+              f"not company-specific)")
 
-
-def _invoke_sync(payload: dict[str, Any]) -> dict[str, Any]:
-    try:
-        company = _parse_company(payload)
-        requests = _parse_requests(payload)
-    except ValueError as exc:
-        return {"status": "invalid_request", "error": str(exc), "contract": "company + requests[]; see scripts/payload.example.json"}
-    run_id = str(payload.get("run_id") or uuid.uuid4().hex[:12])
-    diagnostics: list[str] = []
-    downloaded: list[dict[str, Any]] = []
-    results: list[dict[str, Any]] = []
-    queued: list[dict[str, Any]] = []
-    for request in requests:
-        outcome = _run_request(company, request, run_id, diagnostics)
-        if outcome["status"] == "validated":
-            stored = _store(company, request, run_id, outcome["candidate"], outcome["validation"])
-            downloaded.append(stored)
-            results.append({"request_id": request.id, "status": stored["status"], "source_tier": stored["source_tier"], "s3_key": stored["s3_key"]})
-        elif outcome["status"] == "queued":
-            queued_result = {"request_id": request.id, "status": "queued_browser_worker", "browser_job_id": outcome["browser_job_id"]}
-            queued.append(queued_result)
-            results.append(queued_result)
+    raw_count = len(merged)
+    domain_mode = "off"
+    if qdomain and ENFORCE_SITE_DOMAIN:
+        on_domain_hits = [h for h in merged if _host_matches(h.get("url", ""), qdomain)]
+        off_domain_hits = [h for h in merged if not _host_matches(h.get("url", ""), qdomain)]
+        if DOMAIN_FILTER_MODE == "hard":
+            if on_domain_hits:
+                merged = on_domain_hits
+                domain_mode = "hard(on_domain_hits_found)"
+            elif raw_count > 0:
+                domain_mode = "soft_fallback(no_on_domain_hits)"
+            else:
+                domain_mode = "no_hits_to_filter"
         else:
-            results.append({"request_id": request.id, "status": "not_found"})
-    return {"run_id": run_id, "company": company.legal_name, "requested": len(requests), "downloaded_count": len(downloaded), "results": results, "downloaded": downloaded, "queued": queued, "diagnostics": diagnostics, "policy": {"one_document_per_request": True, "registry_first": True, "require_llm_validation": REQUIRE_LLM_VALIDATION}}
+            if on_domain_hits and off_domain_hits:
+                domain_mode = f"soft(on_domain={len(on_domain_hits)},off_domain_kept={len(off_domain_hits)})"
+            elif on_domain_hits:
+                domain_mode = "soft(on_domain_only)"
+            elif raw_count > 0:
+                domain_mode = "soft(off_domain_only)"
+            else:
+                domain_mode = "no_hits_to_filter"
+
+    probe_only = False
+    if not merged and qdomain:
+        root = _site_root(primary)
+        if root:
+            merged = [{"title": "", "url": root, "_probe": True}]
+            via += "+direct-probe"
+            probe_only = True
+
+    ranked = _rank(merged, primary, qdomain)
+    ranked_urls = [p.get("url", "") for _, p in ranked[:TOP_N_FOR_LLM + 4] if p.get("url")]
+    print(f"[find] domain_mode={domain_mode} | HEAD pre-filtering {len(ranked_urls)} "
+          f"candidates for: {primary[:80]}")
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+        filtered = [h for h in pool.map(_head_check, ranked_urls) if h["ok"]]
+    print(f"[find] {len(filtered)}/{len(ranked_urls)} passed HEAD pre-filter")
+
+    candidate_infos: list[dict] = []
+    for h in filtered[:TOP_N_FOR_LLM]:
+        sample, body_bytes = "", None
+        try:
+            body_bytes, ctype_head = _fetch(h["url"])
+            if "html" in ctype_head:
+                sample = _extract_visible_text(body_bytes, company=company)
+                if len(sample) < 200:
+                    sample = body_bytes.decode("utf-8", "ignore")[:1500]
+            else:
+                sample = body_bytes[:1500].decode("utf-8", "ignore").replace("\x00", " ")
+            h = {**h, "head_ctype": ctype_head or h.get("head_ctype", "")}
+        except Exception as exc:  # noqa: BLE001
+            print(f"[find] sample fetch failed ({h['url']}): {exc}")
+        candidate_infos.append({**h, "content_sample": sample, "_body": body_bytes})
+
+    decision = (_llm_select_best(primary, candidate_infos, company=company) if candidate_infos
+                else {"selected_url": None, "topic_match": False, "year_match": False,
+                      "confidence": "low", "reason": "no-candidates"})
+
+    return {
+        "decision": decision, "candidate_infos": candidate_infos, "ranked": ranked,
+        "via": via, "on_domain": len(merged),
+        "off_domain_dropped": raw_count - len(merged), "query_logs": query_logs,
+        "probe_only": probe_only, "domain_mode": domain_mode,
+        "junk_dropped": junk_dropped,
+    }
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# LLM multi-query generation
+# ═══════════════════════════════════════════════════════════════════════════
+def _parse_llm_json_array(text):
+    text = (text or "").strip()
+    text = re.sub("^```(?:json)?" + chr(92) + "s*", "", text, flags=re.I)
+    text = re.sub(chr(92) + "s*```$", "", text)
+    start = text.find("[")
+    if start > 0:
+        text = text[start:]
+    return json.JSONDecoder().raw_decode(text)[0]
+
+
+def _llm_generate_search_queries(query, company, domain):
+    if _bedrock is None or not ENABLE_LLM_QUERY_GEN:
+        return []
+    cache_key = query + "||" + str(company) + "||" + str(domain)
+    if cache_key in _LLM_QUERY_GEN_CACHE:
+        return _LLM_QUERY_GEN_CACHE[cache_key]
+    filtered_rules = _filtered_doc_rules(query)
+    registries = ", ".join(FILING_REGISTRY_HOSTS[:8])
+    prompt = (
+        "Today is " + dt.date.today().isoformat() + ".\n"
+        "You are a search-query optimizer for finding OFFICIAL company documents "
+        "(annual reports, sustainability/ESG reports, governance policies, filings). "
+        "Generate up to " + str(LLM_QUERY_GEN_MAX) + " DISTINCT web-search query "
+        "strings that maximize the chance of finding the exact document below.\n\n"
+        "Company: " + str(company) + "\n"
+        "Company website domain: " + str(domain or "unknown") + "\n"
+        "Original query: " + query + "\n"
+        + (("Matched document-class rules: " + json.dumps(filtered_rules, ensure_ascii=True) + "\n") if filtered_rules else "")
+        + "\nCreate a MIX of these query shapes (only where sensible):\n"
+        "1. site:DOMAIN scoped query with the exact document class.\n"
+        "2. An UNSCOPED query: COMPANY DOCUMENTCLASS YEAR filetype:pdf.\n"
+        "3. An IR/investor-subdomain hint query (investors.DOMAIN, "
+        "sustainability.DOMAIN, static.DOMAIN) where the file likely lives.\n"
+        "4. A filing-registry-scoped query using ONE of these hosts if relevant "
+        "to the company jurisdiction: " + registries + ". Example: site:REGISTRY COMPANY CLASS.\n"
+        "5. Regional/naming variants of the class (annual report and accounts, "
+        "integrated annual report, BRSR, 10-K, DEF 14A as appropriate).\n\n"
+        "Rules: preserve any year exactly; never invent a year. Keep each query "
+        "under 200 chars. No markdown. Do NOT format domains as markdown links.\n\n"
+        "Output ONLY a JSON array of strings."
+    )
+    try:
+        text = _converse(prompt, max_tokens=500)
+        arr = _parse_llm_json_array(text)
+        out = []
+        seen = {query.strip().lower()}
+        for q in arr:
+            if not isinstance(q, str):
+                continue
+            q = _demarkdown(q.replace(chr(34), "")).strip()
+            if not q or q.lower() in seen:
+                continue
+            seen.add(q.lower())
+            out.append(q[:200])
+        out = out[:LLM_QUERY_GEN_MAX]
+        _LLM_QUERY_GEN_CACHE[cache_key] = out
+        print("[llm-querygen] generated " + str(len(out)) + " variants for " + repr(query))
+        return out
+    except Exception as exc:
+        print("[llm-querygen] failed (" + str(exc) + "); using regex aliases only")
+        _LLM_QUERY_GEN_CACHE[cache_key] = []
+        return []
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# parallel multi-query search fan-out
+# ═══════════════════════════════════════════════════════════════════════════
+def _parallel_web_search(queries, limit):
+    results = {}
+    if not queries:
+        return results
+    workers = max(1, min(SEARCH_FANOUT_WORKERS, len(queries)))
+
+    def _one(q):
+        try:
+            res = _single_web_search(q, limit)
+            # _single_web_search must return a 2-tuple; guard against a code
+            # path that returns None so the fan-out map never holds a None value.
+            return q, (res if res is not None else ([], "none-returned"))
+        except BaseException as exc:  # noqa: BLE001  (also catches CancelledError)
+            print(f"[search] worker crashed for {q!r}: {type(exc).__name__}: {exc}")
+            return q, ([], "error(" + type(exc).__name__ + ")")
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+        for q, res in pool.map(_one, queries):
+            results[q] = res
+    return results
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# sitemap enumeration (Tier 3a)
+# ═══════════════════════════════════════════════════════════════════════════
+_SITEMAP_POLICY_HINTS = re.compile(
+    "annual|report|sustainab|esg|policy|policies|governance|conduct|ethic|"
+    "whistlebl|anti-brib|corruption|remuneration|proxy|charter|committee|"
+    "tax|human-rights|modern-slavery|diversity|environment|health|safety|brsr",
+    re.I)
+_LOC_RE = "<loc>([^<]+)</loc>"
+_SITEMAP_LINE_RE = r"sitemap:\s*(\S+)"
+
+
+def _fetch_text(url, timeout):
+    try:
+        with urlopen(Request(url, headers=dict(_BROWSER_HEADERS)), timeout=timeout) as r:
+            return r.read().decode("utf-8", "ignore")
+    except Exception:
+        return None
+
+
+def _sitemap_locs(xml_text):
+    return [m.group(1).strip() for m in re.finditer(_LOC_RE, xml_text, re.I)]
+
+
+def _harvest_sitemap(domain, query):
+    if not ENABLE_SITEMAP or not domain:
+        return []
+    reg = _registrable(domain)
+    roots = ["https://" + domain, "https://www." + reg, "https://" + reg]
+    seen_roots = set()
+    sitemap_urls = []
+    for root in roots:
+        if root in seen_roots:
+            continue
+        seen_roots.add(root)
+        robots = _fetch_text(root + "/robots.txt", SITEMAP_FETCH_TIMEOUT)
+        if robots:
+            for line in robots.splitlines():
+                m = re.match(_SITEMAP_LINE_RE, line, re.I)
+                if m:
+                    sitemap_urls.append(m.group(1).strip())
+    for root in list(seen_roots):
+        sitemap_urls.append(root + "/sitemap.xml")
+        sitemap_urls.append(root + "/sitemap_index.xml")
+        sitemap_urls.append(root + "/sitemap-index.xml")
+    sitemap_urls = list(dict.fromkeys(sitemap_urls))
+    all_locs = []
+    fetched = set()
+    to_process = list(sitemap_urls)
+    nested = 0
+    while to_process and len(all_locs) < SITEMAP_MAX_URLS and nested < SITEMAP_MAX_NESTED:
+        sm = to_process.pop(0)
+        if sm in fetched:
+            continue
+        fetched.add(sm)
+        nested += 1
+        xml = _fetch_text(sm, SITEMAP_FETCH_TIMEOUT)
+        if not xml:
+            continue
+        for loc in _sitemap_locs(xml):
+            if loc.lower().endswith(".xml") or "sitemap" in loc.lower():
+                if loc not in fetched:
+                    to_process.append(loc)
+            else:
+                all_locs.append(loc)
+        if len(all_locs) >= SITEMAP_MAX_URLS:
+            break
+    if not all_locs:
+        return []
+    cands = []
+    for u in all_locs:
+        if _registrable(urlparse(u).netloc) != reg:
+            continue
+        path = unquote(urlparse(u).path)
+        if _is_doc_url(u) or _SITEMAP_POLICY_HINTS.search(path):
+            cands.append(u)
+    cands = list(dict.fromkeys(cands))
+    ranked = _rank([{"url": u, "title": "", "snippet": ""} for u in cands], query, domain)
+    out = [c["url"] for _, c in ranked[:SITEMAP_MAX_CANDIDATES]]
+    print("[sitemap] " + str(domain) + ": " + str(len(all_locs)) + " urls -> "
+          + str(len(cands)) + " candidates -> top " + str(len(out)))
+    return out
+
+
+def _sitemap_resolve(domain, query, verify_fn, known_bad=None, budget=None):
+    cands = _harvest_sitemap(domain, query)
+    if not cands:
+        return None
+    verified_hits = []
+    tried = 0
+    tbudget = BROWSER_MAX_VERIFY_CANDIDATES if verify_fn else 1
+    for cand in cands:
+        if budget is not None and not budget.time_left():
+            print("[sitemap] stopped: " + budget.why_stopped())
+            break
+        if tried >= tbudget:
+            break
+        if known_bad is not None and cand in known_bad:
+            continue
+        try:
+            cb, cc = _fetch(cand)
+        except Exception as exc:
+            if known_bad is not None:
+                known_bad[cand] = "sitemap GET failed: " + type(exc).__name__
+            continue
+        if not (_is_doc_ctype(cc) or (_is_doc_url(cand) and "html" not in (cc or "").lower())):
+            continue
+        tried += 1
+        cd = {"url": cand, "body": cb, "ctype": cc}
+        if verify_fn is not None and not verify_fn(cd):
+            continue
+        cd["verified"] = True
+        cd["_verified_for"] = query
+        cd["via"] = "sitemap"
+        verified_hits.append(cd)
+        if verify_fn is None:
+            break
+    if not verified_hits:
+        return None
+    verified_hits.sort(key=lambda d: (max(_extract_year_intent(d["url"]))
+                       if _extract_year_intent(d["url"]) else -1), reverse=True)
+    best = verified_hits[0]
+    print("[sitemap] resolved: " + best["url"] + " (" + str(len(best["body"])) + " bytes)")
+    return best
+
+
+# ─── Entrypoint ───────────────────────────────────────────────────────────────
 @app.entrypoint
-async def invoke(payload: dict[str, Any], context: Any = None) -> dict[str, Any]:
-    return _invoke_sync(payload or {})
+async def invoke(payload: dict, context=None) -> dict:
+    loop = asyncio.get_event_loop()
+    ping_task = None
+    if context is not None:
+        async def _ping_loop():
+            while True:
+                await asyncio.sleep(20)
+                try:
+                    await context.ping(status="HEALTHY_BUSY")
+                except Exception:  # noqa: BLE001
+                    pass
+        ping_task = asyncio.create_task(_ping_loop())
+    try:
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            result = await loop.run_in_executor(pool, _invoke_sync, payload)
+        return result
+    finally:
+        if ping_task:
+            ping_task.cancel()
+
+
+def _deep_static_crawl(seed_url: str, domain: str | None, query: str,
+                       verify_fn, known_bad: dict | None = None,
+                       budget: "_QueryBudget | None" = None) -> dict | None:
+    """Tier 3b: recursively fetch same-domain HTML landing pages, regex-crawl
+    each for document links, class-verify every doc, return the most-recent
+    verified match."""
+    if not DEEP_STATIC_CRAWL:
+        return None
+    visited: set[str] = set()
+    frontier = [(seed_url, 0)]
+    pages = 0
+    verified_hits: list[dict] = []
+    while frontier and pages < DEEP_STATIC_MAX_PAGES:
+        url, depth = frontier.pop(0)
+        if budget is not None and not budget.time_left():
+            print(f"[deep-crawl] stopped: {budget.why_stopped()}")
+            break
+        k = url.rstrip("/")
+        if k in visited:
+            continue
+        visited.add(k)
+        pages += 1
+        try:
+            body, ctype = _fetch(url)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[deep-crawl] fetch failed ({url}): {exc}")
+            continue
+        if "html" not in (ctype or "").lower():
+            continue
+        cands, _ = _page_doc_candidates(body, url, query)
+        doc_cands = [u for u in cands if _is_doc_url(u) and not _is_junk_host(u)]
+
+        def _uy(u):
+            ys = _extract_year_intent(u)
+            return max(ys) if ys else -1
+
+        doc_cands = sorted(doc_cands, key=lambda u: (_verify_priority(u, query), _uy(u)),
+                           reverse=True)
+        print(f"[deep-crawl] {url} (depth={depth}, page={pages}): "
+              f"{len(doc_cands)} doc candidates")
+        for cand in doc_cands:
+            if known_bad is not None and cand in known_bad:
+                continue
+            try:
+                cb, cc = _fetch(cand)
+            except Exception as exc:  # noqa: BLE001
+                if known_bad is not None:
+                    known_bad[cand] = f"deep GET failed: {type(exc).__name__}"
+                continue
+            if not (_is_doc_ctype(cc) or (_is_doc_url(cand)
+                    and "html" not in (cc or "").lower())):
+                continue
+            cd = {"url": cand, "body": cb, "ctype": cc}
+            if verify_fn is not None and not verify_fn(cd):
+                continue
+            cd["verified"] = True
+            cd["_verified_for"] = query
+            cd["via"] = "deep_static_crawl"
+            verified_hits.append(cd)
+        if verified_hits:
+            break
+        if depth < DEEP_STATIC_MAX_DEPTH:
+            for sub in _subpage_links(body, url, query, domain or _domain(query) or ""):
+                if sub.rstrip("/") not in visited:
+                    frontier.append((sub, depth + 1))
+    if not verified_hits:
+        return None
+    verified_hits.sort(
+        key=lambda d: (max(_extract_year_intent(d["url"]))
+                       if _extract_year_intent(d["url"]) else -1), reverse=True)
+    best = verified_hits[0]
+    print(f"[deep-crawl] resolved: {best['url']} ({len(best['body'])} bytes)")
+    return best
+
+
+# ─── Orchestrator ─────────────────────────────────────────────────────────────
+def _invoke_sync(payload: dict) -> dict:
+    run_id = (payload or {}).get("run_id") or uuid.uuid4().hex[:8]
+
+    # ── Company context: accepts a structured dict OR a legacy string ──
+    _raw_company = (payload or {}).get("company")
+    if isinstance(_raw_company, dict):
+        company_ctx = {
+            "name": _raw_company.get("name") or "unknown",
+            "domain": _raw_company.get("domain") or "",
+            "jurisdiction": (_raw_company.get("jurisdiction") or "").lower(),
+            "ticker": _raw_company.get("ticker") or "",
+            "cik": _raw_company.get("cik") or "",
+            "companies_house_number": _raw_company.get("companies_house_number") or "",
+        }
+    else:
+        company_ctx = {
+            "name": _raw_company or "unknown",
+            "domain": (payload or {}).get("domain") or "",
+            "jurisdiction": ((payload or {}).get("jurisdiction") or "").lower(),
+            "ticker": (payload or {}).get("ticker") or "",
+            "cik": (payload or {}).get("cik") or "",
+            "companies_house_number": (payload or {}).get("companies_house_number") or "",
+        }
+    company_raw = company_ctx["name"]
+    company = _slug(company_raw)
+
+    # ── Per-run browser switch (Tier 4). Browser runs only when the deploy has
+    #    USE_BROWSER=true AND the run did not explicitly disable it. ──
+    _be = (payload or {}).get("browser_enabled")
+    _use_browser = USE_BROWSER if _be is None else (USE_BROWSER and bool(_be))
+
+    region_override = (payload or {}).get("alias_region")
+    if region_override is None and company_ctx.get("jurisdiction"):
+        region_override = _normalize_alias_region(company_ctx["jurisdiction"])
+    if region_override is None:
+        region_override = _infer_alias_region_from_domain(company_ctx.get("domain"))
+
+    # ── Build work items from structured `reports` OR legacy web_query<N> ──
+    work_items: list[dict] = []
+    reports = (payload or {}).get("reports")
+    if isinstance(reports, list) and reports:
+        _dom = company_ctx.get("domain") or ""
+        for _r in reports:
+            if not isinstance(_r, dict):
+                continue
+            _rc = str(_r.get("report_class") or _r.get("class") or "").strip()
+            if not _rc:
+                continue
+            try:
+                _yr = int(_r.get("year")) if _r.get("year") else None
+            except Exception:  # noqa: BLE001
+                _yr = None
+            _parts = [company_raw, _rc] + ([str(_yr)] if _yr else [])
+            _q = " ".join(_parts)
+            if _dom:
+                _q = f"{_q} site:{_dom}"
+            work_items.append({"raw": _q, "report_class": _rc.lower(), "year": _yr})
+    else:
+        _queries = {k.strip(): v for k, v in (payload or {}).items()
+                    if re.match(r"web_query\d+$", k.strip(), re.I)
+                    and v and str(v).strip()}
+        for _v in _queries.values():
+            work_items.append({"raw": str(_v), "report_class": None, "year": None})
+
+    if not work_items:
+        return {"error": "payload had neither a `reports` array nor web_query<N> "
+                         "fields", "run_id": run_id}
+
+    diag: dict = {
+        "run_id": run_id,
+        "company": company,
+        "company_raw": company_raw,
+        "code_version": CODE_VERSION,
+        "search_backend": SEARCH_BACKEND,
+        "use_browser_deploy": USE_BROWSER,
+        "browser_enabled_run": _use_browser,
+        "tier2_registry": ENABLE_REGISTRY_TIER,
+        "v39_filing_fallback_all_classes": FILING_FALLBACK_ALL_CLASSES,
+        "alias_region": region_override,
+        "work_item_count": len(work_items),
+        "per_query": [],
+    }
+
+    stored: list[dict] = []
+    duplicates: list[dict] = []
+    failures: list[dict] = []
+    stored_by_url: dict[str, dict] = {}
+    stored_by_hash: dict[str, dict] = {}
+    done_queries: set[str] = set()
+    _root_crawl_cache: dict[str, dict] = {}
+    _known_bad: dict[str, str] = {}
+
+    def _material_for(url: str, found: dict) -> tuple[bytes | None, str]:
+        for ci in found.get("candidate_infos", []):
+            if ci.get("url") == url and ci.get("_body") is not None:
+                return ci["_body"], ci.get("head_ctype", "")
+        try:
+            return _fetch(url)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[resolve] material fetch failed ({url}): {exc}")
+            return None, ""
+
+    def _resolve_from_html(page_url: str, page_body: bytes, dom: str | None,
+                           query: str, vfn, budget) -> dict | None:
+        cands, _ = _page_doc_candidates(page_body, page_url, query)
+        doc_cands = [u for u in cands
+                     if _is_doc_url(u) and not _is_junk_host(u)
+                     and not _is_press_release_url(u)]
+        doc_cands = _sort_for_verify(doc_cands, query)
+        hits: list[dict] = []
+        for cand in doc_cands[:BROWSER_MAX_VERIFY_CANDIDATES]:
+            if budget is not None and not budget.time_left():
+                break
+            if _known_bad.get(cand):
+                continue
+            try:
+                cb, cc = _fetch(cand)
+            except Exception as exc:  # noqa: BLE001
+                _known_bad[cand] = f"html-crawl GET failed: {type(exc).__name__}"
+                continue
+            if not (_is_doc_ctype(cc) or (_is_doc_url(cand)
+                    and "html" not in (cc or "").lower())):
+                continue
+            cd = {"url": cand, "body": cb, "ctype": cc}
+            if vfn is not None and not vfn(cd):
+                continue
+            cd["via"] = "search+html_crawl"
+            hits.append(cd)
+        if not hits:
+            return None
+        hits.sort(key=lambda d: (max(_extract_year_intent(d["url"]))
+                  if _extract_year_intent(d["url"]) else -1), reverse=True)
+        return hits[0]
+
+    def _commit(resolved: dict, prepared: str, stage: str, base_log: dict) -> dict:
+        rec = _store(company, run_id, resolved["url"], resolved["body"],
+                     resolved["ctype"], "", prepared)
+        rec["stage"] = stage
+        digest = rec["sha256"]
+        if digest in stored_by_hash or resolved["url"] in stored_by_url:
+            base_log["status"] = "duplicate_existing"
+        else:
+            stored_by_url[resolved["url"]] = rec
+            stored_by_hash[digest] = rec
+            (stored if rec["status"] == "stored" else duplicates).append(rec)
+            base_log["status"] = ("ok" if rec["status"] == "stored"
+                                  else "duplicate_existing")
+        base_log["resolved_via"] = resolved.get("via", stage)
+        base_log["stage"] = stage
+        base_log["documents"] = [rec["s3_key"]]
+        print(f"[store] {rec['status'].upper()} ({stage}): {prepared!r} "
+              f"-> {rec['s3_key']}")
+        return rec
+
+    # ─────────────────────────── per-report loop ───────────────────────────
+    for _item in work_items:
+        raw = _item["raw"]
+        known_class = _item.get("report_class")
+        known_year = _item.get("year")
+        prepared = _prepare_query(str(raw))
+        if not prepared or prepared in done_queries:
+            continue
+        done_queries.add(prepared)
+        _budget = _QueryBudget()
+
+        matched_classes = [c for c, _ in _matched_doc_classes(prepared)]
+        domain = _domain(prepared)
+        verify_fn = _make_browser_verify_fn(prepared, budget=_budget, company=company_raw)
+
+        base_log: dict = {
+            "raw": str(raw).strip(),
+            "prepared": prepared,
+            "known_class": known_class,
+            "known_year": known_year,
+            "matched_classes": matched_classes,
+            "status": "pending",
+            "resolved_via": None,
+            "stage": None,
+            "documents": [],
+        }
+
+        # ── Tier 1: Google (Vertex) search + alias / LLM-generated fan-out ──
+        search_queries = [prepared]
+        for alt in _alias_queries(prepared, region_override):
+            if alt not in search_queries:
+                search_queries.append(alt)
+        for gen in _llm_generate_search_queries(prepared, company_raw, domain):
+            if gen not in search_queries:
+                search_queries.append(gen)
+
+        found = _find_best_document(search_queries, MAX_RESULTS, company=company_raw)
+        decision = found["decision"]
+        base_log["via"] = found.get("via")
+        base_log["domain_mode"] = found.get("domain_mode")
+        base_log["decision_reason"] = decision.get("reason")
+
+        resolved: dict | None = None
+        stage: str | None = None
+
+        if _confident(decision, prepared) and decision.get("selected_url"):
+            sel = decision["selected_url"]
+            body, ctype = _material_for(sel, found)
+            if body is not None:
+                if _is_doc_ctype(ctype) or _is_doc_url(sel):
+                    resolved = {"url": sel, "body": body,
+                                "ctype": ctype or "application/pdf", "via": "search"}
+                    stage = "search"
+                else:
+                    dug = _resolve_from_html(sel, body, domain, prepared,
+                                             verify_fn, _budget)
+                    if dug:
+                        resolved = dug
+                        stage = "search+html_crawl"
+
+        # ── Tier 2: official registry fallback (SEC EDGAR + Companies House) ──
+        if resolved is None and ENABLE_REGISTRY_TIER:
+            _reg_class = known_class or (matched_classes[0] if matched_classes else None)
+            _reg_year = known_year or (max(_extract_year_intent(prepared))
+                                       if _extract_year_intent(prepared) else None)
+            if _reg_class and report_specs.registries_for(_reg_class):
+                reg = registry_tier.registry_resolve(
+                    company_ctx, _reg_class, _reg_year, verify_fn=verify_fn)
+                if reg and reg.get("body"):
+                    resolved = reg
+                    stage = "registry"
+
+        # ── Tier 3a: sitemap enumeration ──
+        if resolved is None and domain:
+            sm = _sitemap_resolve(domain, prepared, verify_fn,
+                                  known_bad=_known_bad, budget=_budget)
+            if sm:
+                resolved = sm
+                stage = "sitemap"
+
+        # ── Tier 3b: deep static crawl from the site root ──
+        if resolved is None:
+            root = _site_root(prepared) or (f"https://{domain}/" if domain else None)
+            if root:
+                dc = _deep_static_crawl(root, domain, prepared, verify_fn,
+                                        known_bad=_known_bad, budget=_budget)
+                if dc:
+                    resolved = dc
+                    stage = "deep_crawl"
+
+        # ── Tier 4: AgentCore Browser (per-run gated) ──
+        if resolved is None and _use_browser:
+            root = _site_root(prepared) or (f"https://{domain}/" if domain else None)
+            if root:
+                br = _browser_resolve_document(
+                    root, domain, prepared, cache=_root_crawl_cache,
+                    verify_fn=verify_fn, known_bad=_known_bad, budget=_budget)
+                if br and br.get("body"):
+                    resolved = br
+                    stage = "browser"
+
+        if resolved is not None:
+            _commit(resolved, prepared, stage or "unknown", base_log)
+        else:
+            base_log["status"] = "no_document_found"
+            failures.append({
+                "query": prepared,
+                "reason": (decision.get("reason") or "no class-verified document "
+                           "found through any tier (failed closed)"),
+            })
+            print(f"[result] NO DOCUMENT FOUND (failed closed): {prepared!r}")
+
+        diag["per_query"].append(base_log)
+
+    if company == "unknown" and stored:
+        # best-effort: adopt the slug of the first stored doc's key prefix
+        try:
+            company = stored[0]["s3_key"].split("/", 1)[0]
+            diag["company"] = company
+        except Exception:  # noqa: BLE001
+            pass
+
+    diag["gateway_debug"] = _GW_DEBUG or None
+    return {
+        "run_id": run_id,
+        "company": company,
+        "stored": stored,
+        "duplicates": duplicates,
+        "no_document_found": failures,
+        "counts": {
+            "stored": len(stored),
+            "duplicates": len(duplicates),
+            "not_found": len(failures),
+            "queries": len(done_queries),
+        },
+        "diagnostics": diag,
+    }
 
 
 if __name__ == "__main__":

@@ -27,7 +27,7 @@ CMD ["gunicorn", \
      "--bind", "0.0.0.0:8080", \
      "--workers", "2", \
      "--threads", "4", \
-     "--timeout", "660", \
+     "--timeout", "900", \
      "--keep-alive", "5", \
      "--access-logfile", "-", \
      "--error-logfile", "-", \

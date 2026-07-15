@@ -10,6 +10,14 @@ REGISTRY="${REPO%/*}"
 aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$REGISTRY"
 
 echo ">> building ${REPO}:${TAG} (linux/arm64)"
-docker buildx build --platform linux/arm64 -t "${REPO}:${TAG}" --push agent/
+# --load stores into local Docker daemon (always Docker v2 schema, never OCI).
+# Lambda only accepts Docker v2; buildx --push produces OCI image index by default.
+docker buildx build \
+  --platform linux/arm64 \
+  --provenance=false \
+  --load \
+  -t "${REPO}:${TAG}" \
+  agent/
 
+docker push "${REPO}:${TAG}"
 echo "Pushed ${REPO}:${TAG}"

@@ -3,44 +3,37 @@
 region    = "us-east-1"
 image_tag = "v1"
 
-# The old AgentCore managed web-search gateway is intentionally disabled. It
-# cannot enforce site: restrictions, so this registry-first runtime does not use
-# it for document retrieval.
-enable_web_search = false
+# Managed Web Search tool (Gateway + web-search connector via AWS CLI).
+enable_web_search      = true
+web_search_max_results = 10
 
-# The LLM only verifies candidates that have already passed deterministic
-# registry/domain/type/company/year gates. Keep this enabled in production.
+# Documents per query (1 = single best match per query).
+best_matches = 1
+
+# Enforce official domain only (strongly recommended — the managed search tool
+# ignores site: so we filter ourselves).
+enforce_site_domain = true
+
+# LLM document relevance selector. Set to a Bedrock model id you have enabled
+# in us-east-1 to reject wrong documents (e.g. political-policy for annual-report).
+# NOTE: the first-gen Nova models (nova-micro/lite/pro v1:0) are now LEGACY/EOL and
+# return "model has reached end of life" — do NOT use them. Live options:
+#   "amazon.nova-2-lite-v1:0"                     (current gen, cheap, recommended)
+#   "us.anthropic.claude-haiku-4-5-20251001"      (best judgement, ~$30/10k runs)
+# Leave empty to skip the relevance check (then wrong docs are kept).
 llm_model_id = "us.amazon.nova-2-lite-v1:0" #"amazon.nova-lite-v1:0"
-require_llm_validation = true
 
-# Required when using SEC EDGAR. Use a real monitored organisational contact,
-# as required by SEC fair-access policy. Do not use the placeholder below.
-#sec_user_agent = "Report IQ operations@example.com"
-
-# Optional UK Companies House API key.
-# companies_house_api_key = "..."
-
-# Optional Google Programmable Search. It runs only after registry and official
-# site/sitemap discovery fail, and is hard-scoped to official_domains.
+# Optional literal Google search (honors site:). Leave empty to use managed/DDG.
 # google_api_key = "AIza..."
 # google_cx      = "0123abc..."
 
-# Optional Brave Search API alternative. It is also only a site-scoped fallback.
-# brave_search_api_key = "..."
-
-# Final fallback for reports behind JavaScript navigation, year selectors, and
-# download buttons. It uses managed AgentCore Browser plus Playwright and runs
-# only for request items with "allow_browser": true.
+# AgentCore Browser tool — in-AWS headless Chromium, NO third-party data egress.
+# RECOMMENDED when company policy forbids third-party search tools. Renders JS and
+# finds deep PDF links the managed search tool misses. Slower per query (spins a
+# browser session) but fully in-account. The crawl + managed tool remain fallback.
 use_browser = true
-browser_region = "us-east-1"
 
-# Optional long-running Fargate browser worker. Enable only after selecting
-# approved network placement. It handles normal JavaScript navigation after the
-# AgentCore Browser tier fails, but reports login/CAPTCHA/WAF pages for manual
-# review and never attempts to bypass them.
-enable_fargate_browser_worker = true
-fargate_ecs_cluster_id        = "reportiq-cluster"
-fargate_subnet_ids            = ["subnet-0eb319a33bfde7293","subnet-0ccac81dc574f7dee"] #["subnet-...", "subnet-..."]
-fargate_security_group_ids    = ["sg-014957b1b0ad4b0a4"]
-fargate_assign_public_ip       = false
-sec_user_agent = "abhay.lunkad@spglobal.com"
+# Serper.dev — only if third-party tools are permitted (they send queries off-AWS).
+# Leave empty if company policy forbids third-party tools (use_browser instead).
+# serper_api_key = "your-serper-key"
+

@@ -2,7 +2,7 @@
 Report IQ — Flask Backend
 Account: 610639371721  Region: us-east-1
 
-Patches in this revision (1–6):
+Patches in this revision (1–6, plus 7-8 below):
   1. company + run_id are now included in the AgentCore payload. Previously
      only search_query + web_query* were sent, so the agent stored every file
      under s3 key prefix "unknown/" and wrote provenance with PK company=
@@ -35,6 +35,35 @@ Patches in this revision (1–6):
      and the row is flushed after each chunk so the UI shows the list grow.
      Per-chunk read timeout is 300s (a 4-query chunk cannot run long enough to
      hit it), which structurally removes the timeout->double-invoke path.
+  7. PER-QUERY RESULT TRACKING + MANUAL UPLOAD FALLBACK.
+     Each chunk's diagnostics now include a `results` list — one entry per
+     query in that chunk with either a matched downloaded file or a
+     'failed' status — so the portal can render a per-query row instead of
+     only chunk-level counts. This is a best-effort pairing: if the agent
+     response tags a downloaded item with its originating query/web_query
+     field, that's used; otherwise items are matched positionally in the
+     order the chunk's queries were sent (the agent processes web_query1..N
+     in order). A new POST /api/sources/upload route lets the portal fall
+     back to a manual multipart upload for any query where the agent could
+     not find a document; the file is written to S3 under the same slug
+     prefix the agent uses, provenance is recorded, and — if a run_id is
+     supplied — the matching per-query row in that run's diagnostics is
+     flipped from 'failed' to 'downloaded' so the UI shows a Download button
+     instead of Upload on the next refresh.
+  8. FIXED THE ACTUAL AGENT RESPONSE SCHEMA. Confirmed via raw CloudWatch body
+     dumps that the agent's real per-chunk JSON uses `stored` / `duplicates` /
+     `no_document_found` — never `downloaded` / `failures`, which patch #7's
+     code (and every version before it) was reading. Those keys never existed
+     in any real response, so every chunk silently reported downloaded=0,
+     failures=0 regardless of what actually happened — including chunks where
+     the agent's own logs showed a genuine [store] STORED. `stored` and
+     `duplicates` are both real, fully-downloadable successes (a duplicate
+     just means the file already existed in S3 under the same hash — nothing
+     was lost, nothing needs re-uploading); only `no_document_found` is an
+     actual failure. Each item's original agent-side "status" ("stored" vs
+     "duplicate") is preserved through to the per-query UI rows as a
+     `duplicate` flag so the portal can show "(already in S3)" without
+     treating it as anything other than success.
 """
 import os, json, uuid, re, threading, hashlib, logging, urllib.request, urllib.error
 import unicodedata
@@ -57,7 +86,6 @@ REPORTS_BUCKET    = os.environ.get("REPORTS_BUCKET",     "edo-coanalyst-report-6
 AGENT_RUNTIME_ARN = os.environ.get("AGENT_RUNTIME_ARN",
     "arn:aws:bedrock-agentcore:us-east-1:610639371721:runtime/edo_coanalyst_report-3dAfJRHyfY")
 AGENT_QUALIFIER   = os.environ.get("AGENT_QUALIFIER",    "DEFAULT")
-BROWSER_RESULTS_QUEUE_URL = os.environ.get("BROWSER_RESULTS_QUEUE_URL", "")
 STATIC_DIR        = os.environ.get("STATIC_DIR",
     os.path.join(os.path.dirname(__file__), "..", "static"))
 
@@ -71,23 +99,15 @@ STATIC_DIR        = os.environ.get("STATIC_DIR",
 # the durable fix is AgentCore's async invoke pattern, not a bigger number.
 AGENT_READ_TIMEOUT = int(os.environ.get("AGENT_READ_TIMEOUT", "600"))
 
-# The UI intentionally collects only a company name and its official website.
-# Document selection is a server-side policy, not a set of user-authored search
-# strings. This keeps every AgentCore run inside one verified company scope.
-DEFAULT_DOCUMENT_REQUESTS = (
-    "annual_report",
-    "sustainability_report",
-    "code_of_conduct",
-    "anti_bribery_policy",
-    "whistleblowing_policy",
-    "tax_strategy",
-    "supplier_code_of_conduct",
-    "proxy_statement",
-)
+# Chunking: how many web_query* fields per AgentCore invoke, and how many
+# invokes may run concurrently. concurrency=2 is the "mix of both" — faster
+# than pure sequential, capped low enough to avoid WebSearch 429 throttling.
+AGENT_CHUNK_SIZE        = int(os.environ.get("AGENT_CHUNK_SIZE",        "1"))
+AGENT_CHUNK_CONCURRENCY = int(os.environ.get("AGENT_CHUNK_CONCURRENCY", "3"))
 
-# A run is considered "stx`uck" if it has been running for more than this many minutes
-# (used only as a cheap outer gate for whether it's worth spawning a reconcile check —
-# the real decision uses the heartbeat below).
+# A run is considered "stuck" if it has been running for more than this many
+# minutes (used only as a cheap outer gate for whether it's worth spawning a
+# reconcile check — the real decision uses the heartbeat below).
 STUCK_THRESHOLD_MINUTES = 2
 
 # HEARTBEAT: the invoke thread refreshes `heartbeat_at` on the run row every time a
@@ -134,10 +154,6 @@ def get_s3():
         config=Config(signature_version="s3v4", s3={"addressing_style": "virtual"}),
     )
 
-
-def get_sqs():
-    return boto3.client("sqs", region_name=REGION)
-
 # ─── Company slug (MUST match agent._slug so S3 keys / provenance line up) ─────
 def _agent_slug(name: str) -> str:
     """
@@ -150,33 +166,6 @@ def _agent_slug(name: str) -> str:
     s = unicodedata.normalize("NFKD", name or "unknown")
     s = "".join(c for c in s if not unicodedata.combining(c))
     return re.sub(r"[^a-z0-9]+", "-", s.lower()).strip("-") or "unknown"
-
-
-def _official_domain(value: str) -> str:
-    """Normalize a UI website value to the exact domain sent to AgentCore."""
-    value = (value or "").strip().lower()
-    value = re.sub(r"^https?://", "", value)
-    return value.split("/", 1)[0].removeprefix("www.")
-
-
-def _structured_agent_payload(company: str, website: str, run_id: str) -> dict:
-    domain = _official_domain(website)
-    return {
-        "run_id": run_id,
-        "company": {
-            "legal_name": company,
-            "official_domains": [domain],
-        },
-        "requests": [
-            {
-                "id": document_type,
-                "document_type": document_type,
-                "allow_search": True,
-                "allow_browser": True,
-            }
-            for document_type in DEFAULT_DOCUMENT_REQUESTS
-        ],
-    }
 
 
 # ─── AgentCore invoke ─────────────────────────────────────────────────────────
@@ -602,6 +591,173 @@ def _summarize_agent_diagnostics(raw: dict) -> dict:
     }
 
 
+def _pair_queries_with_results(chunk_queries: list, downloaded: list, failures: list) -> list:
+    """
+    PATCH #7: best-effort per-query status for the UI.
+
+    Prefer an explicit query/web_query field carried on a downloaded item (if
+    the agent tags its results that way). If nothing is tagged, fall back to
+    positional pairing — the agent processes web_query1..N in order within a
+    chunk and (in practice) returns downloads in that same order, so the Nth
+    query maps to the Nth successful download once matched ones are excluded.
+
+    Every query in the chunk gets exactly one result entry:
+      {"query": ..., "status": "downloaded", "s3_key": ..., "file_name": ...,
+       "source_url": ...}
+    or
+      {"query": ..., "status": "failed"}
+
+    A query with no matched file is 'failed' so the portal can offer a manual
+    upload button for that specific query.
+    """
+    dl = [d for d in (downloaded or []) if isinstance(d, dict)]
+
+    # 1) Try explicit tagging first.
+    by_query = {}
+    for d in dl:
+        q = d.get("query") or d.get("web_query")
+        if q:
+            by_query[q] = d
+
+    results = []
+    pos = 0
+    for q in chunk_queries:
+        match = by_query.get(q)
+        if match is None and not by_query and pos < len(dl):
+            # 2) No tagging present anywhere in this chunk — fall back to
+            # positional pairing across the whole chunk.
+            match = dl[pos]
+            pos += 1
+        if match:
+            key = match.get("s3_key") or match.get("key") or ""
+            results.append({
+                "query":      q,
+                "status":     "downloaded",
+                "s3_key":     key,
+                # PATCH #8: agent items use "report" for the human-readable
+                # filename (no "file_name" key exists in the real schema) —
+                # fall back through both, then the s3_key basename.
+                "file_name":  match.get("file_name") or match.get("report")
+                              or (key.split("/")[-1] if key else ""),
+                "source_url": match.get("source_url") or match.get("url") or "",
+                # True when this result came from the agent's "duplicates"
+                # list (a file that already existed in S3) rather than
+                # "stored" (a brand-new save). Both are equally real,
+                # equally downloadable successes — this flag is purely
+                # cosmetic, for an "(already in S3)" note in the UI.
+                "duplicate":  match.get("status") == "duplicate",
+            })
+        else:
+            results.append({"query": q, "status": "failed"})
+    return results
+
+
+def _patch_run_with_upload(run_id: str, s3_key: str, file_name: str, query: str,
+                            chunk: str, dynamo=None) -> bool:
+    """
+    PATCH #7 (+ #9 fix below): after a manual upload succeeds, patch the run
+    row so the portal's next refresh shows a Download button instead of
+    Upload for that query, AND so the run-list "Failures" count actually
+    drops:
+      - append the file to the run's `downloaded` list (dedup by s3_key)
+      - flip the matching per-query row's status to 'downloaded' inside
+        diagnostics.per_chunk[*].results (matched by chunk index + query text
+        when both are supplied; falls back to matching by query text alone)
+      - PATCH #9: remove the matching entry from the run's top-level
+        `failures` list too. Previously this list (which feeds
+        countFailures() / the Runs table's "Failures" column) was never
+        touched by a manual upload — only `downloaded` and the per-query
+        diagnostics rows were patched — so a run could show a correct
+        per-query "downloaded" row for the uploaded query while the run-list
+        Failures count stayed frozen at its original value forever. Entries
+        in `failures` may be plain query strings or dicts carrying a
+        "query"/"web_query" key (the agent's no_document_found shape isn't
+        fully pinned down yet), so both are matched.
+    Returns False if the run row doesn't exist (upload + provenance still
+    succeed independently — this is purely a UI convenience patch).
+    """
+    if dynamo is None:
+        dynamo = get_dynamo()
+    tbl  = dynamo.Table(RUNS_TABLE)
+    item = tbl.get_item(Key={"run_id": run_id}).get("Item")
+    if not item:
+        return False
+
+    try:
+        downloaded = json.loads(item.get("downloaded") or "[]")
+    except Exception:
+        downloaded = []
+    if not isinstance(downloaded, list):
+        downloaded = []
+    if not any(isinstance(d, dict) and d.get("s3_key") == s3_key for d in downloaded):
+        downloaded.append({
+            "s3_key":      s3_key,
+            "file_name":   file_name,
+            "source_url":  ("manual-upload: " + query) if query else "manual-upload",
+            "manual_upload": True,
+        })
+
+    # PATCH #9: drop this query from the top-level failures list so the Runs
+    # table's Failures column count actually reflects the manual upload.
+    try:
+        failures = json.loads(item.get("failures") or "[]")
+    except Exception:
+        failures = []
+    if not isinstance(failures, list):
+        failures = []
+    if query:
+        def _is_this_query(f):
+            if isinstance(f, str):
+                return f == query
+            if isinstance(f, dict):
+                return f.get("query") == query or f.get("web_query") == query
+            return False
+        failures = [f for f in failures if not _is_this_query(f)]
+
+    try:
+        diag = json.loads(item.get("diagnostics") or "{}")
+    except Exception:
+        diag = {}
+    if not isinstance(diag, dict):
+        diag = {}
+
+    for pc in (diag.get("per_chunk") or []):
+        if not isinstance(pc, dict) or not isinstance(pc.get("results"), list):
+            continue
+        same_chunk = True
+        if chunk:
+            same_chunk = (str(pc.get("chunk")) == str(chunk))
+        if not same_chunk:
+            continue
+        for r in pc["results"]:
+            if not isinstance(r, dict):
+                continue
+            if query and r.get("query") == query and r.get("status") != "downloaded":
+                r.update({
+                    "status":     "downloaded",
+                    "s3_key":     s3_key,
+                    "file_name":  file_name,
+                    "manual_upload": True,
+                })
+
+    try:
+        tbl.update_item(
+            Key={"run_id": run_id},
+            UpdateExpression="SET #dl = :d, #dg = :dx, #fl = :fa",
+            ExpressionAttributeNames={"#dl": "downloaded", "#dg": "diagnostics",
+                                      "#fl": "failures"},
+            ExpressionAttributeValues={
+                ":d":  json.dumps(downloaded),
+                ":dx": json.dumps(diag),
+                ":fa": json.dumps(failures),
+            },
+        )
+        return True
+    except Exception as ex:
+        log.error("[upload] run patch write failed for %s: %s", run_id[:8], ex)
+        return False
+
+
 def _get_stuck_runs(dynamo=None) -> list:
     """Scan runs table for any run with status=running."""
     if dynamo is None:
@@ -651,67 +807,6 @@ _reconciler_thread.start()
 log.info("Background reconciler started (every 60s)")
 
 
-def _consume_browser_results():
-    """Merge asynchronous Fargate browser outcomes into the originating run."""
-    if not BROWSER_RESULTS_QUEUE_URL:
-        return
-    sqs = get_sqs()
-    while True:
-        try:
-            messages = sqs.receive_message(
-                QueueUrl=BROWSER_RESULTS_QUEUE_URL,
-                MaxNumberOfMessages=10,
-                WaitTimeSeconds=20,
-                VisibilityTimeout=60,
-            ).get("Messages", [])
-            for message in messages:
-                try:
-                    result = json.loads(message["Body"])
-                    run_id = str(result.get("run_id", ""))
-                    if not run_id:
-                        raise ValueError("browser result has no run_id")
-                    runs = get_dynamo().Table(RUNS_TABLE)
-                    row = runs.get_item(Key={"run_id": run_id}).get("Item", {})
-                    downloaded = json.loads(row.get("downloaded", "[]"))
-                    if result.get("status") in {"stored", "duplicate"} and isinstance(result.get("document"), dict):
-                        document = result["document"]
-                        if not any(item.get("s3_key") == document.get("s3_key") for item in downloaded if isinstance(item, dict)):
-                            downloaded.append(document)
-                    status = "complete" if downloaded else result.get("status", "no_results")
-                    runs.update_item(
-                        Key={"run_id": run_id},
-                        UpdateExpression="SET #st = :s, #fin = :f, #dl = :d, #dg = :dx",
-                        ExpressionAttributeNames={"#st": "status", "#fin": "finished_at", "#dl": "downloaded", "#dg": "diagnostics"},
-                        ExpressionAttributeValues={
-                            ":s": status,
-                            ":f": datetime.now(timezone.utc).isoformat(),
-                            ":d": json.dumps(downloaded),
-                            ":dx": json.dumps({"browser_result": result}),
-                        },
-                    )
-                    query_id = row.get("query_id")
-                    if query_id:
-                        get_dynamo().Table(QUERIES_TABLE).update_item(
-                            Key={"query_id": query_id},
-                            UpdateExpression="SET #st = :s, #upd = :u",
-                            ExpressionAttributeNames={"#st": "status", "#upd": "updated_at"},
-                            ExpressionAttributeValues={":s": status, ":u": datetime.now(timezone.utc).isoformat()},
-                        )
-                    log.info("[browser-result] run=%s status=%s", run_id[:8], status)
-                    sqs.delete_message(QueueUrl=BROWSER_RESULTS_QUEUE_URL, ReceiptHandle=message["ReceiptHandle"])
-                except Exception:
-                    log.exception("[browser-result] unable to process result")
-        except Exception:
-            log.exception("[browser-result] poll failed; retrying")
-            import time
-            time.sleep(5)
-
-
-if BROWSER_RESULTS_QUEUE_URL:
-    threading.Thread(target=_consume_browser_results, daemon=True).start()
-    log.info("Browser result consumer started")
-
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # Routes — static
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -739,22 +834,23 @@ def save_query():
     table  = dynamo.Table(QUERIES_TABLE)
 
     for item in items:
+        web_queries = {k: v for k, v in item.items() if k.startswith("web_query")}
+        if not web_queries:
+            return jsonify({"error": "At least one web_query<N> field required"}), 400
+
         query_id = str(uuid.uuid4())
-        company  = str(item.get("company", "")).strip()
-        website  = _official_domain(str(item.get("official_website", item.get("website", ""))))
-        if not company or not website or "." not in website:
-            return jsonify({"error": "company and official_website are required"}), 400
+        company  = item.get("company", "Unknown")
         now_iso  = datetime.now(timezone.utc).isoformat()
 
         record = {
             "query_id":     query_id,
             "company":      company,
-            "official_website": website,
-            "document_types": list(DEFAULT_DOCUMENT_REQUESTS),
+            "search_query": item.get("search_query", ""),
             "status":       "pending",
             "created_at":   now_iso,
             "updated_at":   now_iso,
             "run_id":       None,
+            **web_queries,
         }
         table.put_item(Item=record)
         log.info("Saved query %s for %s", query_id, company)
@@ -795,8 +891,6 @@ def trigger_query(query_id):
     item   = resp.get("Item")
     if not item:
         return jsonify({"error": "Query not found"}), 404
-    if not item.get("official_website"):
-        return jsonify({"error": "This is a legacy web-query record. Submit the company and official website again to use the registry-first workflow."}), 409
     run_id = _async_invoke(item)
     return jsonify({"run_id": run_id, "query_id": query_id, "status": "triggered"})
 
@@ -1029,6 +1123,101 @@ def sync_provenance_from_s3():
                     "total": created + skipped})
 
 
+@app.route("/api/sources/upload", methods=["POST"])
+def upload_source():
+    """
+    PATCH #7 — manual upload fallback.
+
+    Used from the Runs detail view when the agent could not find a document
+    for a specific query. The person picks a file locally; it is streamed to
+    S3 under the SAME slug prefix the agent itself uses (so it appears
+    alongside agent-downloaded files for the same company), a provenance row
+    is written (SOLE writer path, same as everywhere else), and — if a
+    run_id is supplied — the matching per-query row inside that run's
+    diagnostics is flipped from 'failed' to 'downloaded' so the portal's
+    next refresh shows a Download button instead of Upload for that row.
+
+    Expects multipart/form-data:
+      file      - required, the file itself
+      company   - required, company display name (used to derive the slug)
+      query     - optional, the exact web_query text this file answers
+      run_id    - optional, the run whose diagnostics should be patched
+      query_id  - optional, the DynamoDB query_id (for provenance linkage)
+      chunk     - optional, the chunk index the query belonged to (narrows
+                  the patch match when the same query text could appear in
+                  more than one chunk)
+    """
+    f = request.files.get("file")
+    if not f or not f.filename:
+        return jsonify({"error": "file is required (multipart field 'file')"}), 400
+    company = (request.form.get("company") or "").strip()
+    if not company:
+        return jsonify({"error": "company is required"}), 400
+
+    query    = (request.form.get("query")    or "").strip()
+    run_id   = (request.form.get("run_id")   or "").strip()
+    query_id = (request.form.get("query_id") or "").strip()
+    chunk    = (request.form.get("chunk")    or "").strip()
+
+    slug      = _agent_slug(company)
+    safe_name = re.sub(r"[^A-Za-z0-9._-]+", "_", os.path.basename(f.filename)).strip("_") or "upload"
+    s3_key    = f"{slug}/manual/{safe_name}"
+
+    try:
+        get_s3().put_object(
+            Bucket=REPORTS_BUCKET,
+            Key=s3_key,
+            Body=f.read(),
+            ContentType=f.mimetype or "application/octet-stream",
+            Metadata={"uploaded-by": "portal-manual", "query": query[:1024]},
+            # If the bucket's policy requires SSE-KMS to be specified explicitly
+            # on every PUT (rather than relying on the bucket's default
+            # encryption setting), uncomment the line below and set
+            # SSEKMSKeyId if a non-default CMK is required:
+            # ServerSideEncryption="aws:kms",
+        )
+    except ClientError as e:
+        log.error("[upload] S3 put_object failed for %s: %s", s3_key, e)
+        return jsonify({"error": f"S3 upload failed: {e}"}), 500
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    dynamo  = get_dynamo()
+
+    try:
+        _write_provenance_if_missing(
+            slug,
+            [{
+                "s3_key":     s3_key,
+                "source_url": ("manual-upload: " + query) if query else "manual-upload",
+                "rag_status": "Pending",
+            }],
+            run_id or "manual-upload", query_id or "manual-upload", now_iso, dynamo,
+        )
+    except Exception as ex:
+        # The file is already safely in S3; a provenance hiccup shouldn't fail
+        # the whole request — log it and continue so the person still gets a
+        # success response with the key they can look up manually if needed.
+        log.error("[upload] provenance write failed for %s: %s", s3_key, ex)
+
+    patched = False
+    if run_id:
+        try:
+            patched = _patch_run_with_upload(run_id, s3_key, safe_name, query, chunk, dynamo)
+        except Exception as ex:
+            log.error("[upload] run patch failed for %s: %s", run_id[:8], ex)
+
+    log.info("[upload] company=%s query=%r -> s3_key=%s run_patched=%s",
+             company, query, s3_key, patched)
+
+    return jsonify({
+        "ok":          True,
+        "s3_key":      s3_key,
+        "file_name":   safe_name,
+        "company":     company,
+        "run_patched": patched,
+    }), 201
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # /api/stats
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1083,75 +1272,6 @@ def _do_invoke(run_id: str, query_record: dict):
             log.error("[run %s] Could not write fatal status: %s", run_id[:8], ex2)
 
 
-def _do_structured_invoke(run_id: str, query_record: dict) -> None:
-    """Invoke the registry-first contract once for a company website pair."""
-    dynamo = get_dynamo()
-    runs_tbl = dynamo.Table(RUNS_TABLE)
-    queries_tbl = dynamo.Table(QUERIES_TABLE)
-    company = str(query_record["company"])
-    website = _official_domain(str(query_record["official_website"]))
-    query_id = str(query_record.get("query_id", "unknown"))
-    now_iso = datetime.now(timezone.utc).isoformat()
-    payload = _structured_agent_payload(company, website, run_id)
-
-    runs_tbl.put_item(Item={
-        "run_id": run_id,
-        "query_id": query_id,
-        "company": company,
-        "official_website": website,
-        "status": "running",
-        "started_at": now_iso,
-        "heartbeat_at": now_iso,
-        "payload": json.dumps(payload),
-        "downloaded": json.dumps([]),
-        "failures": json.dumps([]),
-        "diagnostics": json.dumps({"request_count": len(DEFAULT_DOCUMENT_REQUESTS)}),
-    })
-    queries_tbl.update_item(
-        Key={"query_id": query_id},
-        UpdateExpression="SET #st = :s, #rid = :r, #upd = :u",
-        ExpressionAttributeNames={"#st": "status", "#rid": "run_id", "#upd": "updated_at"},
-        ExpressionAttributeValues={":s": "running", ":r": run_id, ":u": now_iso},
-    )
-
-    raw = _invoke_agentcore_http(json.dumps(payload).encode("utf-8"))
-    try:
-        response = json.loads(raw.decode("utf-8")) if raw else {}
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise RuntimeError("AgentCore returned invalid JSON") from exc
-    if not isinstance(response, dict) or response.get("status") == "invalid_request":
-        raise RuntimeError(str(response.get("error", "AgentCore returned an invalid response")))
-
-    downloaded = response.get("downloaded") if isinstance(response.get("downloaded"), list) else []
-    queued = response.get("queued") if isinstance(response.get("queued"), list) else []
-    results = response.get("results") if isinstance(response.get("results"), list) else []
-    failures = [item for item in results if isinstance(item, dict) and item.get("status") == "not_found"]
-    if downloaded:
-        status = "complete"
-    elif queued:
-        status = "queued_browser_worker"
-    else:
-        status = "no_results"
-    finished_at = datetime.now(timezone.utc).isoformat()
-    runs_tbl.update_item(
-        Key={"run_id": run_id},
-        UpdateExpression="SET #st = :s, #fin = :f, #hb = :h, #dl = :d, #fl = :fa, #dg = :dx",
-        ExpressionAttributeNames={"#st": "status", "#fin": "finished_at", "#hb": "heartbeat_at", "#dl": "downloaded", "#fl": "failures", "#dg": "diagnostics"},
-        ExpressionAttributeValues={
-            ":s": status, ":f": finished_at, ":h": finished_at,
-            ":d": json.dumps(downloaded), ":fa": json.dumps(failures),
-            ":dx": json.dumps({"request_count": len(DEFAULT_DOCUMENT_REQUESTS), "agent_results": results, "queued": queued, "diagnostics": response.get("diagnostics", [])}),
-        },
-    )
-    queries_tbl.update_item(
-        Key={"query_id": query_id},
-        UpdateExpression="SET #st = :s, #upd = :u",
-        ExpressionAttributeNames={"#st": "status", "#upd": "updated_at"},
-        ExpressionAttributeValues={":s": status, ":u": finished_at},
-    )
-    log.info("[run %s] structured company=%s status=%s downloaded=%d queued=%d", run_id[:8], company, status, len(downloaded), len(queued))
-
-
 # ─── Chunking helpers (PATCH #6) ──────────────────────────────────────────────
 def _chunk_web_queries(query_record: dict, size: int) -> list:
     """
@@ -1199,25 +1319,56 @@ def _invoke_one_chunk(chunk_index: int, chunk_queries: list, company: str,
                 body = json.loads(raw.decode("utf-8"))
             except Exception:
                 body = {"raw": raw.decode("utf-8", errors="replace")}
-        downloaded = body.get("downloaded", [])  if isinstance(body, dict) else []
-        failures   = body.get("failures", [])    if isinstance(body, dict) else []
+        # PATCH #8: the agent's REAL response schema uses stored / duplicates /
+        # no_document_found — confirmed from raw CloudWatch body dumps. It does
+        # NOT use "downloaded" or "failures" (those keys never existed, so this
+        # was always silently reading empty defaults, no matter what the agent
+        # actually did — the root cause of every chunk showing 0/0 with no error
+        # even when the agent's own logs showed real [store] STORED lines).
+        #
+        # "stored"     -> the agent found and saved a NEW file this call.
+        # "duplicates" -> the agent found a matching file that ALREADY existed
+        #                 in S3 (same sha256/company/doc-class) and did not
+        #                 re-upload it. This is NOT a failure — the document is
+        #                 genuinely present in S3 and fully downloadable via the
+        #                 s3_key it carries; it's a success from every angle
+        #                 that matters to the portal (Sources tab, provenance,
+        #                 per-query Download button). Both lists are merged
+        #                 into `downloaded` so the entire rest of the pipeline
+        #                 (dedup, provenance write, per-query pairing) treats
+        #                 them identically. Each item's own "status" field
+        #                 ("stored" vs "duplicate") is preserved and passed
+        #                 through so the UI can still show a small "(already in
+        #                 S3)" note without changing the fact that it's a
+        #                 successful, downloadable result.
+        # "no_document_found" -> the only real failure list; the agent tried
+        #                 exhaustively and failed closed for that query.
+        stored     = body.get("stored", [])            if isinstance(body, dict) else []
+        duplicates = body.get("duplicates", [])        if isinstance(body, dict) else []
+        not_found  = body.get("no_document_found", []) if isinstance(body, dict) else []
+        downloaded = list(stored) + list(duplicates)
+        failures   = list(not_found)
         diag       = body.get("diagnostics", {}) if isinstance(body, dict) else {}
         log.info("[run %s] chunk %d done — downloaded=%d failures=%d",
                  run_id[:8], chunk_index, len(downloaded), len(failures))
         return {"chunk": chunk_index, "queries": chunk_queries,
                 "downloaded": downloaded, "failures": failures,
+                # PATCH #7: pre-computed per-query rows so the UI doesn't have
+                # to re-derive them and so the pairing logic lives in one place.
+                "results": _pair_queries_with_results(chunk_queries, downloaded, failures),
                 "diagnostics": diag, "error": None}
     except Exception as e:
         log.error("[run %s] chunk %d ERROR: %s", run_id[:8], chunk_index, e)
+        # PATCH #7: even a hard chunk failure gets per-query rows — every query
+        # in the chunk is 'failed' so the UI can still offer manual upload
+        # instead of only showing an opaque chunk-level error string.
         return {"chunk": chunk_index, "queries": chunk_queries,
                 "downloaded": [], "failures": [], "diagnostics": {},
+                "results": [{"query": q, "status": "failed"} for q in chunk_queries],
                 "error": str(e)[:500]}
 
 
 def _do_invoke_inner(run_id: str, query_record: dict):
-    if query_record.get("official_website"):
-        _do_structured_invoke(run_id, query_record)
-        return
     dynamo   = get_dynamo()
     runs_tbl = dynamo.Table(RUNS_TABLE)
     qry_tbl  = dynamo.Table(QUERIES_TABLE)
@@ -1310,6 +1461,9 @@ def _do_invoke_inner(run_id: str, query_record: dict):
         # throwing (which is what silently froze runs at "running" before),
         # pre-check the serialized size and drop to counts-only per_chunk detail
         # if it's getting large. This trades detail for guaranteed status writes.
+        # NOTE: dropping "results" here also removes the per-query Upload/
+        # Download rows for this run — the UI's fallback (chunk-level counts
+        # table) still renders in that case.
         diag_json = json.dumps(diag)
         if len(diag_json) > 300_000:
             log.warning("[run %s] diagnostics %d bytes — trimming per_chunk detail",
@@ -1424,7 +1578,10 @@ def _do_invoke_inner(run_id: str, query_record: dict):
                 if key not in downloaded_by_key:   # dedupe across chunks
                     downloaded_by_key[key] = {
                         "s3_key":     key,
-                        "file_name":  d.get("file_name") or key.split("/")[-1],
+                        # PATCH #8: agent items carry "report" for the display
+                        # filename, not "file_name" — same fallback as in
+                        # _pair_queries_with_results, kept in lockstep.
+                        "file_name":  d.get("file_name") or d.get("report") or key.split("/")[-1],
                         "source_url": d.get("source_url") or d.get("url") or "",
                     }
             if res.get("failures"):
@@ -1432,6 +1589,10 @@ def _do_invoke_inner(run_id: str, query_record: dict):
             per_chunk_diag.append({
                 "chunk":             res["chunk"],
                 "queries":           res["queries"],
+                # PATCH #7: per-query status rows (downloaded/failed), used by
+                # the Runs detail view to render one row per query with either
+                # a Download or an Upload action.
+                "results":           res.get("results") or [],
                 "downloaded":        len(res.get("downloaded") or []),
                 "failures":          len(res.get("failures") or []),
                 "error":             res.get("error"),
@@ -1454,9 +1615,9 @@ def _do_invoke_inner(run_id: str, query_record: dict):
                 log.error("[run %s] chunk future crashed: %s", run_id[:8], e)
                 with lock:
                     chunks_done[0] += 1
-                    per_chunk_diag.append({"chunk": "?", "queries": [], "downloaded": 0,
-                                           "failures": 0, "error": str(e)[:500],
-                                           "agent_diagnostics": {}})
+                    per_chunk_diag.append({"chunk": "?", "queries": [], "results": [],
+                                           "downloaded": 0, "failures": 0,
+                                           "error": str(e)[:500], "agent_diagnostics": {}})
                     _flush_run_row(final=False)
 
     # ── S3 direct-check fallback: agent may have uploaded without enumerating ──

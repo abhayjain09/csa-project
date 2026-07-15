@@ -293,6 +293,82 @@ def _s3_prefix_for_company(company: str) -> str:
     return variants[0] if variants else _agent_slug(company) + "/"
 
 
+def _clean_company_reports(company: str, dynamo=None, s3=None) -> dict:
+    """Delete one company's reports and provenance before a fresh run.
+
+    Query definitions and historical run rows are deliberately retained:
+    reruns depend on the query record, and run rows are status/audit history.
+    Any AWS deletion error is raised so the agent cannot run over stale data.
+    """
+    if dynamo is None:
+        dynamo = get_dynamo()
+    if s3 is None:
+        s3 = get_s3()
+
+    company_slug = _agent_slug(company)
+    prefix = company_slug + "/"
+    deleted_s3 = 0
+
+    def _delete_s3_batch(objects):
+        nonlocal deleted_s3
+        for start in range(0, len(objects), 1000):
+            batch = objects[start:start + 1000]
+            if not batch:
+                continue
+            response = s3.delete_objects(
+                Bucket=REPORTS_BUCKET,
+                Delete={"Objects": batch, "Quiet": True},
+            )
+            errors = response.get("Errors") or []
+            if errors:
+                raise RuntimeError(f"S3 cleanup failed for {prefix}: {errors[:3]}")
+            deleted_s3 += len(batch)
+
+    # Delete current objects, then all retained versions/delete markers.
+    paginator = s3.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=REPORTS_BUCKET, Prefix=prefix):
+        _delete_s3_batch([{"Key": obj["Key"]} for obj in page.get("Contents", [])])
+
+    version_paginator = s3.get_paginator("list_object_versions")
+    for page in version_paginator.paginate(Bucket=REPORTS_BUCKET, Prefix=prefix):
+        versioned = []
+        for field in ("Versions", "DeleteMarkers"):
+            versioned.extend({"Key": obj["Key"], "VersionId": obj["VersionId"]}
+                             for obj in page.get(field, []))
+        _delete_s3_batch(versioned)
+
+    # Provenance is keyed by company slug + S3 key. Query the exact company
+    # partition instead of scanning or touching any other company's records.
+    provenance = dynamo.Table(PROVENANCE_TABLE)
+    deleted_provenance = 0
+    query_args = {
+        "KeyConditionExpression": "#company = :company",
+        "ExpressionAttributeNames": {"#company": "company"},
+        "ExpressionAttributeValues": {":company": company_slug},
+        "ProjectionExpression": "#company, s3_key",
+    }
+    while True:
+        response = provenance.query(**query_args)
+        with provenance.batch_writer() as batch:
+            for item in response.get("Items", []):
+                batch.delete_item(Key={"company": item["company"], "s3_key": item["s3_key"]})
+                deleted_provenance += 1
+        last_key = response.get("LastEvaluatedKey")
+        if not last_key:
+            break
+        query_args["ExclusiveStartKey"] = last_key
+
+    summary = {
+        "company": company,
+        "company_slug": company_slug,
+        "s3_deleted": deleted_s3,
+        "provenance_deleted": deleted_provenance,
+    }
+    log.info("[fresh-run-cleanup] company=%r slug=%s s3=%d provenance=%d",
+             company, company_slug, deleted_s3, deleted_provenance)
+    return summary
+
+
 def _list_s3_files_for_run(company: str, run_id: str) -> list:
     """
     List S3 objects belonging to this company. Tries multiple prefix variants
@@ -1461,6 +1537,17 @@ def _do_invoke_inner(run_id: str, query_record: dict):
             ExpressionAttributeValues={":s": "no_results", ":u": finished_at},
         )
         return
+
+    # Cleanup is synchronous and strict: no AgentCore invocation starts until
+    # this company's old S3 reports and provenance rows are gone. The outer
+    # _do_invoke guard marks the run failed if cleanup cannot complete.
+    cleanup = _clean_company_reports(company, dynamo=dynamo)
+    runs_tbl.update_item(
+        Key={"run_id": run_id},
+        UpdateExpression="SET #cleanup = :cleanup",
+        ExpressionAttributeNames={"#cleanup": "pre_run_cleanup"},
+        ExpressionAttributeValues={":cleanup": json.dumps(cleanup)},
+    )
 
     log.info("[run %s] company=%s — %d chunks of <=%d queries, concurrency=%d",
              run_id[:8], company, chunks_total, AGENT_CHUNK_SIZE, AGENT_CHUNK_CONCURRENCY)

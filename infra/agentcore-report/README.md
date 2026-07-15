@@ -136,6 +136,21 @@ aws bedrock-agentcore invoke-agent-runtime \
 The `s3_key` / `s3_uri` of each downloaded report is the answer you asked for.
 The same rows are written to the DynamoDB provenance table.
 
+## Latest annual-report behavior
+
+An Annual Report is labeled by its completed fiscal year, not by the calendar
+year in which the download runs. An undated Annual Report request therefore
+targets `current year - 1`: a run in 2026 requests FY2025, and a run in 2027
+requests FY2026. An explicitly requested historical year is never changed.
+
+For filing classes, the rendered investor-relations path runs before a broad
+corporate-site crawl. Static discovery is capped per page, preserves verification
+capacity for the browser, and may accept a configured document CDN only when the
+link originates on an official investor-relations page. The deployment defaults
+are controlled by `LATEST_COMPLETED_FISCAL_YEAR_LAG`,
+`DEEP_STATIC_MAX_DOC_CANDIDATES_PER_PAGE`, `BROWSER_RESERVED_VERIFIES`, and
+`TRUSTED_DOCUMENT_CDN_DOMAINS` in `locals.tf`.
+
 ## How it handles your minimal JSON
 No `company` field is needed — it's derived from the `site:` domain
 (`paccar.com` → `paccar`). The agent keeps only on-domain results and, when a hit

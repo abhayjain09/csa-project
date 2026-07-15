@@ -1,4 +1,8 @@
-"""Report download agent (single AgentCore Runtime) — v40.
+"""Report download agent (single AgentCore Runtime) — v41.
+
+v41 adds completed-fiscal-year targeting for undated Annual Report requests,
+browser-first resolution for filing classes, reserved cross-tier verification
+capacity, bounded static candidates, and investor-scoped trusted CDN discovery.
 
 v40 builds on v39's Gateway/Vertex search + deterministic AgentCore Browser DOM
 fallback and restructures the resolver into an explicit, ordered tier chain:
@@ -47,7 +51,7 @@ import registry_tier
 
 app = BedrockAgentCoreApp()
 
-CODE_VERSION = "v40"
+CODE_VERSION = "v41"
 
 # Tier 2 (official registry fallback) master switch. registry_tier.py reads its
 # own EDGAR_* / CH_* configuration from the environment.
@@ -72,6 +76,8 @@ VERTEX_FALLBACK_TO_GATEWAY = os.environ.get("VERTEX_FALLBACK_TO_GATEWAY", "false
 DEEP_STATIC_CRAWL = os.environ.get("DEEP_STATIC_CRAWL", "true").lower() != "false"
 DEEP_STATIC_MAX_DEPTH = int(os.environ.get("DEEP_STATIC_MAX_DEPTH", "3"))
 DEEP_STATIC_MAX_PAGES = int(os.environ.get("DEEP_STATIC_MAX_PAGES", "100"))
+DEEP_STATIC_MAX_DOC_CANDIDATES_PER_PAGE = int(os.environ.get(
+    "DEEP_STATIC_MAX_DOC_CANDIDATES_PER_PAGE", "20"))
 
 BROWSER_DEEP_NAV = os.environ.get("BROWSER_DEEP_NAV", "true").lower() != "false"
 BROWSER_NAV_MAX_DEPTH = int(os.environ.get("BROWSER_NAV_MAX_DEPTH", "2"))
@@ -91,6 +97,7 @@ BROWSER_CLICK_TIMEOUT_MS     = int(os.environ.get("BROWSER_CLICK_TIMEOUT_MS", "1
 BROWSER_MAX_DOC_BYTES        = int(os.environ.get("BROWSER_MAX_DOC_BYTES", str(80 * 1024 * 1024)))
 BROWSER_MAX_DOC_CANDIDATES   = int(os.environ.get("BROWSER_MAX_DOC_CANDIDATES", "20"))
 BROWSER_MAX_VERIFY_CANDIDATES = int(os.environ.get("BROWSER_MAX_VERIFY_CANDIDATES", "30"))
+BROWSER_RESERVED_VERIFIES = int(os.environ.get("BROWSER_RESERVED_VERIFIES", "20"))
 BROWSER_MAX_CLICK_ATTEMPTS = int(os.environ.get("BROWSER_MAX_CLICK_ATTEMPTS", "12"))
 BROWSER_RESOLVE_MAX_SECONDS = float(os.environ.get("BROWSER_RESOLVE_MAX_SECONDS", "1800"))
 BROWSER_VERIFY_CLASS = os.environ.get("BROWSER_VERIFY_CLASS", "true").lower() != "false"
@@ -101,6 +108,15 @@ MAX_RESULTS       = int(os.environ.get("WEB_SEARCH_MAX_RESULTS", "10"))
 BEST_MATCHES      = int(os.environ.get("BEST_MATCHES", "1"))
 DOC_ONLY          = os.environ.get("DOC_ONLY", "true").lower() != "false"
 CURRENT_YEAR      = dt.date.today().year
+LATEST_COMPLETED_FISCAL_YEAR_LAG = int(os.environ.get(
+    "LATEST_COMPLETED_FISCAL_YEAR_LAG", "1"))
+LATEST_COMPLETED_FISCAL_YEAR_CLASSES = {
+    c.strip().lower()
+    for c in os.environ.get(
+        "LATEST_COMPLETED_FISCAL_YEAR_CLASSES", "annual report",
+    ).split(",")
+    if c.strip()
+}
 ENFORCE_SITE_DOMAIN = os.environ.get("ENFORCE_SITE_DOMAIN", "true").lower() != "false"
 DOMAIN_FILTER_MODE = os.environ.get("DOMAIN_FILTER_MODE", "soft").strip().lower()
 
@@ -1085,6 +1101,39 @@ def _prepare_query(q: str) -> str:
     return q.strip()
 
 
+def _with_year_before_site(query: str, year: int) -> str:
+    """Add a fiscal year without corrupting a trailing or leading site: operator."""
+    site_match = re.search(r"\bsite:\s*\S+", query or "", re.I)
+    if not site_match:
+        return f"{query.strip()} {year}".strip()
+    site = site_match.group(0)
+    remainder = (query[:site_match.start()] + " " + query[site_match.end():]).strip()
+    return re.sub(r"\s+", " ", f"{remainder} {year} {site}").strip()
+
+
+def _apply_latest_completed_fiscal_year(query: str,
+                                         known_class: str | None = None,
+                                         known_year: int | None = None
+                                         ) -> tuple[str, int | None]:
+    """Resolve an undated recurring report request to the latest completed FY.
+
+    Annual reports describe a completed fiscal year. In calendar year 2026 the
+    preferred annual report is therefore FY2025, even when it was published in
+    2026. Explicit historical years always win.
+    """
+    explicit = _extract_year_intent(query)
+    if known_year or explicit:
+        return query, known_year or max(explicit)
+    classes = ({(known_class or "").strip().lower()} if known_class else
+               {c for c, _ in _matched_doc_classes(query)})
+    if not classes.intersection(LATEST_COMPLETED_FISCAL_YEAR_CLASSES):
+        return query, None
+    target = CURRENT_YEAR - max(1, LATEST_COMPLETED_FISCAL_YEAR_LAG)
+    resolved = _with_year_before_site(query, target)
+    print(f"[year] latest completed fiscal year: {query!r} -> {resolved!r}")
+    return resolved, target
+
+
 # ─── HEAD pre-filter ─────────────────────────────────────────────────────────
 _DOC_EXTS = (".pdf", ".doc", ".docx", ".rtf")
 
@@ -1382,6 +1431,7 @@ def _rank(hits: list[dict], query: str, site_domain: str | None) -> list[tuple[i
         if not urlparse(u).path.strip("/"):
             score -= 3
         score += _year_alignment_score(query, hay)
+        score += _filing_type_score_adjustment(u, hay, query)
         if c.get("_from_alias"):
             score += ALIAS_HIT_BOOST
         if "english" in hay:
@@ -1407,6 +1457,14 @@ _BROWSER_HEADERS = {
     "Accept-Encoding": "identity",
     "Connection": "keep-alive",
     "Upgrade-Insecure-Requests": "1",
+}
+
+TRUSTED_DOCUMENT_CDN_DOMAINS = {
+    d.strip().lower()
+    for d in os.environ.get(
+        "TRUSTED_DOCUMENT_CDN_DOMAINS", "q4cdn.com",
+    ).split(",")
+    if d.strip()
 }
 
 
@@ -1435,6 +1493,23 @@ def _is_doc_ctype(ctype: str) -> bool:
             or "ms-excel" in c or "application/octet-stream" in c or "rtf" in c)
 
 
+def _is_investor_page(url: str) -> bool:
+    parsed = urlparse(url or "")
+    host = parsed.netloc.lower().split(":")[0]
+    path = unquote(parsed.path).lower()
+    return (host.startswith(("investors.", "investor."))
+            or "/investors/" in path
+            or "/investor-relations/" in path
+            or "/investor_relations/" in path)
+
+
+def _is_trusted_document_cdn(url: str) -> bool:
+    host = urlparse(url or "").netloc.lower().split(":")[0]
+    reg = _registrable(host)
+    return any(host == d or host.endswith("." + d) or reg == _registrable(d)
+               for d in TRUSTED_DOCUMENT_CDN_DOMAINS)
+
+
 def _doc_links(html: bytes, base_url: str, domain: str) -> list[str]:
     txt = html.decode("utf-8", "ignore")
     found = []
@@ -1446,7 +1521,9 @@ def _doc_links(html: bytes, base_url: str, domain: str) -> list[str]:
             found.append(urljoin(base_url, href))
     out = []
     for u in found:
-        if _registrable(urlparse(u).netloc) == _registrable(domain) and u not in out:
+        same_site = _registrable(urlparse(u).netloc) == _registrable(domain)
+        trusted_ir_cdn = _is_investor_page(base_url) and _is_trusted_document_cdn(u)
+        if (same_site or trusted_ir_cdn) and u not in out:
             out.append(u)
     return out
 
@@ -1652,8 +1729,9 @@ class _QueryBudget:
         self.deadline = time.monotonic() + QUERY_MAX_SECONDS
         self.rejected: set[str] = set()
 
-    def can_verify(self) -> bool:
-        return (self.verifies < QUERY_MAX_VERIFIES
+    def can_verify(self, reserve: int = 0) -> bool:
+        usable_limit = max(0, QUERY_MAX_VERIFIES - max(0, reserve))
+        return (self.verifies < usable_limit
                 and time.monotonic() < self.deadline)
 
     def note_verify(self) -> None:
@@ -1662,7 +1740,11 @@ class _QueryBudget:
     def time_left(self) -> bool:
         return time.monotonic() < self.deadline
 
-    def why_stopped(self) -> str:
+    def why_stopped(self, reserve: int = 0) -> str:
+        usable_limit = max(0, QUERY_MAX_VERIFIES - max(0, reserve))
+        if reserve and self.verifies >= usable_limit:
+            return (f"pre-browser verify allowance {usable_limit} exhausted; "
+                    f"{min(reserve, QUERY_MAX_VERIFIES)} reserved for browser")
         if self.verifies >= QUERY_MAX_VERIFIES:
             return f"verify budget {QUERY_MAX_VERIFIES} exhausted"
         return f"wall-clock {QUERY_MAX_SECONDS}s exceeded"
@@ -1726,19 +1808,32 @@ def _click_target_visible(page, text: str, timeout_ms: int = 1500) -> bool:
         return False
 
 def _verify_priority(url: str, query: str) -> int:
-    name = unquote(urlparse(url).path).rsplit("/", 1)[-1].lower()
+    path = unquote(urlparse(url).path).lower()
+    name = path.rsplit("/", 1)[-1]
     terms = [t for t in _keywords(query) if len(t) > 3]
-    if not terms:
-        return 0
-    return 3 if any(t in name for t in terms) else 0
+    score = 3 if any(t in name for t in terms) else 0
+    matched = {c for c, _ in _matched_doc_classes(query)}
+    if "annual report" in matched:
+        if "/doc_financials/annual/" in path:
+            score += 20
+        if re.search(r"(?:^|[/_.-])ar[_-]?20\d{2}(?:\.|$)", path):
+            score += 16
+        if _is_trusted_document_cdn(url):
+            score += 6
+        if any(marker in path for marker in (
+                "sustainab", "climate", "assurance", "modern_slavery",
+                "modern-slavery", "proxy", "10-q", "quarterly", "policy")):
+            score -= 30
+    return score
 
 def _sort_for_verify(urls: list[str], query: str) -> list[str]:
     return sorted(urls, key=lambda u: _verify_priority(u, query), reverse=True)
 
 def _doc_candidate_score(url: str, text: str, query: str, domain: str | None) -> int:
     ranked = _rank([{"url": url, "title": text, "snippet": text}], query, domain)
-    base = ranked[0][0] if ranked else 0
-    return base + _filing_type_score_adjustment(url, text, query)
+    # _rank already includes filing-type boosts/penalties. Do not apply them a
+    # second time for browser candidates.
+    return ranked[0][0] if ranked else 0
 
 
 _FILING_TYPE_HINTS: dict[str, dict[str, list[str]]] = {
@@ -1746,7 +1841,8 @@ _FILING_TYPE_HINTS: dict[str, dict[str, list[str]]] = {
         "boost": ["10-k", "10k", "form10-k", "form 10-k", "annual report",
                   "ar20", "integrated annual report", "annual-report"],
         "penalize": ["10-q", "10q", "quarterly", "8-k", "8k",
-                     "consolidated_financial_statements", "current report"],
+                     "consolidated_financial_statements", "current report",
+                     "sustainab", "climate", "assurance", "proxy"],
     },
     "proxy statement": {
         "boost": ["def 14a", "def14a", "proxy statement", "proxy-statement",
@@ -1992,7 +2088,7 @@ def _extract_visible_text(raw_html: bytes, company: str = "",
 
 
 def _make_browser_verify_fn(query: str, budget: "_QueryBudget | None" = None,
-                             company: str = ""):
+                             company: str = "", reserve_verifies: int = 0):
     """verify_fn(candidate_doc) -> bool. Fail-closed class+company check scoped to one candidate."""
     if not (BROWSER_VERIFY_CLASS and _bedrock is not None):
         return None
@@ -2018,11 +2114,11 @@ def _make_browser_verify_fn(query: str, budget: "_QueryBudget | None" = None,
             if budget is not None:
                 budget.mark_rejected(url)
             return False
-        if budget is not None and not budget.can_verify():
-            print(f"[verify] budget stop ({budget.why_stopped()}): skipping "
+        if budget is not None and not budget.can_verify(reserve_verifies):
+            print(f"[verify] budget stop ({budget.why_stopped(reserve_verifies)}): skipping "
                   f"LLM verify for {url}")
             cand["_verify_decision"] = {"selected_url": None, "topic_match": False,
-                                        "reason": f"query-budget:{budget.why_stopped()}"}
+                                        "reason": f"query-budget:{budget.why_stopped(reserve_verifies)}"}
             return False
         sample = ""
         try:
@@ -2088,9 +2184,15 @@ def _browser_resolve_document_uncached(page_url: str, domain: str | None,
     _deadline = time.monotonic() + BROWSER_RESOLVE_MAX_SECONDS
 
     def _time_left() -> bool:
-        if budget is not None and not budget.time_left():
+        if budget is not None and not budget.can_verify():
             return False
         return time.monotonic() < _deadline
+
+    def _stop_reason() -> str:
+        if budget is not None and not budget.can_verify():
+            return budget.why_stopped()
+        return (f"BROWSER_RESOLVE_MAX_SECONDS "
+                f"({BROWSER_RESOLVE_MAX_SECONDS}s) exceeded")
 
     try:
         with browser_session(BROWSER_REGION) as client:
@@ -2209,9 +2311,7 @@ def _browser_resolve_document_uncached(page_url: str, domain: str | None,
                         for h in ranked_docs:
                             if tried >= verify_budget or not _time_left():
                                 if not _time_left():
-                                    print(f"[browser] Tier 2 stopped: "
-                                          f"BROWSER_RESOLVE_MAX_SECONDS "
-                                          f"({BROWSER_RESOLVE_MAX_SECONDS}s) exceeded")
+                                    print(f"[browser] Tier 2 stopped: {_stop_reason()}")
                                 break
                             cand = h["url"]
                             if known_bad is not None and cand in known_bad:
@@ -2266,14 +2366,18 @@ def _browser_resolve_document_uncached(page_url: str, domain: str | None,
                                         "via": "browser_in_session_fetch"}
                             if verify_fn is not None:
                                 if not verify_fn(cand_doc):
+                                    reject_reason = (cand_doc.get("_verify_decision") or {}).get(
+                                        "reason", "class verification failed")
                                     print(f"[browser] in-session candidate "
-                                          f"{tried}/{verify_budget} wrong class "
-                                          f"({cand}); trying next candidate")
+                                          f"{tried}/{verify_budget} not accepted "
+                                          f"({cand}): {reject_reason}; trying next candidate")
                                     continue
                                 cand_doc["verified"] = True
                                 cand_doc["_verified_for"] = query
                             verified_hits.append(cand_doc)
-                            if verify_fn is None:
+                            target_years = _extract_year_intent(query)
+                            candidate_years = _extract_year_intent(cand)
+                            if verify_fn is None or target_years.intersection(candidate_years):
                                 break
 
                         if verified_hits:
@@ -2303,9 +2407,7 @@ def _browser_resolve_document_uncached(page_url: str, domain: str | None,
                         for h in labeled:
                             if clicked >= click_budget or not _time_left():
                                 if not _time_left():
-                                    print(f"[browser] Tier 3 stopped: "
-                                          f"BROWSER_RESOLVE_MAX_SECONDS "
-                                          f"({BROWSER_RESOLVE_MAX_SECONDS}s) exceeded")
+                                    print(f"[browser] Tier 3 stopped: {_stop_reason()}")
                                 break
                             txt = (h.get("text") or "").strip()
                             if not txt:
@@ -2457,7 +2559,10 @@ def _browser_resolve_document_uncached(page_url: str, domain: str | None,
                                     cd["verified"] = True
                                     cd["_verified_for"] = query
                                 nav_hits.append(cd)
-                                if verify_fn is None:
+                                target_years = _extract_year_intent(query)
+                                candidate_years = _extract_year_intent(cand)
+                                if (verify_fn is None
+                                        or target_years.intersection(candidate_years)):
                                     break
                             if nav_hits:
                                 nav_hits.sort(
@@ -2967,7 +3072,8 @@ def _harvest_sitemap(domain, query):
     return out
 
 
-def _sitemap_resolve(domain, query, verify_fn, known_bad=None, budget=None):
+def _sitemap_resolve(domain, query, verify_fn, known_bad=None, budget=None,
+                     reserve_verifies=0):
     cands = _harvest_sitemap(domain, query)
     if not cands:
         return None
@@ -2975,8 +3081,8 @@ def _sitemap_resolve(domain, query, verify_fn, known_bad=None, budget=None):
     tried = 0
     tbudget = BROWSER_MAX_VERIFY_CANDIDATES if verify_fn else 1
     for cand in cands:
-        if budget is not None and not budget.time_left():
-            print("[sitemap] stopped: " + budget.why_stopped())
+        if budget is not None and not budget.can_verify(reserve_verifies):
+            print("[sitemap] stopped: " + budget.why_stopped(reserve_verifies))
             break
         if tried >= tbudget:
             break
@@ -2998,7 +3104,9 @@ def _sitemap_resolve(domain, query, verify_fn, known_bad=None, budget=None):
         cd["_verified_for"] = query
         cd["via"] = "sitemap"
         verified_hits.append(cd)
-        if verify_fn is None:
+        target_years = _extract_year_intent(query)
+        if (verify_fn is None
+                or target_years.intersection(_extract_year_intent(cand))):
             break
     if not verified_hits:
         return None
@@ -3034,7 +3142,8 @@ async def invoke(payload: dict, context=None) -> dict:
 
 def _deep_static_crawl(seed_url: str, domain: str | None, query: str,
                        verify_fn, known_bad: dict | None = None,
-                       budget: "_QueryBudget | None" = None) -> dict | None:
+                       budget: "_QueryBudget | None" = None,
+                       reserve_verifies: int = 0) -> dict | None:
     """Tier 3b: recursively fetch same-domain HTML landing pages, regex-crawl
     each for document links, class-verify every doc, return the most-recent
     verified match."""
@@ -3046,8 +3155,8 @@ def _deep_static_crawl(seed_url: str, domain: str | None, query: str,
     verified_hits: list[dict] = []
     while frontier and pages < DEEP_STATIC_MAX_PAGES:
         url, depth = frontier.pop(0)
-        if budget is not None and not budget.time_left():
-            print(f"[deep-crawl] stopped: {budget.why_stopped()}")
+        if budget is not None and not budget.can_verify(reserve_verifies):
+            print(f"[deep-crawl] stopped: {budget.why_stopped(reserve_verifies)}")
             break
         k = url.rstrip("/")
         if k in visited:
@@ -3072,7 +3181,11 @@ def _deep_static_crawl(seed_url: str, domain: str | None, query: str,
                            reverse=True)
         print(f"[deep-crawl] {url} (depth={depth}, page={pages}): "
               f"{len(doc_cands)} doc candidates")
-        for cand in doc_cands:
+        for cand in doc_cands[:DEEP_STATIC_MAX_DOC_CANDIDATES_PER_PAGE]:
+            if budget is not None and not budget.can_verify(reserve_verifies):
+                print(f"[deep-crawl] candidate verification stopped: "
+                      f"{budget.why_stopped(reserve_verifies)}")
+                break
             if known_bad is not None and cand in known_bad:
                 continue
             try:
@@ -3091,6 +3204,9 @@ def _deep_static_crawl(seed_url: str, domain: str | None, query: str,
             cd["_verified_for"] = query
             cd["via"] = "deep_static_crawl"
             verified_hits.append(cd)
+            target_years = _extract_year_intent(query)
+            if target_years.intersection(_extract_year_intent(cand)):
+                break
         if verified_hits:
             break
         if depth < DEEP_STATIC_MAX_DEPTH:
@@ -3236,6 +3352,9 @@ def _invoke_sync(payload: dict) -> dict:
                 continue
             cd["via"] = "search+html_crawl"
             hits.append(cd)
+            target_years = _extract_year_intent(query)
+            if target_years.intersection(_extract_year_intent(cand)):
+                break
         if not hits:
             return None
         hits.sort(key=lambda d: (max(_extract_year_intent(d["url"]))
@@ -3268,6 +3387,9 @@ def _invoke_sync(payload: dict) -> dict:
         known_class = _item.get("report_class")
         known_year = _item.get("year")
         prepared = _prepare_query(str(raw))
+        prepared, inferred_year = _apply_latest_completed_fiscal_year(
+            prepared, known_class=known_class, known_year=known_year)
+        effective_year = known_year or inferred_year
         if not prepared or prepared in done_queries:
             continue
         done_queries.add(prepared)
@@ -3275,13 +3397,18 @@ def _invoke_sync(payload: dict) -> dict:
 
         matched_classes = [c for c, _ in _matched_doc_classes(prepared)]
         domain = _domain(prepared)
-        verify_fn = _make_browser_verify_fn(prepared, budget=_budget, company=company_raw)
+        browser_reserve = BROWSER_RESERVED_VERIFIES if _use_browser else 0
+        prebrowser_verify_fn = _make_browser_verify_fn(
+            prepared, budget=_budget, company=company_raw,
+            reserve_verifies=browser_reserve)
+        browser_verify_fn = _make_browser_verify_fn(
+            prepared, budget=_budget, company=company_raw)
 
         base_log: dict = {
             "raw": str(raw).strip(),
             "prepared": prepared,
             "known_class": known_class,
-            "known_year": known_year,
+            "known_year": effective_year,
             "matched_classes": matched_classes,
             "status": "pending",
             "resolved_via": None,
@@ -3317,7 +3444,7 @@ def _invoke_sync(payload: dict) -> dict:
                     stage = "search"
                 else:
                     dug = _resolve_from_html(sel, body, domain, prepared,
-                                             verify_fn, _budget)
+                                             prebrowser_verify_fn, _budget)
                     if dug:
                         resolved = dug
                         stage = "search+html_crawl"
@@ -3329,36 +3456,65 @@ def _invoke_sync(payload: dict) -> dict:
                                        if _extract_year_intent(prepared) else None)
             if _reg_class and report_specs.registries_for(_reg_class):
                 reg = registry_tier.registry_resolve(
-                    company_ctx, _reg_class, _reg_year, verify_fn=verify_fn)
+                    company_ctx, _reg_class, _reg_year,
+                    verify_fn=prebrowser_verify_fn)
                 if reg and reg.get("body"):
                     resolved = reg
                     stage = "registry"
 
         # ── Tier 3a: sitemap enumeration ──
         if resolved is None and domain:
-            sm = _sitemap_resolve(domain, prepared, verify_fn,
-                                  known_bad=_known_bad, budget=_budget)
+            sm = _sitemap_resolve(
+                domain, prepared, prebrowser_verify_fn,
+                known_bad=_known_bad, budget=_budget,
+                reserve_verifies=browser_reserve)
             if sm:
                 resolved = sm
                 stage = "sitemap"
 
-        # ── Tier 3b: deep static crawl from the site root ──
+        # JS-heavy investor-relations pages are both more precise and cheaper
+        # than a broad corporate-site crawl for filing classes. Try the browser
+        # before static recursion while its reserved verification budget is intact.
+        browser_first = bool(
+            _use_browser and set(matched_classes).intersection({
+                "annual report", "proxy statement", "remuneration report",
+            }))
+        browser_attempted = False
+        if resolved is None and browser_first:
+            root = _site_root(prepared) or (f"https://{domain}/" if domain else None)
+            if root:
+                browser_attempted = True
+                br = _browser_resolve_document(
+                    root, domain, prepared, cache=_root_crawl_cache,
+                    verify_fn=browser_verify_fn, known_bad=_known_bad,
+                    budget=_budget)
+                if br and br.get("body"):
+                    resolved = br
+                    stage = "browser"
+
+        # ── Deep static crawl from the site root ──
         if resolved is None:
             root = _site_root(prepared) or (f"https://{domain}/" if domain else None)
             if root:
-                dc = _deep_static_crawl(root, domain, prepared, verify_fn,
-                                        known_bad=_known_bad, budget=_budget)
+                static_reserve = 0 if browser_attempted else browser_reserve
+                static_verify_fn = (browser_verify_fn if browser_attempted
+                                    else prebrowser_verify_fn)
+                dc = _deep_static_crawl(
+                    root, domain, prepared, static_verify_fn,
+                    known_bad=_known_bad, budget=_budget,
+                    reserve_verifies=static_reserve)
                 if dc:
                     resolved = dc
                     stage = "deep_crawl"
 
-        # ── Tier 4: AgentCore Browser (per-run gated) ──
-        if resolved is None and _use_browser:
+        # Browser fallback for non-filing classes keeps the original ordering.
+        if resolved is None and _use_browser and not browser_attempted:
             root = _site_root(prepared) or (f"https://{domain}/" if domain else None)
             if root:
                 br = _browser_resolve_document(
                     root, domain, prepared, cache=_root_crawl_cache,
-                    verify_fn=verify_fn, known_bad=_known_bad, budget=_budget)
+                    verify_fn=browser_verify_fn, known_bad=_known_bad,
+                    budget=_budget)
                 if br and br.get("body"):
                     resolved = br
                     stage = "browser"

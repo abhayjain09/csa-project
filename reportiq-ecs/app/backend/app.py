@@ -705,15 +705,6 @@ def _patch_run_with_upload(run_id: str, s3_key: str, file_name: str, query: str,
         failures = []
     if not isinstance(failures, list):
         failures = []
-    if query:
-        def _is_this_query(f):
-            if isinstance(f, str):
-                return f == query
-            if isinstance(f, dict):
-                return f.get("query") == query or f.get("web_query") == query
-            return False
-        failures = [f for f in failures if not _is_this_query(f)]
-
     try:
         diag = json.loads(item.get("diagnostics") or "{}")
     except Exception:
@@ -721,6 +712,15 @@ def _patch_run_with_upload(run_id: str, s3_key: str, file_name: str, query: str,
     if not isinstance(diag, dict):
         diag = {}
 
+    # The agent's failure payload contains its *prepared* query, while the UI
+    # sends the original query stored in diagnostics.results. Preparation can
+    # change casing and whitespace, so exact string comparison leaves the
+    # top-level failure behind and the Runs table keeps showing the old count.
+    def _normalise_query(value):
+        return " ".join(str(value or "").split()).casefold()
+
+    query_key = _normalise_query(query)
+    result_patched = False
     for pc in (diag.get("per_chunk") or []):
         if not isinstance(pc, dict) or not isinstance(pc.get("results"), list):
             continue
@@ -732,13 +732,41 @@ def _patch_run_with_upload(run_id: str, s3_key: str, file_name: str, query: str,
         for r in pc["results"]:
             if not isinstance(r, dict):
                 continue
-            if query and r.get("query") == query and r.get("status") != "downloaded":
+            if (query_key and _normalise_query(r.get("query")) == query_key
+                    and r.get("status") != "downloaded"):
                 r.update({
                     "status":     "downloaded",
                     "s3_key":     s3_key,
                     "file_name":  file_name,
                     "manual_upload": True,
                 })
+                result_patched = True
+                # Keep legacy/fallback chunk counts consistent with the
+                # per-query result that was just resolved.
+                try:
+                    pc["failures"] = max(0, int(pc.get("failures") or 0) - 1)
+                    pc["downloaded"] = int(pc.get("downloaded") or 0) + 1
+                except (TypeError, ValueError):
+                    pass
+                break
+
+    # Remove exactly one failure: one upload resolves one failed query.  Use a
+    # normalised comparison first; if the agent rewrote the prepared query more
+    # substantially, a successfully patched failed result is still authoritative
+    # evidence that one entry must be removed from the aggregate counter.
+    failure_index = None
+    if query_key:
+        for i, failure in enumerate(failures):
+            failure_query = failure
+            if isinstance(failure, dict):
+                failure_query = failure.get("query") or failure.get("web_query")
+            if _normalise_query(failure_query) == query_key:
+                failure_index = i
+                break
+    if failure_index is None and result_patched and failures:
+        failure_index = 0
+    if failure_index is not None:
+        failures.pop(failure_index)
 
     try:
         tbl.update_item(

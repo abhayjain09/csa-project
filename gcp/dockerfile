@@ -1,0 +1,14 @@
+# Use the official AWS Lambda Python 3.12 base image
+FROM public.ecr.aws/lambda/python:3.12
+
+# Copy requirements first so Docker can cache this layer when only code changes
+COPY requirement.txt ${LAMBDA_TASK_ROOT}/requirements.txt
+
+# Install dependencies into the Lambda task root
+RUN pip install --no-cache-dir -r requirements.txt --target "${LAMBDA_TASK_ROOT}"
+
+# Copy function code
+COPY lambda.py ${LAMBDA_TASK_ROOT}/lambda.py
+
+# Set the CMD to your handler (file_name.handler_function_name)
+CMD ["lambda.lambda_handler"]

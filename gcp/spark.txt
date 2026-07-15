@@ -1,0 +1,346 @@
+@flow
+step_flowbuild_info:data
+This Spark Is Created With Flow Auto Builder V1.0
+Do Not Delete This Step, This Is Important.
+----
+step_extract_company:prompt:model=GPT-5.2;temperature=0;max_tokens=200
+##system_prompt:
+Extract the company name from the user input. Return only the company name, nothing else. If multiple companies are mentioned, return the first one. If no company name is found, return "GENERAL_SEARCH".
+
+
+
+
+##user_prompt:
+${user_input}
+----
+step_determine_search_type:if:"${step_extract_company_output}" != "GENERAL_SEARCH"
+----
+>step_find_company_website:restapi:name=bing_search
+"${step_extract_company_output}" official website investor relations
+----
+>step_extract_website_url:prompt:model=GPT-5.2;temperature=0;max_tokens=300
+##system_prompt:
+Extract the main company website URL from the search results. Return only the primary company website URL (usually the .com domain), nothing else. If multiple URLs are found, return the most official one.
+
+
+
+
+##user_prompt:
+${step_find_company_website_output}
+----
+>step_search_internal_docs_recent:documents:max_chunks=25;document_list=[0];use_selected_documents
+Company: ${step_extract_company_output}
+Documents from 2025, 2024, 2023, 2022, 2021, 2020
+Annual reports, quarterly reports, financial statements, 10-K, 10-Q, proxy statements
+Fiscal year ending March 31, 2026, June 30, 2026
+----
+>step_search_internal_docs_historical:documents:max_chunks=20;document_list=[0];use_selected_documents
+Company: ${step_extract_company_output}
+Historical documents from 2020, 2019
+Annual reports, quarterly reports, financial statements, SEC filings
+----
+>step_search_sustainability_docs_recent:documents:max_chunks=20;document_list=[0];use_selected_documents
+Company: ${step_extract_company_output}
+Sustainability reports, ESG reports from 2025, 2024, 2023, 2022, 2021, 2020
+Environmental policies, social responsibility reports, corporate governance documents, climate change policies, carbon footprint reports, diversity and inclusion policies, EEO reports
+Fiscal year ending March 31, 2026, June 30, 2026
+----
+>step_search_sustainability_docs_historical:documents:max_chunks=15;document_list=[0];use_selected_documents
+Company: ${step_extract_company_output}
+Sustainability reports, ESG reports from 2020, 2019
+Environmental policies, social responsibility reports, corporate governance documents
+----
+>step_search_comprehensive_policy_docs:documents:max_chunks=40;document_list=[0];use_selected_documents
+Company: ${step_extract_company_output}
+Policy documents: Biodiversity Policy, Conflict Minerals Purchasing Policy, EHS HSE policy Health Safety Environmental policy, Sustainability Policy, Environmental Policy, Diversity policy, Gender Equality Policy, Code of Conduct, Share Trading Policy, Supplier Code of Conduct Vendor policy, Whistleblower policy, GMO Statement, Management Compensation Policy, Stock ownership Policy, Board Diversity Policy, Human Rights policy, Community Giving Guidelines, Privacy Policy, Responsible Investment policy, Stakeholder Engagement Policy, Tax Strategies, WGEA filings, Anti-Bribery and Corruption Policy, Material Information Disclosure and Confidentiality Policy, Money Laundering Policy, Criteria for assessing independence of directors, Marketing Communication Policy, Marketing Advertising Policy, Materiality Analysis Process, Political Contributions Report Disclosure, Corporate Risk and Capital Management Policy, Social Policy, Remuneration Compensation Report, Board Report, Taxation Report, Political Contributions Policy, Gender Pay Report, Conflict Minerals Report, Charitable Contribution Policy, Modern Slavery and Human Trafficking Statement
+----
+>step_search_governance_charter_docs:documents:max_chunks=35;document_list=[0];use_selected_documents
+Company: ${step_extract_company_output}
+Corporate governance documents: Bylaws Articles of association, Corporate By Laws, Memorandum of Association, Audit committee, Corporate Governance Guidelines, Rules of performance evaluation of board, Rules of Procedure of the Board of directors, Rules of Procedure of the Supervisory Board, Finance Committee Charter, Human Capital and Compensation Committee, Nominating and Corporate Governance Committee Charter, Risk and Compliance Committee Charter, Technology Committee Charter, Compensation Committee Charter, Executive Committee Charter, Compensation Committee, Corporate Governance and Nominating Committee, Executive Committee, Board Risk Committee, Human Resources Compensation Committee Mandate, Governance Committee Mandate, Environment Health Safety Sustainable Development Committee Mandate, Position Description Board Committee Chair, Composition of the board and its committees, Charter of the board of directors, Charter of the Human Resources Committee, Charter of the Audit and Risk Management Committee, Charter of the Board of Directors, Related Party and Conduct Review Committee, Ethics Compliance and Sustainability Committee Charter, External Auditor Independence Charter, Board Charter, Nomination Committee Charter, People and Remuneration Committee Charter, Environmental Social and Governance ESG Committee Charter, Audit and Risk Committee Terms of Reference, Investment Committee Mandate, Management Board Mandate, Remuneration and Nomination Committee Mandate, Social and Ethics Committee Charter
+----
+>step_search_operational_policy_docs:documents:max_chunks=35;document_list=[0];use_selected_documents
+Company: ${step_extract_company_output}
+Operational policies: Director Accountability Statement, Executive Remuneration Policy, Directors Remuneration Policy, Composition of Various Committees of Board of Directors, Director Independence Standards, Clawback Policy, Purchasing Basic Policy CSR Procurement Guidelines, annual wind management policy and operation, SDGs report, quality policy, Policy for dealing with anti-social forces, Conflict of Interest Management Policy, Basic Policy on Internal Control Basic Policy on Financial Reporting, Basic policy for building an internal control system, Basic Policy of Internal Control System, Medium-term management plan policy, Efforts regarding the Corporate Governance Code, Corporate Governance Basic Policy, Green procurement standard, The Charter of the Risk Management Committee, The Charter of the Remuneration Committee, CSR Procurement Guidelines, Initiatives for SDGs, About SDGs initiatives, Relevant Act or Fact Disclosure Policy, Policy of Rewards Gifts and Hospitalities Competition Policy, Long Term Incentive Plan, Learning and Development Policy, INSIDER TRADING POLICY, Indication Policy, Green Procurement Policy Supplier Environment Programs, Disciplinary Policy, Deforestation Policy Program, Basic CSR Policy, Corporate research report, Basic IR Policy, Animal Testing Policy Program, Adaptation to Climate Change, Packaging and Waste Policy, Responsible Sourcing Policy, Responsible Drinking Policy, Water Policy, Climate Policy
+----
+>step_search_specialized_policy_docs:documents:max_chunks=35;document_list=[0];use_selected_documents
+Company: ${step_extract_company_output}
+Specialized policies: Procedure to Propose Persons for Election as Directors, Business Communication Guidelines, Environmental Protection Policy, Safety Report, Gift policy, Procurement Policy, Donations Policy, Gifts Entertainment and Hospitality Expenses Policy, Sponsorship Policy, Travel and Hospitality Policy, Antitrust Compliance Policy, Integrity Policy, Group Waste Management Policy, Group Water Stewardship Policy, Group Non-GM Policy, Group Fair Labour Practices Policy, Group Food Safety Policy, Group Responsible Packaging Policy, Group Responsible Procurement Policy, Policy on Water Quality Management, Policy on Water Supply Management, Policy on Sustainable Supply Chain, Directors Fit and Proper Policy, Stakeholder Engagement Policy, Responsible Supply Chain Policy, WCT Material Use Policy, SHLPH Securities Dealing Code, RESPONSIBLE MINERALS SOURCING POLICY, POLICY ON COMMUNICATIONS WITH DIRECTORS, Board of Trustees and Board Committees, Declaration of Trust, Responsible sourcing progress, EU SFDR disclosure, Bioethics Policy, Human Capital Management Report, Board Protocol Potential Conflicts Interests, Speak Up Policy, WGEA Compliance Questionnaire, WGEA Workplace Profile, WGEA Workforce Management Statistics
+----
+>step_search_eeo_docs_comprehensive:documents:max_chunks=15;document_list=[0];use_selected_documents
+Company: ${step_extract_company_output}
+EEO report, Equal Employment Opportunity report, EEO-1 report from 2025, 2024, 2023, 2022, 2021, 2020
+Workforce diversity report, employment equity report, equal opportunity policy, diversity statistics, inclusion metrics
+Fiscal year ending March 31, 2026, June 30, 2026
+----
+>step_search_kensho_vector_latest:restapi:name=kensho_vector
+{
+  "dataset": "transcripts-filings",
+  "query": "${step_extract_company_output} annual report quarterly report 10-K 10-Q earnings financial statements",
+  "top_k": 60,
+  "filters": {
+    "$and": [
+      {"financial_year": {"$gte": 2020}},
+      {"financial_year": {"$lte": 2025}}
+    ]
+  }
+}
+----
+>step_search_kensho_vector_q4_reports:restapi:name=kensho_vector
+{
+  "dataset": "transcripts-filings",
+  "query": "${step_extract_company_output} Q4 fourth quarter annual report year-end earnings",
+  "top_k": 30,
+  "filters": {
+    "$and": [
+      {"financial_year": {"$gte": 2020}},
+      {"financial_quarter": {"$eq": 4}}
+    ]
+  }
+}
+----
+>step_search_kensho_vector_fy2025_2026:restapi:name=kensho_vector
+{
+  "dataset": "transcripts-filings",
+  "query": "${step_extract_company_output} fiscal year 2025 2026 March 31 2026 June 30 2026 annual report financial statements earnings",
+  "top_k": 40,
+  "filters": {
+    "$and": [
+      {"financial_year": {"$gte": 2025}}
+    ]
+  }
+}
+----
+>step_search_kensho_sustainability_enhanced:restapi:name=kensho_vector
+{
+  "dataset": "transcripts-filings",
+  "query": "${step_extract_company_output} sustainability ESG environmental social governance climate change carbon emissions renewable energy diversity inclusion EEO equal employment opportunity CSR corporate social responsibility",
+  "top_k": 40,
+  "filters": {
+    "$and": [
+      {"financial_year": {"$gte": 2020}},
+      {"financial_year": {"$lte": 2025}}
+    ]
+  }
+}
+----
+>step_search_kensho_comprehensive_policies:restapi:name=kensho_vector
+{
+  "dataset": "transcripts-filings",
+  "query": "${step_extract_company_output} Biodiversity Policy Conflict Minerals EHS HSE Health Safety Environmental Sustainability Diversity Gender Equality Code of Conduct Share Trading Supplier Code Whistleblower GMO Management Compensation Stock ownership Board Diversity Human Rights Community Giving Privacy Responsible Investment Stakeholder Engagement Tax Strategies WGEA Anti-Bribery Corruption Material Information Disclosure Money Laundering Marketing Communication Materiality Analysis Political Contributions Corporate Risk Capital Management Social Remuneration Board Taxation Gender Pay Conflict Minerals Charitable Contribution Modern Slavery Human Trafficking Bylaws Articles association Corporate Memorandum Audit Corporate Governance performance evaluation Procedure Board directors Supervisory Finance Committee Charter Human Capital Compensation Nominating Risk Compliance Technology Executive Environment Health Safety Sustainable Development Position Description Composition Charter Audit Risk Management Related Party Conduct Review Ethics Compliance Sustainability External Auditor Independence Nomination People Remuneration Environmental Social Governance ESG Investment Management Remuneration Nomination Social Ethics",
+  "top_k": 60,
+  "filters": {
+    "$and": [
+      {"financial_year": {"$gte": 2020}},
+      {"financial_year": {"$lte": 2025}}
+    ]
+  }
+}
+----
+>step_search_kensho_eeo_enhanced:restapi:name=kensho_vector
+{
+  "dataset": "transcripts-filings",
+  "query": "${step_extract_company_output} EEO-1 report equal employment opportunity workforce diversity employment equity diversity statistics inclusion metrics pay equity gender diversity racial diversity",
+  "top_k": 25,
+  "filters": {
+    "$and": [
+      {"financial_year": {"$gte": 2020}},
+      {"financial_year": {"$lte": 2025}}
+    ]
+  }
+}
+----
+>step_search_internet_financial_comprehensive:restapi:name=bing_search
+"${step_extract_company_output}" annual report 2025 2024 2023 2022 2021 2020 quarterly report SEC filing 10-K 10-Q proxy statement investor relations "fiscal year ending March 31 2026" "fiscal year ending June 30 2026" filetype:pdf
+----
+>step_search_internet_financial_by_year:restapi:name=bing_search
+"${step_extract_company_output}" "annual report 2025" OR "annual report 2024" OR "annual report 2023" OR "annual report 2022" OR "annual report 2021" OR "annual report 2020" OR "FY 2025" OR "FY 2026" filetype:pdf site:sec.gov OR site:investor
+----
+>step_search_internet_sustainability_comprehensive:restapi:name=bing_search
+"${step_extract_company_output}" sustainability report ESG report environmental policy social responsibility corporate governance climate change carbon footprint diversity inclusion EEO report filetype:pdf 2025 2024 2023 2022 2021 2020 "fiscal year 2025" "fiscal year 2026"
+----
+>step_search_internet_sustainability_by_year:restapi:name=bing_search
+"${step_extract_company_output}" "sustainability report 2025" OR "sustainability report 2024" OR "sustainability report 2023" OR "sustainability report 2022" OR "sustainability report 2021" OR "sustainability report 2020" OR "ESG report 2025" filetype:pdf
+----
+>step_search_internet_comprehensive_policies:restapi:name=bing_search
+"${step_extract_company_output}" "Biodiversity Policy" "Conflict Minerals Policy" "EHS policy" "HSE policy" "Health Safety Environmental policy" "Sustainability Policy" "Environmental Policy" "Diversity policy" "Gender Equality Policy" "Code of Conduct" "Share Trading Policy" "Supplier Code of Conduct" "Whistleblower policy" "GMO Statement" "Management Compensation Policy" "Stock ownership Policy" "Board Diversity Policy" "Human Rights policy" "Community Giving Guidelines" "Privacy Policy" "Responsible Investment policy" "Stakeholder Engagement Policy" "Tax Strategies" "WGEA filings" "Anti-Bribery Policy" "Anti-Corruption Policy" "Material Information Disclosure Policy" "Money Laundering Policy" "Marketing Communication Policy" "Political Contributions Policy" "Gender Pay Report" "Conflict Minerals Report" "Charitable Contribution Policy" "Modern Slavery Statement" "Human Trafficking Statement" filetype:pdf
+----
+>step_search_internet_governance_charters:restapi:name=bing_search
+"${step_extract_company_output}" "Bylaws" "Articles of association" "Corporate By Laws" "Memorandum of Association" "Audit committee charter" "Corporate Governance Guidelines" "Finance Committee Charter" "Human Capital and Compensation Committee" "Nominating and Corporate Governance Committee Charter" "Risk and Compliance Committee Charter" "Technology Committee Charter" "Compensation Committee Charter" "Executive Committee Charter" "Board Risk Committee" "Ethics Committee Charter" "Board Charter" "Nomination Committee Charter" "People and Remuneration Committee Charter" "ESG Committee Charter" "Investment Committee Mandate" "Management Board Mandate" "Social and Ethics Committee Charter" filetype:pdf
+----
+>step_search_internet_eeo_comprehensive:restapi:name=bing_search
+"${step_extract_company_output}" "EEO report" "EEO-1 report" "equal employment opportunity" "workforce diversity report" "employment equity report" "diversity statistics" "pay equity report" filetype:pdf 2025 2024 2023 2022 2021 2020 "fiscal year 2025" "fiscal year 2026"
+----
+>step_search_internet_quarterly_reports:restapi:name=bing_search
+"${step_extract_company_output}" "Q1 2025" OR "Q2 2025" OR "Q3 2025" OR "Q4 2025" OR "Q1 2024" OR "Q2 2024" OR "Q3 2024" OR "Q4 2024" OR "Q1 2023" OR "Q2 2023" OR "Q3 2023" OR "Q4 2023" quarterly report earnings filetype:pdf
+----
+>step_search_sec_filings_recent:restapi:name=bing_search
+"${step_extract_company_output}" site:sec.gov "10-K" OR "10-Q" OR "8-K" OR "DEF 14A" 2025 OR 2024 OR 2023 OR 2022 OR 2021 OR 2020 filetype:htm OR filetype:pdf
+----
+>step_search_proxy_statements:restapi:name=bing_search
+"${step_extract_company_output}" "proxy statement" "DEF 14A" "annual meeting" "shareholder meeting" 2025 2024 2023 2022 2021 2020 "fiscal year ending March 31 2026" "fiscal year ending June 30 2026" filetype:pdf
+----
+>step_try_scrape_company_website:webpage:keep_links
+${step_extract_website_url_output}
+----
+>step_check_website_scrape_success:if:"${step_try_scrape_company_website_output}" != "" and "timeout" not in "${step_try_scrape_company_website_output}".lower() and "error" not in "${step_try_scrape_company_website_output}".lower()
+----
+>>step_analyze_website_for_policy_links:prompt:model=GPT-5.2;temperature=0;max_tokens=1000
+##system_prompt:
+Analyze the company website content and extract all URLs/links that might contain policy documents, governance information, or related documents. Look for sections like Corporate Governance, Policies, Ethics & Compliance, Investor Relations, Sustainability, About Us, Legal, Diversity & Inclusion, Equal Employment Opportunity, EEO Reports. Return a list of relevant URLs that should be scraped for policy documents.
+
+
+
+
+##user_prompt:
+Website content: ${step_try_scrape_company_website_output}
+Company: ${step_extract_company_output}
+----
+>>step_policy_links_success:data
+${step_analyze_website_for_policy_links_output}
+----
+>step_scrape_governance_page:restapi:name=bing_search
+site:${step_extract_website_url_output} "corporate governance" OR "policies" OR "code of conduct" OR "ethics" OR "compliance"
+----
+>step_scrape_investor_relations:restapi:name=bing_search
+site:${step_extract_website_url_output} "investor relations" OR "annual report" OR "quarterly report" OR "SEC filings"
+----
+>step_scrape_sustainability_page:restapi:name=bing_search
+site:${step_extract_website_url_output} "sustainability" OR "ESG" OR "environmental" OR "social responsibility"
+----
+>step_scrape_diversity_eeo_page:restapi:name=bing_search
+site:${step_extract_website_url_output} "diversity" OR "inclusion" OR "EEO" OR "equal employment opportunity" OR "workforce diversity" OR "EEO report"
+----
+>step_search_alternative_document_sources:restapi:name=bing_search
+"${step_extract_company_output}" "annual report" OR "10-K" OR "sustainability report" OR "code of conduct" OR "human rights policy" OR "EEO report" site:sec.gov OR site:sustainabilityreporting.org OR site:globalreporting.org filetype:pdf
+----
+<step_policy_links_failure:data
+Unable to scrape website directly. Using alternative search methods to find policy documents.
+----
+<step_general_search_mode:data
+Performing general document search without specific company focus.
+----
+step_determine_website_status:if:"${step_try_scrape_company_website_output}" != "" and "timeout" not in "${step_try_scrape_company_website_output}".lower() and "error" not in "${step_try_scrape_company_website_output}".lower()
+----
+>step_website_status_success:data
+Website successfully scraped and analyzed
+----
+<step_website_status_failure:data
+Website scraping failed due to timeout or connection error. Alternative search methods were used.
+----
+step_consolidate_policy_links:data
+${step_policy_links_success_output}${step_policy_links_failure_output}${step_general_search_mode_output}
+----
+step_consolidate_website_status:data
+${step_website_status_success_output}${step_website_status_failure_output}
+----
+step_compile_comprehensive_results:prompt:model=GPT-5.2;temperature=0;max_tokens=8000
+##system_prompt:
+Compile and organize all document search results from multiple sources covering the past 5-6 years (2020-2025) and fiscal year 2026 documents. Create a comprehensive categorized list showing document name/title, document type, date/year, source, and URL or access method. 
+
+**IMPORTANT: Include financial year 2025 and fiscal year ending dates (March 31, 2026, June 30, 2026) in all relevant searches. Consolidate ALL policy-related documents into a SINGLE "Policy Documents" table/section. Do NOT create separate categories for different types of policies. All policies should be in one unified table including the comprehensive policy checklist:**
+
+**Policy Documents Checklist to Search For:**
+- Biodiversity Policy, Conflict Minerals Purchasing Policy, EHS/HSE policy (Health, Safety & Environmental policy), Sustainability Policy, Environmental Policy, Diversity policy, Gender Equality Policy, Code of Conduct, Share Trading Policy, Supplier Code of Conduct/Vendor policy, Whistleblower policy, GMO Statement, Management Compensation Policy, Stock ownership Policy, Board Diversity Policy, Human Rights policy, Community Giving Guidelines, Privacy Policy, Responsible Investment policy, Stakeholder Engagement Policy, Tax Strategies, WGEA filings, Anti-Bribery and Corruption Policy, Material Information Disclosure and Confidentiality Policy, Money Laundering Policy, Marketing Communication Policy, Political Contributions Policy, Gender Pay Report, Conflict Minerals Report, Charitable Contribution Policy, Modern Slavery and Human Trafficking Statement, Bylaws/Articles of association, Corporate Governance Guidelines, Committee Charters (Audit, Risk, Compensation, Nomination, etc.), Board Reports, Remuneration Reports, and all other governance and operational policies from the comprehensive checklist provided.
+
+Organize results into these categories only:
+1. Financial Documents (by year, including 2025 and FY 2026)
+2. Sustainability & ESG Documents (by year, including 2025 and FY 2026) 
+3. **Policy Documents (Single Consolidated Table with Comprehensive Checklist)**
+4. EEO & Diversity Documents (by year, including 2025 and FY 2026)
+5. SEC Filings (by year, including 2025)
+6. Quarterly Reports (by quarter and year, including 2025)
+
+Remove duplicates, prioritize most recent documents, and sort by relevance and recency within each category. Highlight any gaps in yearly coverage and note which policies from the checklist are missing. Pay special attention to fiscal year ending dates of March 31, 2026 and June 30, 2026.
+
+
+
+
+##user_prompt:
+Company: ${step_extract_company_output}
+Website Scraping Status: ${step_consolidate_website_status_output}
+Internal Recent Financial Documents: ${step_search_internal_docs_recent_output}
+Internal Historical Financial Documents: ${step_search_internal_docs_historical_output}
+Internal Recent Sustainability Documents: ${step_search_sustainability_docs_recent_output}
+Internal Historical Sustainability Documents: ${step_search_sustainability_docs_historical_output}
+Internal Comprehensive Policy Documents: ${step_search_comprehensive_policy_docs_output}
+Internal Governance Charter Documents: ${step_search_governance_charter_docs_output}
+Internal Operational Policy Documents: ${step_search_operational_policy_docs_output}
+Internal Specialized Policy Documents: ${step_search_specialized_policy_docs_output}
+Internal Comprehensive EEO Documents: ${step_search_eeo_docs_comprehensive_output}
+Kensho Vector Latest Financial Results: ${step_search_kensho_vector_latest_output}
+Kensho Vector Q4 Reports: ${step_search_kensho_vector_q4_reports_output}
+Kensho Vector FY 2025-2026 Results: ${step_search_kensho_vector_fy2025_2026_output}
+Kensho Vector Enhanced Sustainability Results: ${step_search_kensho_sustainability_enhanced_output}
+Kensho Vector Comprehensive Policies Results: ${step_search_kensho_comprehensive_policies_output}
+Kensho Vector Enhanced EEO Results: ${step_search_kensho_eeo_enhanced_output}
+Internet Comprehensive Financial Search: ${step_search_internet_financial_comprehensive_output}
+Internet Financial Search by Year: ${step_search_internet_financial_by_year_output}
+Internet Comprehensive Sustainability Search: ${step_search_internet_sustainability_comprehensive_output}
+Internet Sustainability Search by Year: ${step_search_internet_sustainability_by_year_output}
+Internet Comprehensive Policies Search: ${step_search_internet_comprehensive_policies_output}
+Internet Governance Charters Search: ${step_search_internet_governance_charters_output}
+Internet Comprehensive EEO Search: ${step_search_internet_eeo_comprehensive_output}
+Internet Quarterly Reports Search: ${step_search_internet_quarterly_reports_output}
+SEC Filings Recent Search: ${step_search_sec_filings_recent_output}
+Proxy Statements Search: ${step_search_proxy_statements_output}
+Website Scraping Results: ${step_try_scrape_company_website_output}
+Policy Pages Found: ${step_consolidate_policy_links_output}
+Governance Page Search: ${step_scrape_governance_page_output}
+Investor Relations Search: ${step_scrape_investor_relations_output}
+Sustainability Page Search: ${step_scrape_sustainability_page_output}
+Diversity & EEO Page Search: ${step_scrape_diversity_eeo_page_output}
+Alternative Document Sources Search: ${step_search_alternative_document_sources_output}
+----
+step_display_comprehensive_results:print:yield
+# Document Collection Report for ${step_extract_company_output}
+
+## Executive Summary
+This report contains all documents found for **${step_extract_company_output}** across multiple sources with comprehensive policy checklist coverage, including financial year 2025 and fiscal year ending dates (March 31, 2026 and June 30, 2026).
+
+## Company Website Analyzed:
+**Primary Website:** ${step_extract_website_url_output}
+
+## Document Inventory:
+${step_compile_comprehensive_results_output}
+----
+step_create_document_report_file:download:file_type=txt;file_name=Document_Collection_Report_Updated_2025_FY2026
+# Document Collection Report for ${step_extract_company_output}
+
+Generated on: ${user_time}
+Requested by: Krishna vardhan Donka (k.donka@spglobal.com)
+Department: S1 DATA OPERATIONS
+
+## Company Analysis: ${step_extract_company_output}
+## Primary Website: ${step_extract_website_url_output}
+
+## Updated Coverage Period: 2020-2025 and Fiscal Year 2026
+## Fiscal Year Ending Dates: March 31, 2026 and June 30, 2026
+
+## Document Inventory:
+${step_compile_comprehensive_results_output}
+
+## Search Sources Utilized:
+1. Internal Document Repositories (Updated for 2025 and FY 2026)
+2. Kensho Vector Database (Extended to 2025 with FY 2026 search)
+3. Internet Search Engines (Including 2025 and FY 2026 terms)
+4. SEC.gov Direct Filings Search (Updated for 2025)
+5. Company Website Scraping
+6. Alternative Document Sources
+7. Site-Specific Searches
+8. Dedicated EEO and Diversity Document Search (Including 2025 and FY 2026)
+9. Quarterly Reports Search (Extended to 2025)
+10. Proxy Statements and Shareholder Meeting Documents (Including FY 2026 endings)
+11. Comprehensive Policy Checklist Coverage
+12. Governance Charter Documents
+13. Operational and Specialized Policy Documents
+14. Fiscal Year Ending Searches (March 31, 2026 and June 30, 2026)
+
+## Key Updates Made:
+- Extended search coverage to include financial year 2025
+- Added specific searches for fiscal year ending March 31, 2026
+- Added specific searches for fiscal year ending June 30, 2026
+- Updated Kensho Vector filters to include 2025 data
+- Enhanced internet searches with FY 2025 and FY 2026 terms
+- Updated internal document searches to include 2025 documents
+- Modified quarterly report searches to include Q1-Q4 2025
+- Enhanced EEO and sustainability document searches for 2025 and FY 2026

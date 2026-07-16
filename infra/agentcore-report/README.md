@@ -136,12 +136,21 @@ aws bedrock-agentcore invoke-agent-runtime \
 The `s3_key` / `s3_uri` of each downloaded report is the answer you asked for.
 The same rows are written to the DynamoDB provenance table.
 
-## Latest annual-report behavior
+## Latest Annual and Sustainability Report behavior
 
-An Annual Report is labeled by its completed fiscal year, not by the calendar
-year in which the download runs. An undated Annual Report request therefore
-targets `current year - 1`: a run in 2026 requests FY2025, and a run in 2027
-requests FY2026. An explicitly requested historical year is never changed.
+Annual and Sustainability Reports are compared by their completed reporting-
+period end year, not merely the calendar year in which the download runs. An
+undated request in 2026 therefore searches reporting end-year 2026 first,
+including Indian-style labels such as `FY2025-26`, `2025/26`, and `2025–2026`.
+It also searches end-year 2025 / `FY2024-25` as a fallback.
+
+The current end year is a search and scan target, not a maximum-year cap. The
+resolver verifies the document class and company and compares candidates by
+their normalized reporting-period end year. An older document found early is
+retained only as a fallback while later official-source tiers are checked. Thus
+`FY2025-26` wins over `FY2024-25` whenever it is available; otherwise the newest
+older verified report is returned. An explicitly requested historical year
+remains strict and is never changed.
 
 For filing classes, the rendered investor-relations path runs before a broad
 corporate-site crawl. Static discovery is capped per page, preserves verification

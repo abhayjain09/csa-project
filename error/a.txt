@@ -1,0 +1,402 @@
+class-parity] OK — 11 document classes aligned across _DOC_CLASS_RULES and report_specs.REPORT_SPECS
+WARNING:  Invalid HTTP request received.
+[year] latest completed fiscal year: 'site:www.ge.com Annual Report' -> 'Annual Report 2025 site:www.ge.com'
+[llm-querygen] generated 7 variants for 'Annual Report 2025 site:www.ge.com'
+[find][query] 'Annual Report 2025 site:www.ge.com' -> 1 hits via=gateway(native-site)
+[find][query] 'annual report and accounts 2025 site:www.ge.com' -> 1 hits via=gateway(native-site)
+[find][query] 'universal registration document 2025 site:www.ge.com' -> 10 hits via=gateway(stripped-site)
+[find][query] 'integrated annual report 2025 site:www.ge.com' -> 1 hits via=gateway(native-site)
+[find][query] 'General electric company annual report 2025 filetype:pdf' -> 9 hits via=gateway(native-site)
+[find][query] 'investors.ge.com annual report 2025' -> 9 hits via=gateway(native-site)
+[find][query] 'site:sec.gov General electric company annual report 2025' -> 9 hits via=gateway(native-site)
+[find][query] 'Integrated annual report 2025 site:www.ge.com' -> 1 hits via=gateway(native-site)
+[find][query] 'General electric company integrated annual report 2025 filetype:pdf' -> 9 hits via=gateway(native-site)
+[find][query] 'sustainability.ge.com annual report 2025' -> 9 hits via=gateway(native-site)
+[find][query] 'site:companieshouse.gov.uk General electric company annual report and accounts 2025' -> 9 hits via=gateway(native-site)
+[find] dropped 3 junk-host candidate(s) (app store / media / social / aggregator subdomains — generic, not company-specific)
+[find] domain_mode=soft(on_domain=7,off_domain_kept=42) | HEAD pre-filtering 10 candidates for: Annual Report 2025 site:www.ge.com
+[find] 10/10 passed HEAD pre-filter
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No exact 2025 GE annual report found
+[edgar] could not resolve CIK for 'General electric company'/''; skipping
+[ch] no API key configured (CH_SECRET_NAME); skipping
+[sitemap] ge.com: 25 urls -> 3 candidates -> top 3
+[sitemap] inspected 3 landing page(s), discovered 0 linked document(s); 0 total document candidate(s)
+[browser] possible WAF/bot-challenge page (matched 'cloudflare') at https://www.ge.com/
+[browser] hover-reveal: harvested grew to 19 links after menu hover
+[browser] harvested 19 links: 0 doc-file candidates, 0 download-labeled controls (verify_budget=10, click_budget=10) | block_marker=cloudflare
+[browser][nav] IR-prioritized frontier: 2/12 nav links (IR-nav first, query terms ['annual', 'report', '2025'] secondary)
+[browser][nav] https://www.ge.com/investor-relations: 0 doc candidates (depth=1, pages=1)
+[browser][nav] https://www.ge.com/investor-relations/spinoff-resources: 20 doc candidates (depth=1, pages=2)
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 Annual Report found in candidates.
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge_spin-off_faq_040224.pdf): No 2025 Annual Report found in candidates.
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 Annual Report found in candidates
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/gehc_spin-off_faq.pdf): No 2025 Annual Report found in candidates
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 Annual Report found in candidates.
+[browser] candidate REJECTED by class check (https://www.geaerospace.com/sites/default/files/ge-vernova-spin-off-faq.pdf): No 2025 Annual Report found in candidates.
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 Annual Report found.
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/GE%20Press%20Release_11092021.pdf): No 2025 Annual Report found.
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 annual report found.
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/gehc-form-10-as-filed-12.2.2022.pdf): No 2025 annual report found.
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 Annual Report present in candidates
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/379971acl2.pdf): No 2025 Annual Report present in candidates
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 Annual Report available
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/379971acl.pdf): No 2025 Annual Report available
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=No 2025 annual report found
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/gehc-equity-roadshow-slides-12-11-22_0.pdf): No 2025 annual report found
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 Annual Report found
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge-healthcare-investor-day-presentation.pdf): No 2025 Annual Report found
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=Wrong year, wrong company
+[browser] candidate REJECTED by class check (https://www.gevernova.com/sites/default/files/2024-02/form10_highlights_feb2024.pdf): Wrong year, wrong company
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 annual report found for GE
+[browser] candidate REJECTED by class check (https://www.gevernova.com/sites/default/files/2024-03/24_investor_day_presentation_gevernova.pdf): No 2025 annual report found for GE
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 annual report found for General Electric
+[browser] candidate REJECTED by class check (https://www.gevernova.com/sites/default/files/2024-03/form10_registration_statement_mar052024.pdf): No 2025 annual report found for General Electric
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=Wrong year and company
+[browser] candidate REJECTED by class check (https://www.gevernova.com/sites/default/files/2024-02/form10_registration_statement_feb2024.pdf): Wrong year and company
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Not an Annual Report; it's an 8-K filing.
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/8k-ge-announces-boards-of-directors-for-future-independent-ge-vernova-and-ge-aerospace.pdf): Not an Annual Report; it's an 8-K filing.
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025 annual report.
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge-2022-to-form-8-k-launch-as-filed.pdf): Wrong year, not 2025 annual report.
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 Annual Report found, wrong year
+[browser] candidate REJECTED by class check (https://www.geaerospace.com/sites/default/files/investor-day-2024-presentation.pdf?_gl=1*sp7153*_ga*MzY2NTE5MjE3LjE2OTI3MjQzMjY.*_ga_M2Q4NS0CLZ*MTcxMTk5Njk3Mi4xNjUuMS4xNzEyMDAxMjcyLjU0LjAuMA..&_ga=2.83248214.1742955319.1711987776-366519217.1692724326): No 2025 Annual Report found, wrong year
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=No 2025 Annual Report available
+[browser] candidate REJECTED by class check (https://d18rn0p25nwr6d.cloudfront.net/CIK-0000040545/b372f5d6-978f-4305-9157-e94fe2fb6dec.pdf): No 2025 Annual Report available
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Year 2025 not present in filename or content sample
+[browser] candidate REJECTED by class check (https://d18rn0p25nwr6d.cloudfront.net/CIK-0000040545/27162944-ae2f-4520-ae85-8f1e91b55bfe.pdf): Year 2025 not present in filename or content sample
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 Annual Report available
+[browser] candidate REJECTED by class check (https://d18rn0p25nwr6d.cloudfront.net/CIK-0000040545/c44e6745-bc3f-4e24-9f3c-8e2550ccf4cc.pdf): No 2025 Annual Report available
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 annual report present in candidates
+[browser] candidate REJECTED by class check (https://d18rn0p25nwr6d.cloudfront.net/CIK-0000040545/6a8107b4-0fe9-4039-94d6-4392d00b635f.pdf): No 2025 annual report present in candidates
+[browser][nav] https://www.ge.com/investor-relations/events-reports: 20 doc candidates (depth=2, pages=3)
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year in filename
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge_ar2023_annualreport.pdf): Wrong year in filename
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 annual report found for GE
+[browser] candidate REJECTED by class check (https://www.geaerospace.com/sites/default/files/2024-geaerospace-annual-meeting-results.pdf): No 2025 annual report found for GE
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge_10k_02022024.pdf): Wrong year, not 2025
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge_webcast_revised_10k_04252023.pdf): Wrong year, not 2025
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025 Annual Report
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge_webcast_presentation_01232024.pdf): Wrong year, not 2025 Annual Report
+[verify] STRICT reject (near-neighbor filename, no LLM): https://www.ge.com/sites/default/files/ge_webcast_transcript_01232024.pdf
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025 Annual Report
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge_webcast_presentation_04252023.pdf): Wrong year, not 2025 Annual Report
+[verify] STRICT reject (near-neighbor filename, no LLM): https://www.ge.com/sites/default/files/ge_webcast_transcript_04252023.pdf
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025 Annual Report
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge_webcast_presentation_07252023.pdf): Wrong year, not 2025 Annual Report
+[verify] STRICT reject (near-neighbor filename, no LLM): https://www.ge.com/sites/default/files/ge_webcast_transcript_07252023.pdf
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 annual report found
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge_webcast_presentation_10242023_0.pdf): No 2025 annual report found
+[verify] STRICT reject (near-neighbor filename, no LLM): https://www.ge.com/sites/default/files/ge_webcast_transcript_10242023.pdf
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 Annual Report found, wrong year in filename
+[browser] candidate REJECTED by class check (https://www.geaerospace.com/sites/default/files/geaerospace_webcast_presentation_04232024.pdf): No 2025 Annual Report found, wrong year in filename
+[verify] STRICT reject (near-neighbor filename, no LLM): https://www.geaerospace.com/sites/default/files/JPMorgan_Industrials_Conference_03132024-GE_Presentation_Transcript.pdf
+[verify] STRICT reject (near-neighbor filename, no LLM): https://www.gevernova.com/sites/default/files/24_investor_day_transcript_gevernova_0.pdf
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=Wrong company, no 2025 year
+[browser] candidate REJECTED by class check (https://www.gevernova.com/sites/default/files/24_investor_day_highlights_gevernova.pdf): Wrong company, no 2025 year
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 Annual Report found, only 2023 10-Q.
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge_webcast_10q_04252023.pdf): No 2025 Annual Report found, only 2023 10-Q.
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=No 2025 Annual Report found; only 2023 10-Q
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge_webcast_10q_07252023.pdf): No 2025 Annual Report found; only 2023 10-Q
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025 Annual Report
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge_webcast_10q_10242023.pdf): Wrong year, not 2025 Annual Report
+[verify] STRICT reject (near-neighbor filename, no LLM): https://www.geaerospace.com/sites/default/files/2024-geaerospace-asm-transcript.pdf
+[browser][nav] https://www.ge.com/investor-relations/ir-updates: 0 doc candidates (depth=2, pages=4)
+[browser][nav] https://www.ge.com/investor-relations/sec-filings: 0 doc candidates (depth=2, pages=5)
+[browser][nav] https://www.ge.com/investor-relations/annual-report: 3 doc candidates (depth=2, pages=6)
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Year 2025 not found in filename or content
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge_ar23_annuallettertoshareholders.pdf): Year 2025 not found in filename or content
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge_ar23_10-k.pdf): Wrong year, not 2025
+[browser][nav] https://www.ge.com/investor-relations/annualmeeting: 5 doc candidates (depth=2, pages=7)
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Wrong company, GE Aerospace not General Electric
+[browser] candidate REJECTED by class check (https://www.geaerospace.com/sites/default/files/geaerospace_2025annualreport.pdf): Wrong company, GE Aerospace not General Electric
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 Annual Report found for GE
+[browser] candidate REJECTED by class check (https://www.geaerospace.com/sites/default/files/geaerospace_2026_annual_meeting_rules_of_conduct.pdf): No 2025 Annual Report found for GE
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 annual report found, wrong year and class.
+[browser] candidate REJECTED by class check (https://www.geaerospace.com/sites/default/files/ge_2024_annual_meeting_rules_of_conduct.pdf): No 2025 annual report found, wrong year and class.
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=Wrong company, wrong year
+[browser] candidate REJECTED by class check (https://www.geaerospace.com/sites/default/files/geaerospace_proxy_2026.pdf): Wrong company, wrong year
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 GE Annual Report found
+[browser] candidate REJECTED by class check (https://www.geaerospace.com/sites/default/files/supplemental_proxy_materials_2026.pdf): No 2025 GE Annual Report found
+[browser][nav] https://www.ge.com/investor-relations/shareholder-services: 20 doc candidates (depth=2, pages=8)
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025 annual report
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge-scf-investors-report-dec23.pdf): Wrong year, not 2025 annual report
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025 report
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge-scf-investors-report-sep23.pdf): Wrong year, not 2025 report
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=No 2025 Annual Report found
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge-scf-investors-report-06-23.pdf): No 2025 Annual Report found
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge-scf-investors-report-03-23.pdf): Wrong year, not 2025
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 annual report present
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge-scf-investors-report-12-22.pdf): No 2025 annual report present
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=No 2025 Annual Report available in candidates
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge-scf-investors-report-09-22.pdf): No 2025 Annual Report available in candidates
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=No 2025 annual report found.
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge_scf_investors_report_06_22.pdf): No 2025 annual report found.
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=No 2025 Annual Report available in candidates.
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/2022-03-ge-scf-investor-report.pdf): No 2025 Annual Report available in candidates.
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/2021-12_GE_SCF_Investors_Report.pdf): Wrong year, not 2025
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/2021-09_GE_SCF_Investor_Report.pdf): Wrong year, not 2025
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025 annual report.
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/2021-06_GE_SCF_Investor_Report.pdf): Wrong year, not 2025 annual report.
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=No 2025 Annual Report available in candidates.
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/2021-03_GE_SCF_Investor_Report.pdf): No 2025 Annual Report available in candidates.
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=No 2025 Annual Report available in candidates.
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/2020-12_GE_SCF_Investor_Report.pdf): No 2025 Annual Report available in candidates.
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=No 2025 annual report found in candidates.
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/2020-09_GE_SCF_Investor_Report.pdf): No 2025 annual report found in candidates.
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/2020-06_GE_SCF_Investor_Report.pdf): Wrong year, not 2025
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025 annual report.
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/2020-03_GE_SCF_Investor_Report.pdf): Wrong year, not 2025 annual report.
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025 Annual Report
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/2019-12_GE_SCF_Investor_Report.pdf): Wrong year, not 2025 Annual Report
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025 annual report
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/2019-09_GE_SCF_Investor_Report.pdf): Wrong year, not 2025 annual report
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025 annual report
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/2019-06_GE_SCF_Investor_Report.pdf): Wrong year, not 2025 annual report
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/2019-03_GE_SCF_Investor_Report.pdf): Wrong year, not 2025
+[browser][nav] https://www.ge.com/investor-relations/ir-contact: 0 doc candidates (depth=2, pages=9)
+[browser][nav] https://www.ge.com/sustainability/reports-hub: 0 doc candidates (depth=2, pages=10)
+[browser][nav] https://www.ge.com/news/investor-relations-updates: 0 doc candidates (depth=2, pages=11)
+[browser][nav] https://www.ge.com/investor-relations/important-forward-looking-statement-information: 0 doc candidates (depth=2, pages=12)
+[browser][nav] https://www.ge.com/investor-relations/events-reports/ge-investor-update-0: 4 doc candidates (depth=2, pages=13)
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 Annual Report found among candidates.
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/GE%20Investor%20Update_110921_6.pdf): No 2025 Annual Report found among candidates.
+[verify] STRICT reject (near-neighbor filename, no LLM): https://www.ge.com/sites/default/files/ge_investor_update_transcript_11092021.pdf
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 annual report found
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/infographic_11.09.2021.pdf): No 2025 annual report found
+[browser][nav] goto failed (https://www.ge.com/sites/default/files/gehc-financial-supplement_december-filling_as-of-12.01.22_1800.xlsx): Page.goto: Download is starting
+Call log:
+  - navigating to "https://www.ge.com/sites/default/files/gehc-financial-supplement_december-filling_as-of-12.01.22_1800.xlsx", waiting until "domcontentloaded"
+[browser][nav] https://www.ge.com/investor-relations/events-reports/morgan-stanley-healthcare-conference: 2 doc candidates (depth=2, pages=15)
+[verify] STRICT reject (near-neighbor filename, no LLM): https://www.ge.com/sites/default/files/gehc-at-morgan-stanley-healthcare-conference-9-12-22_0.pdf
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 annual report found
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/gehc_2022_morgan_stanley_healthcare_conference_slides.pdf): No 2025 annual report found
+[browser][nav] https://www.ge.com/investor-relations/events-reports/ubs-healthcare-conference: 2 doc candidates (depth=2, pages=16)
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 annual report present
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/UBS_Healthcare_Conference_Slides_2022-5-24.pdf): No 2025 annual report present
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 annual report available
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/GE%20Healthcare_UBS%202022%20Global%20Healthcare_May%2024%202022.pdf): No 2025 annual report available
+[browser][nav] https://www.ge.com/investor-relations/events-reports/fortieth-annual-jp-morgan-virtual-healthcare-conference: 1 doc candidates (depth=2, pages=17)
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong document type, no 2025 year
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/GE%20-%20JP%20Morgan%20Healthcare%20Conference.pdf): Wrong document type, no 2025 year
+[browser][nav] https://www.ge.com/investor-relations/events-reports/ge-healthcare-update-0: 1 doc candidates (depth=2, pages=18)
+[verify] STRICT reject (near-neighbor filename, no LLM): https://www.ge.com/sites/default/files/GE_RSNA_Fireside_Chat_Transcript_2021.pdf
+[browser][vision] model found no download control
+[browser] https://www.ge.com/: no document resolved through any tier
+[deep-crawl] https://www.ge.com/ (depth=0, page=1): 0 doc candidates
+[result] NO DOCUMENT FOUND (failed closed): 'Annual Report 2025 site:www.ge.com'
+{
+    "timestamp": "2026-07-16T20:17:12.225Z",
+    "level": "INFO",
+    "message": "Invocation completed successfully (331.343s)",
+    "logger": "bedrock_agentcore.app",
+    "requestId": "f3876abf-d2da-435e-8218-9bb17457b489",
+    "sessionId": "0ac59e0b-9865-4ea7-a6a3-a4bd7bfd7819"
+}
+class-parity] OK — 11 document classes aligned across _DOC_CLASS_RULES and report_specs.REPORT_SPECS
+[year] latest completed fiscal year: 'site:www.ge.com Annual Report' -> 'Annual Report 2025 site:www.ge.com'
+[llm-querygen] generated 8 variants for 'Annual Report 2025 site:www.ge.com'
+[find][query] 'Annual Report 2025 site:www.ge.com' -> 1 hits via=gateway(native-site)
+[find][query] 'annual report and accounts 2025 site:www.ge.com' -> 1 hits via=gateway(native-site)
+[find][query] 'universal registration document 2025 site:www.ge.com' -> 10 hits via=gateway(stripped-site)
+[find][query] 'integrated annual report 2025 site:www.ge.com' -> 1 hits via=gateway(native-site)
+[find][query] 'site:www.ge.com Annual Report 2025' -> 1 hits via=gateway(native-site)
+[find][query] 'General electric company Annual Report 2025 filetype:pdf' -> 9 hits via=gateway(native-site)
+[find][query] 'site:investors.ge.com Annual Report 2025' -> 1 hits via=gateway(native-site)
+[find][query] 'site:sec.gov General electric company Annual Report 2025' -> 9 hits via=gateway(native-site)
+[find][query] 'site:www.ge.com Integrated Annual Report 2025' -> 1 hits via=gateway(native-site)
+[find][query] 'General electric company Integrated Annual Report 2025 filetype:pdf' -> 9 hits via=gateway(native-site)
+[find][query] 'site:investors.ge.com Integrated Annual Report 2025' -> 1 hits via=gateway(native-site)
+[find][query] 'site:companieshouse.gov.uk General electric company Annual Report and Accounts 2025' -> 9 hits via=gateway(native-site)
+[find] dropped 2 junk-host candidate(s) (app store / media / social / aggregator subdomains — generic, not company-specific)
+[find] domain_mode=soft(on_domain=6,off_domain_kept=30) | HEAD pre-filtering 10 candidates for: Annual Report 2025 site:www.ge.com
+[find] 10/10 passed HEAD pre-filter
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 GE annual report found among candidates.
+[edgar] could not resolve CIK for 'General electric company'/''; skipping
+[ch] no API key configured (CH_SECRET_NAME); skipping
+[sitemap] ge.com: 25 urls -> 3 candidates -> top 3
+[sitemap] inspected 3 landing page(s), discovered 0 linked document(s); 0 total document candidate(s)
+[browser] possible WAF/bot-challenge page (matched 'cloudflare') at https://www.ge.com/
+[browser] hover-reveal: harvested grew to 19 links after menu hover
+[browser] harvested 19 links: 0 doc-file candidates, 0 download-labeled controls (verify_budget=10, click_budget=10) | block_marker=cloudflare
+[browser][nav] IR-prioritized frontier: 2/12 nav links (IR-nav first, query terms ['annual', 'report', '2025'] secondary)
+[browser][nav] https://www.ge.com/investor-relations: 0 doc candidates (depth=1, pages=1)
+[browser][nav] https://www.ge.com/investor-relations/spinoff-resources: 20 doc candidates (depth=1, pages=2)
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=No 2025 Annual Report found
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge_spin-off_faq_040224.pdf): No 2025 Annual Report found
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 Annual Report found in candidates
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/gehc_spin-off_faq.pdf): No 2025 Annual Report found in candidates
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 Annual Report found in candidates.
+[browser] candidate REJECTED by class check (https://www.geaerospace.com/sites/default/files/ge-vernova-spin-off-faq.pdf): No 2025 Annual Report found in candidates.
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 annual report present
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/GE%20Press%20Release_11092021.pdf): No 2025 annual report present
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025 annual report
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/gehc-form-10-as-filed-12.2.2022.pdf): Wrong year, not 2025 annual report
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 annual report available
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/379971acl2.pdf): No 2025 annual report available
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 Annual Report present
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/379971acl.pdf): No 2025 Annual Report present
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 Annual Report found in candidates
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/gehc-equity-roadshow-slides-12-11-22_0.pdf): No 2025 Annual Report found in candidates
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 Annual Report found
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge-healthcare-investor-day-presentation.pdf): No 2025 Annual Report found
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=Wrong year and company
+[browser] candidate REJECTED by class check (https://www.gevernova.com/sites/default/files/2024-02/form10_highlights_feb2024.pdf): Wrong year and company
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 annual report available in candidates
+[browser] candidate REJECTED by class check (https://www.gevernova.com/sites/default/files/2024-03/24_investor_day_presentation_gevernova.pdf): No 2025 annual report available in candidates
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=Wrong year and company
+[browser] candidate REJECTED by class check (https://www.gevernova.com/sites/default/files/2024-03/form10_registration_statement_mar052024.pdf): Wrong year and company
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=Wrong year and company
+[browser] candidate REJECTED by class check (https://www.gevernova.com/sites/default/files/2024-02/form10_registration_statement_feb2024.pdf): Wrong year and company
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Not an Annual Report, it's an 8-K filing.
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/8k-ge-announces-boards-of-directors-for-future-independent-ge-vernova-and-ge-aerospace.pdf): Not an Annual Report, it's an 8-K filing.
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025 Annual Report
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge-2022-to-form-8-k-launch-as-filed.pdf): Wrong year, not 2025 Annual Report
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 Annual Report found for GE
+[browser] candidate REJECTED by class check (https://www.geaerospace.com/sites/default/files/investor-day-2024-presentation.pdf?_gl=1*sp7153*_ga*MzY2NTE5MjE3LjE2OTI3MjQzMjY.*_ga_M2Q4NS0CLZ*MTcxMTk5Njk3Mi4xNjUuMS4xNzEyMDAxMjcyLjU0LjAuMA..&_ga=2.83248214.1742955319.1711987776-366519217.1692724326): No 2025 Annual Report found for GE
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=No 2025 annual report available in candidates
+[browser] candidate REJECTED by class check (https://d18rn0p25nwr6d.cloudfront.net/CIK-0000040545/b372f5d6-978f-4305-9157-e94fe2fb6dec.pdf): No 2025 annual report available in candidates
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Year 2025 not present in filename or content sample
+[browser] candidate REJECTED by class check (https://d18rn0p25nwr6d.cloudfront.net/CIK-0000040545/27162944-ae2f-4520-ae85-8f1e91b55bfe.pdf): Year 2025 not present in filename or content sample
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 Annual Report available
+[browser] candidate REJECTED by class check (https://d18rn0p25nwr6d.cloudfront.net/CIK-0000040545/c44e6745-bc3f-4e24-9f3c-8e2550ccf4cc.pdf): No 2025 Annual Report available
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=No 2025 annual report available
+[browser] candidate REJECTED by class check (https://d18rn0p25nwr6d.cloudfront.net/CIK-0000040545/6a8107b4-0fe9-4039-94d6-4392d00b635f.pdf): No 2025 annual report available
+[browser][nav] https://www.ge.com/investor-relations/events-reports: 20 doc candidates (depth=2, pages=3)
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year: 2023 not 2025
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge_ar2023_annualreport.pdf): Wrong year: 2023 not 2025
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 Annual Report found
+[browser] candidate REJECTED by class check (https://www.geaerospace.com/sites/default/files/2024-geaerospace-annual-meeting-results.pdf): No 2025 Annual Report found
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge_10k_02022024.pdf): Wrong year, not 2025
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=No 2025 Annual Report found
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge_webcast_revised_10k_04252023.pdf): No 2025 Annual Report found
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not an annual report
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge_webcast_presentation_01232024.pdf): Wrong year, not an annual report
+[verify] STRICT reject (near-neighbor filename, no LLM): https://www.ge.com/sites/default/files/ge_webcast_transcript_01232024.pdf
+[llm] select decision: selected=None topic=False company=True year=False conf=low reason=Wrong year, not an annual report
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge_webcast_presentation_04252023.pdf): Wrong year, not an annual report
+[verify] STRICT reject (near-neighbor filename, no LLM): https://www.ge.com/sites/default/files/ge_webcast_transcript_04252023.pdf
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025 annual report
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge_webcast_presentation_07252023.pdf): Wrong year, not 2025 annual report
+[verify] STRICT reject (near-neighbor filename, no LLM): https://www.ge.com/sites/default/files/ge_webcast_transcript_07252023.pdf
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge_webcast_presentation_10242023_0.pdf): Wrong year, not 2025
+[verify] STRICT reject (near-neighbor filename, no LLM): https://www.ge.com/sites/default/files/ge_webcast_transcript_10242023.pdf
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 Annual Report found
+[browser] candidate REJECTED by class check (https://www.geaerospace.com/sites/default/files/geaerospace_webcast_presentation_04232024.pdf): No 2025 Annual Report found
+[verify] STRICT reject (near-neighbor filename, no LLM): https://www.geaerospace.com/sites/default/files/JPMorgan_Industrials_Conference_03132024-GE_Presentation_Transcript.pdf
+[verify] STRICT reject (near-neighbor filename, no LLM): https://www.gevernova.com/sites/default/files/24_investor_day_transcript_gevernova_0.pdf
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=Wrong company, no 2025 content
+[browser] candidate REJECTED by class check (https://www.gevernova.com/sites/default/files/24_investor_day_highlights_gevernova.pdf): Wrong company, no 2025 content
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=No 2025 annual report found, only 2023 10-Q.
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge_webcast_10q_04252023.pdf): No 2025 annual report found, only 2023 10-Q.
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=No 2025 Annual Report present, only 2023 10-Q
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge_webcast_10q_07252023.pdf): No 2025 Annual Report present, only 2023 10-Q
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not an annual report
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge_webcast_10q_10242023.pdf): Wrong year, not an annual report
+[verify] STRICT reject (near-neighbor filename, no LLM): https://www.geaerospace.com/sites/default/files/2024-geaerospace-asm-transcript.pdf
+[browser][nav] https://www.ge.com/investor-relations/ir-updates: 0 doc candidates (depth=2, pages=4)
+[browser][nav] https://www.ge.com/investor-relations/sec-filings: 0 doc candidates (depth=2, pages=5)
+[browser][nav] https://www.ge.com/investor-relations/annual-report: 3 doc candidates (depth=2, pages=6)
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year: 2023 not 2025
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge_ar23_annuallettertoshareholders.pdf): Wrong year: 2023 not 2025
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year in filename
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge_ar23_10-k.pdf): Wrong year in filename
+[browser][nav] https://www.ge.com/investor-relations/annualmeeting: 5 doc candidates (depth=2, pages=7)
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Wrong company: GE Aerospace, not General Electric
+[browser] candidate REJECTED by class check (https://www.geaerospace.com/sites/default/files/geaerospace_2025annualreport.pdf): Wrong company: GE Aerospace, not General Electric
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 annual report found for GE
+[browser] candidate REJECTED by class check (https://www.geaerospace.com/sites/default/files/geaerospace_2026_annual_meeting_rules_of_conduct.pdf): No 2025 annual report found for GE
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 Annual Report found
+[browser] candidate REJECTED by class check (https://www.geaerospace.com/sites/default/files/ge_2024_annual_meeting_rules_of_conduct.pdf): No 2025 Annual Report found
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=Wrong year, wrong company, not an annual report
+[browser] candidate REJECTED by class check (https://www.geaerospace.com/sites/default/files/geaerospace_proxy_2026.pdf): Wrong year, wrong company, not an annual report
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 GE annual report present
+[browser] candidate REJECTED by class check (https://www.geaerospace.com/sites/default/files/supplemental_proxy_materials_2026.pdf): No 2025 GE annual report present
+[browser][nav] https://www.ge.com/investor-relations/shareholder-services: 20 doc candidates (depth=2, pages=8)
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025 report
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge-scf-investors-report-dec23.pdf): Wrong year, not 2025 report
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025 report
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge-scf-investors-report-sep23.pdf): Wrong year, not 2025 report
+[llm] select decision: selected=None topic=False company=True year=False conf=low reason=No 2025 Annual Report found
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge-scf-investors-report-06-23.pdf): No 2025 Annual Report found
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=No 2025 annual report available
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge-scf-investors-report-03-23.pdf): No 2025 annual report available
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge-scf-investors-report-12-22.pdf): Wrong year, not 2025
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge-scf-investors-report-09-22.pdf): Wrong year, not 2025
+[llm] select decision: selected=None topic=False company=True year=False conf=low reason=No 2025 annual report found
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/ge_scf_investors_report_06_22.pdf): No 2025 annual report found
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=No 2025 Annual Report found
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/2022-03-ge-scf-investor-report.pdf): No 2025 Annual Report found
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/2021-12_GE_SCF_Investors_Report.pdf): Wrong year, not 2025
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025 annual report
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/2021-09_GE_SCF_Investor_Report.pdf): Wrong year, not 2025 annual report
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025 annual report
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/2021-06_GE_SCF_Investor_Report.pdf): Wrong year, not 2025 annual report
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025 annual report
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/2021-03_GE_SCF_Investor_Report.pdf): Wrong year, not 2025 annual report
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/2020-12_GE_SCF_Investor_Report.pdf): Wrong year, not 2025
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=No 2025 annual report available in candidates.
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/2020-09_GE_SCF_Investor_Report.pdf): No 2025 annual report available in candidates.
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025 annual report.
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/2020-06_GE_SCF_Investor_Report.pdf): Wrong year, not 2025 annual report.
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025 annual report
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/2020-03_GE_SCF_Investor_Report.pdf): Wrong year, not 2025 annual report
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025 annual report
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/2019-12_GE_SCF_Investor_Report.pdf): Wrong year, not 2025 annual report
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025 Annual Report.
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/2019-09_GE_SCF_Investor_Report.pdf): Wrong year, not 2025 Annual Report.
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025 annual report
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/2019-06_GE_SCF_Investor_Report.pdf): Wrong year, not 2025 annual report
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/2019-03_GE_SCF_Investor_Report.pdf): Wrong year, not 2025
+[browser][nav] https://www.ge.com/investor-relations/ir-contact: 0 doc candidates (depth=2, pages=9)
+[browser][nav] https://www.ge.com/sustainability/reports-hub: 0 doc candidates (depth=2, pages=10)
+[browser][nav] https://www.ge.com/news/investor-relations-updates: 0 doc candidates (depth=2, pages=11)
+[browser][nav] https://www.ge.com/investor-relations/important-forward-looking-statement-information: 0 doc candidates (depth=2, pages=12)
+[browser][nav] https://www.ge.com/investor-relations/events-reports/ge-investor-update-0: 4 doc candidates (depth=2, pages=13)
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025 annual report
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/GE%20Investor%20Update_110921_6.pdf): Wrong year, not 2025 annual report
+[verify] STRICT reject (near-neighbor filename, no LLM): https://www.ge.com/sites/default/files/ge_investor_update_transcript_11092021.pdf
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=Wrong year, not an annual report
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/infographic_11.09.2021.pdf): Wrong year, not an annual report
+[browser][nav] goto failed (https://www.ge.com/sites/default/files/gehc-financial-supplement_december-filling_as-of-12.01.22_1800.xlsx): Page.goto: Download is starting
+Call log:
+  - navigating to "https://www.ge.com/sites/default/files/gehc-financial-supplement_december-filling_as-of-12.01.22_1800.xlsx", waiting until "domcontentloaded"
+[browser][nav] https://www.ge.com/investor-relations/events-reports/morgan-stanley-healthcare-conference: 2 doc candidates (depth=2, pages=15)
+[verify] STRICT reject (near-neighbor filename, no LLM): https://www.ge.com/sites/default/files/gehc-at-morgan-stanley-healthcare-conference-9-12-22_0.pdf
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 annual report found.
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/gehc_2022_morgan_stanley_healthcare_conference_slides.pdf): No 2025 annual report found.
+[browser][nav] https://www.ge.com/investor-relations/events-reports/ubs-healthcare-conference: 2 doc candidates (depth=2, pages=16)
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 annual report found
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/UBS_Healthcare_Conference_Slides_2022-5-24.pdf): No 2025 annual report found
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 Annual Report available in candidates.
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/GE%20Healthcare_UBS%202022%20Global%20Healthcare_May%2024%202022.pdf): No 2025 Annual Report available in candidates.
+[browser][nav] https://www.ge.com/investor-relations/events-reports/fortieth-annual-jp-morgan-virtual-healthcare-conference: 1 doc candidates (depth=2, pages=17)
+[llm] select decision: selected=None topic=False company=True year=False conf=low reason=No 2025 Annual Report present
+[browser] candidate REJECTED by class check (https://www.ge.com/sites/default/files/GE%20-%20JP%20Morgan%20Healthcare%20Conference.pdf): No 2025 Annual Report present
+[browser][nav] https://www.ge.com/investor-relations/events-reports/ge-healthcare-update-0: 1 doc candidates (depth=2, pages=18)
+[verify] STRICT reject (near-neighbor filename, no LLM): https://www.ge.com/sites/default/files/GE_RSNA_Fireside_Chat_Transcript_2021.pdf
+[browser][vision] model found no download control
+[browser] https://www.ge.com/: no document resolved through any tier
+[deep-crawl] https://www.ge.com/ (depth=0, page=1): 0 doc candidates
+[result] NO DOCUMENT FOUND (failed closed): 'Annual Report 2025 site:www.ge.com'
+{
+    "timestamp": "2026-07-16T20:07:52.733Z",
+    "level": "INFO",
+    "message": "Invocation completed successfully (339.956s)",
+    "logger": "bedrock_agentcore.app",
+    "requestId": "414f77ac-6676-4cd3-bccd-e291579b2157",
+    "sessionId": "9fded4a6-87ca-48ba-95fb-c79fe585274f"
+}

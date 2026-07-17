@@ -1,13 +1,4 @@
-"""Report download agent (single AgentCore Runtime) — v44.
-
-v44 defines "latest" as the greatest reporting-period end year actually
-available. A run in 2026 prefers FY2025-26 when published and falls back to
-FY2024-25 only when no newer class-verified report is available.
-
-v43 makes "latest" Annual and Sustainability Report discovery period-aware:
-fiscal ranges such as FY2024-25 normalize to reporting end-year 2025, while an
-inferred latest year is a search preference with fallback rather than a hard
-validation constraint.
+"""Report download agent (single AgentCore Runtime) — v42.
 
 v42 bridges relevant HTML landing pages discovered through sitemaps to the
 documents they link, reserves search sampling capacity for official-domain
@@ -65,7 +56,7 @@ import registry_tier
 
 app = BedrockAgentCoreApp()
 
-CODE_VERSION = "v44"
+CODE_VERSION = "v42"
 
 # Tier 2 (official registry fallback) master switch. registry_tier.py reads its
 # own EDGAR_* / CH_* configuration from the environment.
@@ -123,12 +114,11 @@ BEST_MATCHES      = int(os.environ.get("BEST_MATCHES", "1"))
 DOC_ONLY          = os.environ.get("DOC_ONLY", "true").lower() != "false"
 CURRENT_YEAR      = dt.date.today().year
 LATEST_COMPLETED_FISCAL_YEAR_LAG = int(os.environ.get(
-    "LATEST_COMPLETED_FISCAL_YEAR_LAG", "0"))
+    "LATEST_COMPLETED_FISCAL_YEAR_LAG", "1"))
 LATEST_COMPLETED_FISCAL_YEAR_CLASSES = {
     c.strip().lower()
     for c in os.environ.get(
-        "LATEST_COMPLETED_FISCAL_YEAR_CLASSES",
-        "annual report,sustainability report",
+        "LATEST_COMPLETED_FISCAL_YEAR_CLASSES", "annual report",
     ).split(",")
     if c.strip()
 }
@@ -890,36 +880,9 @@ def _clean_query(q: str) -> str:
 
 _YEAR_RE = r"(?<!\d)(20\d{2})(?!\d)"
 _YY_OR_YYYY_RE = r"(?<!\d)(\d{2}|\d{4})(?!\d)"
-_FISCAL_RANGE_SEP_RE = r"[-/_\u2010-\u2015]"
-
-
-def _extract_fiscal_year_ranges(text: str) -> set[tuple[int, int]]:
-    """Return normalized (start_year, end_year) fiscal/reporting ranges."""
-    t = (text or "").lower()
-    ranges: set[tuple[int, int]] = set()
-    for a, b in re.findall(
-            rf"\bfy\s*{_YY_OR_YYYY_RE}\s*{_FISCAL_RANGE_SEP_RE}\s*{_YY_OR_YYYY_RE}", t):
-        ya = int(a) if len(a) == 4 else 2000 + int(a)
-        yb = (int(b) if len(b) == 4
-              else (ya // 100) * 100 + int(b))
-        if abs(yb - ya) <= 1:
-            ranges.add((ya, yb))
-    for a, b in re.findall(
-            rf"{_YEAR_RE}\s*{_FISCAL_RANGE_SEP_RE}\s*{_YY_OR_YYYY_RE}", t):
-        ya = int(a)
-        yb = int(b) if len(b) == 4 else (ya // 100) * 100 + int(b)
-        if abs(yb - ya) <= 1:
-            ranges.add((ya, yb))
-    return ranges
 
 
 def _extract_year_intent(text: str) -> set[int]:
-    """Extract calendar years and both ends of common fiscal-year ranges.
-
-    Examples treated as {2024, 2025}: FY2024-25, FY 24/25, 2024-2025,
-    and 2024–25. Supporting both ends lets an end-year request for 2025 match
-    the Indian financial-year label FY2024-25.
-    """
     out: set[int] = set()
     t = (text or "").lower()
     for y in re.findall(_YEAR_RE, t):
@@ -927,97 +890,26 @@ def _extract_year_intent(text: str) -> set[int]:
     for yy in re.findall(rf"\bfy\s*{_YY_OR_YYYY_RE}", t):
         y = int(yy)
         out.add(y if y >= 1000 else 2000 + y)
-    for start_year, end_year in _extract_fiscal_year_ranges(t):
-        out.update({start_year, end_year})
+    for a, b in re.findall(rf"\bfy\s*{_YY_OR_YYYY_RE}\s*[-/]\s*{_YY_OR_YYYY_RE}", t):
+        ya = int(a) if len(a) == 4 else 2000 + int(a)
+        yb = int(b) if len(b) == 4 else 2000 + int(b)
+        if abs(yb - ya) <= 1:
+            out.update({ya, yb})
+    for a, b in re.findall(rf"{_YEAR_RE}\s*[-/]\s*{_YY_OR_YYYY_RE}", t):
+        ya = int(a)
+        yb = int(b) if len(b) == 4 else (ya // 100) * 100 + int(b)
+        if abs(yb - ya) <= 1:
+            out.update({ya, yb})
     return out
-
-
-_RECURRING_DOCUMENT_CLASSES = {
-    "annual report", "proxy statement", "remuneration report",
-    "sustainability report",
-}
-
-
-def _query_needs_recency_scan(query: str) -> bool:
-    return any(canonical in _RECURRING_DOCUMENT_CLASSES
-               for canonical, _ in _matched_doc_classes(query))
-
-
-def _latest_reporting_search_year() -> int:
-    """Current search anchor only; it never caps newer available reports."""
-    return CURRENT_YEAR - max(0, LATEST_COMPLETED_FISCAL_YEAR_LAG)
-
-
-def _reporting_period_end_year(text: str,
-                               latest_allowed: int | None = None
-                               ) -> int | None:
-    """Return the normalized reporting-period end year from text.
-
-    When ``latest_allowed`` is supplied, later publication/upload years are
-    ignored. Thus ``/uploads/2026/Annual-Report-FY2024-25.pdf`` resolves to
-    reporting end-year 2025 during a 2026 latest-report run.
-    """
-    all_range_ends = sorted(end for _, end in _extract_fiscal_year_ranges(text))
-    range_ends = list(all_range_ends)
-    if latest_allowed is not None:
-        range_ends = [year for year in range_ends if year <= latest_allowed]
-    if range_ends:
-        return range_ends[-1]
-    if all_range_ends:
-        # An explicit fiscal range is authoritative. If its end is beyond the
-        # allowed completed period, do not fall back to its start year or an
-        # unrelated upload-folder year.
-        return None
-
-    years = sorted(_extract_year_intent(text))
-    if latest_allowed is not None:
-        years = [year for year in years if year <= latest_allowed]
-    return years[-1] if years else None
-
-
-def _report_recency_key(candidate, query: str) -> int:
-    """One recency key shared by annual/sustainability resolver tiers."""
-    if isinstance(candidate, dict):
-        url = str(candidate.get("url") or "")
-        descriptive = " ".join(str(candidate.get(key) or "") for key in (
-            "filename", "title", "content_sample"))
-    else:
-        url = str(candidate or "")
-        descriptive = ""
-    basename = unquote(urlparse(url).path).rsplit("/", 1)[-1]
-    preferred_text = " ".join(part for part in (basename, descriptive) if part)
-    # Prefer filename/title/content years over upload-directory years. Only use
-    # the full URL when the descriptive material carries no period at all.
-    text = (preferred_text if _extract_year_intent(preferred_text)
-            else " ".join(part for part in (url, descriptive) if part))
-    year = _reporting_period_end_year(text)
-    return year if year is not None else -1
-
-
-def _reporting_year_goal_satisfied(candidate, query: str) -> bool:
-    """Whether a verified candidate is new enough to stop searching."""
-    explicit = _extract_year_intent(query)
-    if explicit:
-        if isinstance(candidate, dict):
-            candidate_text = " ".join(str(candidate.get(key) or "") for key in (
-                "url", "filename", "title", "content_sample"))
-        else:
-            candidate_text = str(candidate or "")
-        candidate_years = _extract_year_intent(candidate_text)
-        return bool(explicit.intersection(candidate_years))
-    if _query_needs_recency_scan(query):
-        return (_report_recency_key(candidate, query) >=
-                _latest_reporting_search_year())
-    return True
 
 
 def _year_alignment_score(query: str, candidate_text: str) -> int:
     qy = _extract_year_intent(query)
     if not qy:
-        candidate_year = _report_recency_key(candidate_text, query)
-        if candidate_year < 0:
+        cy = _extract_year_intent(candidate_text)
+        if not cy:
             return 0
-        return max(0, min(candidate_year - (CURRENT_YEAR - 10), 10))
+        return max(0, min(max(cy) - (CURRENT_YEAR - 10), 10))
     cy = _extract_year_intent(candidate_text)
     if not cy:
         return 0
@@ -1081,8 +973,6 @@ def _llm_select_best(query: str, candidates: list[dict], company: str = "") -> d
         year_rule = (
             f"- Year rule: the target year(s) are {sorted(target_years)}. The chosen "
             "candidate MUST show one of these years in its filename or content sample. "
-            "Treat a fiscal range by its END year: FY2024-25, 2024/25, and "
-            "2024-2025 all match target year 2025. "
             "If none match, set selected_url to null and year_match to false.\n"
         )
     else:
@@ -1093,18 +983,11 @@ def _llm_select_best(query: str, candidates: list[dict], company: str = "") -> d
             "that are otherwise equally strong CLASS matches: if this is a "
             "normally-dated/recurring document (an Annual Report, Proxy "
             "Statement, Sustainability Report, or similar periodic filing), "
-            "PREFER the one showing the MOST RECENT REPORTING-PERIOD END YEAR "
-            "in its filename or "
+            "PREFER the one showing the MOST RECENT year in its filename or "
             "content — do not settle for an old year (e.g. 2020-2022) when a "
             "newer one is present among the candidates just because it "
-            "happened to rank first. Fiscal ranges are compared by their end "
-            "year, so FY2024-25 is newer than FY2023-24. Do not mistake a URL "
-            "upload/publication folder such as /2026/ for the reporting period "
-            "when the document itself clearly says FY2024-25. If this is a policy or other typically "
-            "undated document, year is irrelevant — ignore it entirely. For "
-            "a recurring report, choose the greatest reporting-period END year "
-            "actually available, including the current end year when published; "
-            "there is no previous-year cap.\n"
+            "happened to rank first. If this is a policy or other typically "
+            "undated document, year is irrelevant — ignore it entirely.\n"
         )
 
     if company and company.lower() != "unknown":
@@ -1229,7 +1112,7 @@ def _prepare_query(q: str) -> str:
     return q.strip()
 
 
-def _with_year_before_site(query: str, year: int | str) -> str:
+def _with_year_before_site(query: str, year: int) -> str:
     """Add a fiscal year without corrupting a trailing or leading site: operator."""
     site_match = re.search(r"\bsite:\s*\S+", query or "", re.I)
     if not site_match:
@@ -1239,30 +1122,15 @@ def _with_year_before_site(query: str, year: int | str) -> str:
     return re.sub(r"\s+", " ", f"{remainder} {year} {site}").strip()
 
 
-def _latest_period_search_queries(query: str, end_year: int) -> list[str]:
-    """Search newest calendar/FY labels plus one fallback reporting period."""
-    variants = []
-    for candidate_end_year in (end_year, end_year - 1):
-        fiscal_label = (f"FY{candidate_end_year - 1}-"
-                        f"{candidate_end_year % 100:02d}")
-        variants.extend((
-            _with_year_before_site(query, candidate_end_year),
-            _with_year_before_site(query, fiscal_label),
-        ))
-    return list(dict.fromkeys(variant for variant in variants if variant != query))
-
-
 def _apply_latest_completed_fiscal_year(query: str,
                                          known_class: str | None = None,
                                          known_year: int | None = None
                                          ) -> tuple[str, int | None]:
-    """Identify the preferred end year for an undated recurring report.
+    """Resolve an undated recurring report request to the latest completed FY.
 
-    In calendar year 2026, Annual and Sustainability Report discovery first
-    searches reporting end-year 2026 (including FY2025-26). The base query
-    remains undated and selection has no end-year cap: the greatest available
-    class-verified period wins, with older reports used only as fallback.
-    Explicit historical years remain strict.
+    Annual reports describe a completed fiscal year. In calendar year 2026 the
+    preferred annual report is therefore FY2025, even when it was published in
+    2026. Explicit historical years always win.
     """
     explicit = _extract_year_intent(query)
     if known_year or explicit:
@@ -1271,10 +1139,10 @@ def _apply_latest_completed_fiscal_year(query: str,
                {c for c, _ in _matched_doc_classes(query)})
     if not classes.intersection(LATEST_COMPLETED_FISCAL_YEAR_CLASSES):
         return query, None
-    target = _latest_reporting_search_year()
-    print(f"[year] latest available reporting period search anchor: "
-          f"{query!r} -> end-year {target} (query remains fallback-capable)")
-    return query, target
+    target = CURRENT_YEAR - max(1, LATEST_COMPLETED_FISCAL_YEAR_LAG)
+    resolved = _with_year_before_site(query, target)
+    print(f"[year] latest completed fiscal year: {query!r} -> {resolved!r}")
+    return resolved, target
 
 
 # ─── HEAD pre-filter ─────────────────────────────────────────────────────────
@@ -2002,11 +1870,7 @@ def _verify_priority(url: str, query: str) -> int:
     if "annual report" in matched:
         if "/doc_financials/annual/" in path:
             score += 20
-        if "/integrated-report" in path:
-            score += 20
         if re.search(r"(?:^|[/_.-])ar[_-]?20\d{2}(?:\.|$)", path):
-            score += 16
-        if re.search(r"(?:^|[/_.-])ir[_-]?20\d{2}(?:[/_.-]|$)", path):
             score += 16
         if _is_known_document_cdn(url):
             score += 6
@@ -2017,12 +1881,7 @@ def _verify_priority(url: str, query: str) -> int:
     return score
 
 def _sort_for_verify(urls: list[str], query: str) -> list[str]:
-    return sorted(
-        urls,
-        key=lambda u: (_verify_priority(u, query),
-                       _report_recency_key(u, query)),
-        reverse=True,
-    )
+    return sorted(urls, key=lambda u: _verify_priority(u, query), reverse=True)
 
 def _doc_candidate_score(url: str, text: str, query: str, domain: str | None) -> int:
     ranked = _rank([{"url": url, "title": text, "snippet": text}], query, domain)
@@ -2034,8 +1893,7 @@ def _doc_candidate_score(url: str, text: str, query: str, domain: str | None) ->
 _FILING_TYPE_HINTS: dict[str, dict[str, list[str]]] = {
     "annual report": {
         "boost": ["10-k", "10k", "form10-k", "form 10-k", "annual report",
-                  "ar20", "integrated annual report", "integrated report",
-                  "integrated-report", "annual-report"],
+                  "ar20", "integrated annual report", "annual-report"],
         "penalize": ["10-q", "10q", "quarterly", "8-k", "8k",
                      "consolidated_financial_statements", "current report",
                      "sustainab", "climate", "assurance", "proxy"],
@@ -2480,14 +2338,6 @@ def _browser_resolve_document_uncached(page_url: str, domain: str | None,
                                and not _is_junk_host(h.get("url", ""))
                                and not _is_press_release_url(h.get("url", ""), h.get("text", ""))
                                and not _is_navigation_href(h.get("url", ""), domain)]
-                    labeled.sort(
-                        key=lambda h: (_doc_candidate_score(
-                                           h.get("url", ""), h.get("text", ""),
-                                           query, domain),
-                                       _report_recency_key(
-                                           {"url": h.get("url", ""),
-                                            "title": h.get("text", "")}, query)),
-                        reverse=True)
                     nav_links = [h["url"] for h in harvested
                                  if _is_navigation_href(h.get("url", ""), domain)
                                  and not _is_junk_host(h.get("url", ""))
@@ -2580,13 +2430,15 @@ def _browser_resolve_document_uncached(page_url: str, domain: str | None,
                                 cand_doc["verified"] = True
                                 cand_doc["_verified_for"] = query
                             verified_hits.append(cand_doc)
-                            if (verify_fn is None
-                                    or _reporting_year_goal_satisfied(cand_doc, query)):
+                            target_years = _extract_year_intent(query)
+                            candidate_years = _extract_year_intent(cand)
+                            if verify_fn is None or target_years.intersection(candidate_years):
                                 break
 
                         if verified_hits:
                             def _hit_year(hit: dict) -> int:
-                                return _report_recency_key(hit, query)
+                                years = _extract_year_intent(hit["url"])
+                                return max(years) if years else -1
                             verified_hits.sort(key=_hit_year, reverse=True)
                             best = verified_hits[0]
                             if len(verified_hits) > 1:
@@ -2764,12 +2616,15 @@ def _browser_resolve_document_uncached(page_url: str, domain: str | None,
                                     cd["verified"] = True
                                     cd["_verified_for"] = query
                                 nav_hits.append(cd)
+                                target_years = _extract_year_intent(query)
+                                candidate_years = _extract_year_intent(cand)
                                 if (verify_fn is None
-                                        or _reporting_year_goal_satisfied(cd, query)):
+                                        or target_years.intersection(candidate_years)):
                                     break
                             if nav_hits:
                                 nav_hits.sort(
-                                    key=lambda d: _report_recency_key(d, query),
+                                    key=lambda d: (max(_extract_year_intent(d["url"]))
+                                                   if _extract_year_intent(d["url"]) else -1),
                                     reverse=True)
                                 resolved = nav_hits[0]
                                 print(f"[browser][nav] resolved via deep nav: "
@@ -2951,15 +2806,12 @@ def _write_metadata_sidecar(s3_key, company, url, digest, ctype, query,
 
 
 def _store(company: str, run_id: str, url: str, body: bytes, ctype: str,
-           title: str, query: str = "", report_class: str | None = None,
-           year: int | None = None) -> dict:
+           title: str, query: str = "") -> dict:
     digest  = hashlib.sha256(body).hexdigest()
     s3_key  = f"{_slug(company)}/{digest[:12]}-{_safe_name(url)}"
     _s3_put_if_missing(s3_key, body, ctype,
                        {"source_url": url, "sha256": digest, "run_id": run_id})
-    _write_metadata_sidecar(
-        s3_key, company, url, digest, ctype, query,
-        report_class=report_class, year=year, run_id=run_id)
+    _write_metadata_sidecar(s3_key, company, url, digest, ctype, query, run_id=run_id)
     wrote = _write_provenance_if_missing({
         "company": _slug(company), "s3_key": s3_key, "run_id": run_id,
         "report": title or _safe_name(url), "source_url": url, "query": query,
@@ -2973,7 +2825,7 @@ def _store(company: str, run_id: str, url: str, body: bytes, ctype: str,
         "s3_uri": f"s3://{BUCKET}/{s3_key}" if BUCKET else "(no bucket configured)",
         "download_url": _presign(s3_key),
         "source_url": url, "content_type": ctype, "sha256": digest,
-        "report": title or _safe_name(url), "year": year,
+        "report": title or _safe_name(url),
     }
 
 
@@ -3139,18 +2991,8 @@ def _parse_llm_json_array(text):
 
 
 def _query_variant_preserves_years(original: str, variant: str) -> bool:
-    """LLM aliases may change FY notation, but not reporting-period intent."""
-    original_years = _extract_year_intent(original)
-    variant_years = _extract_year_intent(variant)
-    if not original_years:
-        return not variant_years
-    if not variant_years:
-        return False
-    if (_extract_fiscal_year_ranges(original)
-            or _extract_fiscal_year_ranges(variant)):
-        return (_reporting_period_end_year(original) ==
-                _reporting_period_end_year(variant))
-    return original_years == variant_years
+    """LLM search aliases may rephrase a query, but may not alter its years."""
+    return _extract_year_intent(original) == _extract_year_intent(variant)
 
 
 def _llm_generate_search_queries(query, company, domain):
@@ -3180,9 +3022,7 @@ def _llm_generate_search_queries(query, company, domain):
         "to the company jurisdiction: " + registries + ". Example: site:REGISTRY COMPANY CLASS.\n"
         "5. Regional/naming variants of the class (annual report and accounts, "
         "integrated annual report, BRSR, 10-K, DEF 14A as appropriate).\n\n"
-        "Rules: preserve the requested reporting period; never invent a year. "
-        "Equivalent fiscal notation is allowed (target 2025 may be searched as "
-        "FY2024-25). Keep each query "
+        "Rules: preserve any year exactly; never invent a year. Keep each query "
         "under 200 chars. No markdown. Do NOT format domains as markdown links.\n\n"
         "Output ONLY a JSON array of strings."
     )
@@ -3356,6 +3196,17 @@ def _sitemap_landing_score(url: str, query: str) -> int:
     return score
 
 
+_RECURRING_DOCUMENT_CLASSES = {
+    "annual report", "proxy statement", "remuneration report",
+    "sustainability report",
+}
+
+
+def _query_needs_recency_scan(query: str) -> bool:
+    return any(canonical in _RECURRING_DOCUMENT_CLASSES
+               for canonical, _ in _matched_doc_classes(query))
+
+
 def _strong_sitemap_doc_match(url: str, query: str) -> bool:
     """True when every meaningful query term is present in the document path."""
     path = unquote(urlparse(url or "").path).lower()
@@ -3420,6 +3271,8 @@ def _sitemap_resolve(domain, query, verify_fn, known_bad=None, budget=None,
     verified_hits = []
     tried = 0
     tbudget = BROWSER_MAX_VERIFY_CANDIDATES if verify_fn else 1
+    target_years = _extract_year_intent(query)
+    scan_for_recency = not target_years and _query_needs_recency_scan(query)
     for cand in candidate_urls:
         if budget is not None and not budget.can_verify(reserve_verifies):
             print("[sitemap] stopped: " + budget.why_stopped(reserve_verifies))
@@ -3448,11 +3301,13 @@ def _sitemap_resolve(domain, query, verify_fn, known_bad=None, budget=None,
             cd["source_page"] = source_page
         verified_hits.append(cd)
         if (verify_fn is None
-                or _reporting_year_goal_satisfied(cd, query)):
+                or target_years.intersection(_extract_year_intent(cand))
+                or not scan_for_recency):
             break
     if not verified_hits:
         return None
-    verified_hits.sort(key=lambda d: _report_recency_key(d, query), reverse=True)
+    verified_hits.sort(key=lambda d: (max(_extract_year_intent(d["url"]))
+                       if _extract_year_intent(d["url"]) else -1), reverse=True)
     best = verified_hits[0]
     print("[sitemap] resolved: " + best["url"] + " (" + str(len(best["body"])) + " bytes)")
     return best
@@ -3516,7 +3371,8 @@ def _deep_static_crawl(seed_url: str, domain: str | None, query: str,
         doc_cands = [u for u in cands if _is_doc_url(u) and not _is_junk_host(u)]
 
         def _uy(u):
-            return _report_recency_key(u, query)
+            ys = _extract_year_intent(u)
+            return max(ys) if ys else -1
 
         doc_cands = sorted(doc_cands, key=lambda u: (_verify_priority(u, query), _uy(u)),
                            reverse=True)
@@ -3545,11 +3401,10 @@ def _deep_static_crawl(seed_url: str, domain: str | None, query: str,
             cd["_verified_for"] = query
             cd["via"] = "deep_static_crawl"
             verified_hits.append(cd)
-            if _reporting_year_goal_satisfied(cd, query):
+            target_years = _extract_year_intent(query)
+            if target_years.intersection(_extract_year_intent(cand)):
                 break
-        if (verified_hits and any(
-                _reporting_year_goal_satisfied(hit, query)
-                for hit in verified_hits)):
+        if verified_hits:
             break
         if depth < DEEP_STATIC_MAX_DEPTH:
             for sub in _subpage_links(body, url, query, domain or _domain(query) or ""):
@@ -3558,7 +3413,8 @@ def _deep_static_crawl(seed_url: str, domain: str | None, query: str,
     if not verified_hits:
         return None
     verified_hits.sort(
-        key=lambda d: _report_recency_key(d, query), reverse=True)
+        key=lambda d: (max(_extract_year_intent(d["url"]))
+                       if _extract_year_intent(d["url"]) else -1), reverse=True)
     best = verified_hits[0]
     print(f"[deep-crawl] resolved: {best['url']} ({len(best['body'])} bytes)")
     return best
@@ -3694,24 +3550,18 @@ def _invoke_sync(payload: dict) -> dict:
                 continue
             cd["via"] = "search+html_crawl"
             hits.append(cd)
-            if _reporting_year_goal_satisfied(cd, query):
+            target_years = _extract_year_intent(query)
+            if target_years.intersection(_extract_year_intent(cand)):
                 break
         if not hits:
             return None
-        hits.sort(key=lambda d: _report_recency_key(d, query), reverse=True)
+        hits.sort(key=lambda d: (max(_extract_year_intent(d["url"]))
+                  if _extract_year_intent(d["url"]) else -1), reverse=True)
         return hits[0]
 
     def _commit(resolved: dict, prepared: str, stage: str, base_log: dict) -> dict:
-        resolved_year_value = _report_recency_key(resolved, prepared)
-        resolved_year = (resolved_year_value
-                         if resolved_year_value >= 0 else None)
-        if resolved_year is None and base_log.get("year_mode") == "explicit":
-            resolved_year = base_log.get("known_year")
-        resolved_class = (base_log.get("known_class") or
-                          ((base_log.get("matched_classes") or [None])[0]))
         rec = _store(company, run_id, resolved["url"], resolved["body"],
-                     resolved["ctype"], "", prepared,
-                     report_class=resolved_class, year=resolved_year)
+                     resolved["ctype"], "", prepared)
         rec["stage"] = stage
         digest = rec["sha256"]
         if digest in stored_by_hash or resolved["url"] in stored_by_url:
@@ -3735,14 +3585,9 @@ def _invoke_sync(payload: dict) -> dict:
         known_class = _item.get("report_class")
         known_year = _item.get("year")
         prepared = _prepare_query(str(raw))
-        explicit_years = _extract_year_intent(prepared)
-        prepared, preferred_year = _apply_latest_completed_fiscal_year(
+        prepared, inferred_year = _apply_latest_completed_fiscal_year(
             prepared, known_class=known_class, known_year=known_year)
-        inferred_latest = bool(
-            preferred_year and not known_year and not explicit_years)
-        effective_year = (known_year or
-                          (max(explicit_years) if explicit_years else None) or
-                          preferred_year)
+        effective_year = known_year or inferred_year
         if not prepared or prepared in done_queries:
             continue
         done_queries.add(prepared)
@@ -3762,9 +3607,6 @@ def _invoke_sync(payload: dict) -> dict:
             "prepared": prepared,
             "known_class": known_class,
             "known_year": effective_year,
-            "year_mode": ("latest_preference" if inferred_latest
-                          else "explicit" if effective_year else "none"),
-            "preferred_search_year": (preferred_year if inferred_latest else None),
             "matched_classes": matched_classes,
             "status": "pending",
             "resolved_via": None,
@@ -3774,11 +3616,6 @@ def _invoke_sync(payload: dict) -> dict:
 
         # ── Tier 1: Google (Vertex) search + alias / LLM-generated fan-out ──
         search_queries = [prepared]
-        if inferred_latest and preferred_year:
-            for period_query in _latest_period_search_queries(
-                    prepared, preferred_year):
-                if period_query not in search_queries:
-                    search_queries.append(period_query)
         for alt in _alias_queries(prepared, region_override):
             if alt not in search_queries:
                 search_queries.append(alt)
@@ -3794,24 +3631,6 @@ def _invoke_sync(payload: dict) -> dict:
 
         resolved: dict | None = None
         stage: str | None = None
-        latest_fallbacks: list[tuple[dict, str]] = []
-
-        def _defer_older_latest_candidate() -> None:
-            """Keep an older verified result, but let later tiers seek newer."""
-            nonlocal resolved, stage
-            if resolved is None or not inferred_latest or not preferred_year:
-                return
-            resolved_year = _report_recency_key(resolved, prepared)
-            if resolved_year >= preferred_year:
-                return
-            fallback_stage = stage or "unknown"
-            latest_fallbacks.append((resolved, fallback_stage))
-            shown_year = str(resolved_year) if resolved_year >= 0 else "unknown"
-            print(f"[year] retaining {shown_year} result from {fallback_stage} "
-                  f"as fallback; continuing scan for end-year "
-                  f"{preferred_year} or newer")
-            resolved = None
-            stage = None
 
         if _confident(decision, prepared) and decision.get("selected_url"):
             sel = decision["selected_url"]
@@ -3827,15 +3646,12 @@ def _invoke_sync(payload: dict) -> dict:
                     if dug:
                         resolved = dug
                         stage = "search+html_crawl"
-        _defer_older_latest_candidate()
 
         # ── Tier 2: official registry fallback (SEC EDGAR + Companies House) ──
         if resolved is None and ENABLE_REGISTRY_TIER:
             _reg_class = known_class or (matched_classes[0] if matched_classes else None)
-            # Explicit years stay strict. For an inferred "latest" request,
-            # pass no year so the registry returns its newest available filing.
-            _reg_year = known_year or (max(explicit_years)
-                                       if explicit_years else None)
+            _reg_year = known_year or (max(_extract_year_intent(prepared))
+                                       if _extract_year_intent(prepared) else None)
             if _reg_class and report_specs.registries_for(_reg_class):
                 reg = registry_tier.registry_resolve(
                     company_ctx, _reg_class, _reg_year,
@@ -3843,7 +3659,6 @@ def _invoke_sync(payload: dict) -> dict:
                 if reg and reg.get("body"):
                     resolved = reg
                     stage = "registry"
-        _defer_older_latest_candidate()
 
         # ── Tier 3a: sitemap enumeration ──
         if resolved is None and domain:
@@ -3854,7 +3669,6 @@ def _invoke_sync(payload: dict) -> dict:
             if sm:
                 resolved = sm
                 stage = "sitemap"
-        _defer_older_latest_candidate()
 
         # JS-heavy investor-relations pages are both more precise and cheaper
         # than a broad corporate-site crawl for filing classes. Try the browser
@@ -3862,7 +3676,6 @@ def _invoke_sync(payload: dict) -> dict:
         browser_first = bool(
             _use_browser and set(matched_classes).intersection({
                 "annual report", "proxy statement", "remuneration report",
-                "sustainability report",
             }))
         browser_attempted = False
         if resolved is None and browser_first:
@@ -3876,7 +3689,6 @@ def _invoke_sync(payload: dict) -> dict:
                 if br and br.get("body"):
                     resolved = br
                     stage = "browser"
-        _defer_older_latest_candidate()
 
         # ── Deep static crawl from the site root ──
         if resolved is None:
@@ -3892,7 +3704,6 @@ def _invoke_sync(payload: dict) -> dict:
                 if dc:
                     resolved = dc
                     stage = "deep_crawl"
-        _defer_older_latest_candidate()
 
         # Browser fallback for non-filing classes keeps the original ordering.
         if resolved is None and _use_browser and not browser_attempted:
@@ -3905,17 +3716,6 @@ def _invoke_sync(payload: dict) -> dict:
                 if br and br.get("body"):
                     resolved = br
                     stage = "browser"
-        _defer_older_latest_candidate()
-
-        if resolved is None and latest_fallbacks:
-            resolved, stage = max(
-                latest_fallbacks,
-                key=lambda item: _report_recency_key(item[0], prepared),
-            )
-            fallback_year = _report_recency_key(resolved, prepared)
-            print(f"[year] current reporting-period target was not found; "
-                  f"using newest verified fallback end-year "
-                  f"{fallback_year if fallback_year >= 0 else 'unknown'}")
 
         if resolved is not None:
             _commit(resolved, prepared, stage or "unknown", base_log)

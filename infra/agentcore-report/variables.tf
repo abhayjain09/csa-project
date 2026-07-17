@@ -81,8 +81,8 @@ variable "enable_web_search" {
     Requires AWS CLI v2 on the machine running `terraform apply`.
     Set false to deploy without it (agent falls back to direct search).
   EOT
-  type        = bool
-  default     = true
+  type    = bool
+  default = true
 }
 
 variable "gateway_search_tool" {

@@ -131,9 +131,15 @@ data "aws_iam_policy_document" "task_perms" {
       "arn:aws:dynamodb:${local.region}:${local.acct}:table/${var.queries_table}",
       "arn:aws:dynamodb:${local.region}:${local.acct}:table/${var.runs_table}",
       "arn:aws:dynamodb:${local.region}:${local.acct}:table/${var.provenance_table}",
+      aws_dynamodb_table.pageindex_runs.arn,
+      aws_dynamodb_table.answering_runs.arn,
+      aws_dynamodb_table.answering_results.arn,
       "arn:aws:dynamodb:${local.region}:${local.acct}:table/${var.queries_table}/index/*",
       "arn:aws:dynamodb:${local.region}:${local.acct}:table/${var.runs_table}/index/*",
       "arn:aws:dynamodb:${local.region}:${local.acct}:table/${var.provenance_table}/index/*",
+      "${aws_dynamodb_table.pageindex_runs.arn}/index/*",
+      "${aws_dynamodb_table.answering_runs.arn}/index/*",
+      "${aws_dynamodb_table.answering_results.arn}/index/*",
     ]
   }
 

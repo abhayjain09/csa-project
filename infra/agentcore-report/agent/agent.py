@@ -1,4 +1,17 @@
-"""Report download agent (single AgentCore Runtime) — v42.
+"""Report download agent (single AgentCore Runtime) — v45.
+
+v45 keeps annual reports and proxy statements on the official-company path
+first: direct Google URL search -> official sitemap/landing-page crawl -> deep
+static crawl -> browser navigation. A validated CIK is used on SEC EDGAR only
+when the official-company path does not produce the requested document.
+
+v44 made discovery identity-first and official-domain scoped. Ticker aliases
+enrich Google probes while CIKs are consumed directly by SEC EDGAR.
+
+v43 added Google-grounded Vertex company-identity hints with official SEC
+validation, registry-first annual/proxy resolution, hard official-domain web
+filtering, stable per-query result IDs, class-scoped S3 keys, and browser
+navigation-to-archive handling.
 
 v42 bridges relevant HTML landing pages discovered through sitemaps to the
 documents they link, reserves search sampling capacity for official-domain
@@ -56,7 +69,7 @@ import registry_tier
 
 app = BedrockAgentCoreApp()
 
-CODE_VERSION = "v42"
+CODE_VERSION = os.environ.get("CODE_VERSION", "v45")
 
 # Tier 2 (official registry fallback) master switch. registry_tier.py reads its
 # own EDGAR_* / CH_* configuration from the environment.
@@ -77,6 +90,18 @@ SEARCH_BACKEND = os.environ.get("SEARCH_BACKEND", "gateway").strip().lower()
 LAMBDA_SEARCH_FUNCTION = os.environ.get("LAMBDA_SEARCH_FUNCTION", "").strip()
 LAMBDA_INVOKE_TIMEOUT = int(os.environ.get("LAMBDA_INVOKE_TIMEOUT", "120"))
 VERTEX_FALLBACK_TO_GATEWAY = os.environ.get("VERTEX_FALLBACK_TO_GATEWAY", "false").lower() == "true"
+ENABLE_VERTEX_IDENTITY = os.environ.get(
+    "ENABLE_VERTEX_IDENTITY", "true").lower() != "false"
+REQUIRE_VALIDATED_REGISTRY_IDENTITY = os.environ.get(
+    "REQUIRE_VALIDATED_REGISTRY_IDENTITY", "true").lower() != "false"
+REQUIRE_OFFICIAL_DOMAIN_FOR_WEB = os.environ.get(
+    "REQUIRE_OFFICIAL_DOMAIN_FOR_WEB", "true").lower() != "false"
+REGISTRY_FIRST_CLASSES = {
+    c.strip().lower()
+    for c in os.environ.get(
+        "REGISTRY_FIRST_CLASSES", "").split(",")
+    if c.strip()
+}
 
 DEEP_STATIC_CRAWL = os.environ.get("DEEP_STATIC_CRAWL", "true").lower() != "false"
 DEEP_STATIC_MAX_DEPTH = int(os.environ.get("DEEP_STATIC_MAX_DEPTH", "3"))
@@ -154,6 +179,8 @@ ENABLE_LLM_CLASS_MATCH = os.environ.get("ENABLE_LLM_CLASS_MATCH", "true").lower(
 ENFORCE_COMPANY_SAMPLE_EVIDENCE = os.environ.get(
     "ENFORCE_COMPANY_SAMPLE_EVIDENCE", "true").lower() != "false"
 COMPANY_SAMPLE_MIN_CHARS = int(os.environ.get("COMPANY_SAMPLE_MIN_CHARS", "40"))
+MIN_SELECTION_CONFIDENCE = os.environ.get(
+    "MIN_SELECTION_CONFIDENCE", "high").strip().lower()
 
 _bedrock = boto3.client("bedrock-runtime", region_name=REGION) if LLM_MODEL_ID else None
 _s3      = boto3.client("s3", region_name=REGION) if BUCKET else None
@@ -198,6 +225,8 @@ IR_NAV_KEYWORDS = tuple(
         "ethics,compliance,reports,disclosures,shareholder,filings").split(",")
     if k.strip())
 _LLM_QUERY_GEN_CACHE = {}
+_VERTEX_IDENTITY_CACHE: dict[str, dict] = {}
+_VERTEX_IDENTITY_CACHE_LOCK = threading.Lock()
 
 
 # ── Model circuit breaker ──────────────────────────────────────────────────
@@ -794,25 +823,96 @@ def _alias_queries(original_query: str, region: str | None = None) -> list[str]:
 
 
 # ─── Basic helpers ────────────────────────────────────────────────────────────
+def _clean_domain(value: str | None) -> str:
+    raw = _demarkdown(str(value or "")).strip("[]() /")
+    if not raw:
+        return ""
+    if "://" not in raw:
+        raw = "https://" + raw
+    try:
+        host = (urlparse(raw).hostname or "").lower().rstrip(".")
+    except ValueError:
+        return ""
+    if not host or "." not in host:
+        return ""
+    return host[4:] if host.startswith("www.") else host
+
+
 def _domain(query: str) -> str | None:
     m = re.search(r"site:\s*(\S+)", query or "")
     if not m:
         return None
-    raw = _demarkdown(m.group(1))
-    raw = raw.strip("[]() ")
-    if "://" not in raw:
-        raw = "https://" + raw
-    try:
-        host = urlparse(raw).netloc.lower()
-    except ValueError:
-        return None
-    if not host or "." not in host:
-        return None
-    return host[4:] if host.startswith("www.") else host
+    return _clean_domain(m.group(1)) or None
 
 
 def _strip_site(q: str) -> str:
     return re.sub(r"site:\s*\S+", "", q or "").strip()
+
+
+def _scope_to_official_domain(query: str, domain: str | None) -> str:
+    """Replace any user/model site operator with the validated official domain."""
+    clean = re.sub(r"\bsite:\s*\S+", "", query or "", flags=re.I).strip()
+    clean = re.sub(r"\s+", " ", clean)
+    return f"{clean} site:{domain}".strip() if domain else clean
+
+
+def _official_search_queries(query: str, company_ctx: dict,
+                             aliases: list[str],
+                             generated: list[str]) -> list[str]:
+    """Build official-domain Google probes with safe identity enrichment.
+
+    A validated ticker is a useful discovery alias on IR sites, so it gets one
+    dedicated query variant. The CIK is deliberately not added to corporate
+    website searches: it is an exact registry key and is sent directly to SEC
+    EDGAR, where it has higher precision and avoids polluting website results.
+    """
+    domain = _clean_domain((company_ctx or {}).get("domain"))
+    if not domain and REQUIRE_OFFICIAL_DOMAIN_FOR_WEB:
+        return []
+
+    candidates = [query]
+    validation = (company_ctx or {}).get("_identity_validation") or {}
+    if validation.get("status") == "validated":
+        ticker = str((company_ctx or {}).get("ticker") or "").upper().strip()
+        if ticker and not re.search(
+                rf"\b(?:ticker|stock\s+symbol)\s*:?\s*[\"']?"
+                rf"{re.escape(ticker)}(?:[\"']|\b)",
+                query.upper(), re.I):
+            candidates.append(
+                f'{_strip_site(query)} ticker "{ticker}"')
+    candidates.extend(aliases or [])
+    candidates.extend(generated or [])
+
+    out: list[str] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        scoped = _scope_to_official_domain(str(candidate or ""), domain)
+        if not scoped or not _query_variant_preserves_years(query, scoped):
+            continue
+        key = scoped.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(scoped)
+    return out
+
+
+def _discovery_route(report_class: str | None,
+                     registry_eligible: bool) -> list[str]:
+    """Return the authoritative per-class discovery order."""
+    canonical = (report_class or "").strip().lower()
+    route: list[str] = []
+    if registry_eligible and canonical in REGISTRY_FIRST_CLASSES:
+        route.append("registry")
+    route.extend([
+        "direct_search",
+        "official_crawl",
+        "deep_crawl",
+        "browser",
+    ])
+    if registry_eligible and "registry" not in route:
+        route.append("registry")
+    return route
 
 
 def _slug(name: str) -> str:
@@ -1336,16 +1436,10 @@ def _parse_mcp_results(res, dbg=None) -> list[dict]:
     return out
 
 
-def _vertex_lambda_search(query: str, limit: int) -> tuple[list[dict], str]:
-    """Tier 1 discovery via the ISOLATED Vertex grounded-search Lambda."""
+def _invoke_vertex_lambda(payload: dict) -> dict:
+    """Invoke the isolated Vertex Lambda and return its decoded JSON body."""
     if _lambda is None or not LAMBDA_SEARCH_FUNCTION:
-        return [], "no-lambda-configured"
-    site = _domain(query)
-    payload = {
-        "query": _strip_site(query) if site else query,
-        "site": site or "",
-        "max_results": limit,
-    }
+        return {"error": "no-lambda-configured"}
     try:
         resp = _lambda.invoke(
             FunctionName=LAMBDA_SEARCH_FUNCTION,
@@ -1354,7 +1448,7 @@ def _vertex_lambda_search(query: str, limit: int) -> tuple[list[dict], str]:
         )
     except Exception as exc:  # noqa: BLE001
         print(f"[vertex-lambda] invoke error: {type(exc).__name__}: {exc}")
-        return [], f"lambda-invoke-error({type(exc).__name__})"
+        return {"error": f"lambda-invoke-error({type(exc).__name__})"}
 
     if resp.get("FunctionError"):
         try:
@@ -1362,13 +1456,27 @@ def _vertex_lambda_search(query: str, limit: int) -> tuple[list[dict], str]:
         except Exception:  # noqa: BLE001
             err = ""
         print(f"[vertex-lambda] function error: {err}")
-        return [], "lambda-function-error"
+        return {"error": "lambda-function-error"}
 
     try:
         body = json.loads(resp["Payload"].read().decode("utf-8"))
     except Exception as exc:  # noqa: BLE001
         print(f"[vertex-lambda] payload parse failed: {exc}")
-        return [], f"lambda-parse-error({type(exc).__name__})"
+        return {"error": f"lambda-parse-error({type(exc).__name__})"}
+    return body if isinstance(body, dict) else {"error": "lambda-non-object-response"}
+
+
+def _vertex_lambda_search(query: str, limit: int) -> tuple[list[dict], str]:
+    """Tier 1 discovery via the ISOLATED Vertex grounded-search Lambda."""
+    site = _domain(query)
+    body = _invoke_vertex_lambda({
+        "mode": "document_search",
+        "query": _strip_site(query) if site else query,
+        "site": site or "",
+        "max_results": limit,
+    })
+    if body.get("error") and not body.get("results"):
+        return [], str(body["error"])
 
     raw = body.get("results", []) if isinstance(body, dict) else []
     out, seen = [], set()
@@ -1394,6 +1502,71 @@ def _vertex_lambda_search(query: str, limit: int) -> tuple[list[dict], str]:
               f"grounding-redirect URL(s) that leaked from the Lambda")
     via = body.get("via", "vertex-lambda") if isinstance(body, dict) else "vertex-lambda"
     return out, via
+
+
+def _vertex_company_identity_hint(company_ctx: dict) -> dict:
+    """Get grounded company identifiers as hints; never trust them directly."""
+    if not ENABLE_VERTEX_IDENTITY or _lambda is None:
+        return {}
+    name = str(company_ctx.get("name") or "").strip()
+    domain = str(company_ctx.get("domain") or "").strip().lower()
+    if not name or name.lower() == "unknown":
+        return {}
+    cache_key = f"{name.lower()}||{domain}"
+    with _VERTEX_IDENTITY_CACHE_LOCK:
+        cached = _VERTEX_IDENTITY_CACHE.get(cache_key)
+    if cached is not None:
+        return dict(cached)
+
+    body = _invoke_vertex_lambda({
+        "mode": "company_identity",
+        "company_name": name,
+        "site": domain,
+        "max_results": 8,
+    })
+    hint = dict(body.get("identity_hint") or {})
+    sources = [
+        item for item in (body.get("results") or [])
+        if isinstance(item, dict) and item.get("url")
+    ]
+
+    # A Vertex-proposed domain may enrich a legacy payload only when at least
+    # one resolved grounding source is actually hosted on that same domain.
+    # This is source attestation, not trust in generated model text.
+    hinted_domain = str(hint.get("official_domain") or "").strip().lower()
+    if hinted_domain:
+        identity_stop = {
+            "inc", "incorporated", "corp", "corporation", "company",
+            "limited", "ltd", "plc", "group", "holdings", "holding",
+        }
+        identity_terms = [
+            term for term in re.findall(r"[a-z0-9]+", name.lower())
+            if len(term) > 2 and term not in identity_stop
+        ]
+        hint["_domain_attested"] = bool(identity_terms) and any(
+            _host_matches(item.get("url", ""), hinted_domain)
+            and all(
+                term in (
+                    str(item.get("title") or "") + " "
+                    + str(item.get("snippet") or "") + " "
+                    + str(item.get("url") or "")
+                ).lower()
+                for term in identity_terms
+            )
+            for item in sources
+        )
+    hint["_grounding_sources"] = [
+        {"title": str(item.get("title") or "")[:200],
+         "url": str(item.get("url") or "")[:1000]}
+        for item in sources[:8]
+    ]
+    with _VERTEX_IDENTITY_CACHE_LOCK:
+        _VERTEX_IDENTITY_CACHE[cache_key] = dict(hint)
+    print(f"[identity] Vertex hint for {name!r}: "
+          f"ticker={hint.get('ticker')!r} cik={hint.get('cik')!r} "
+          f"domain={hint.get('official_domain')!r} "
+          f"sources={len(sources)} (untrusted until SEC validation)")
+    return hint
 
 
 def _single_web_search(query: str, limit: int) -> tuple[list[dict], str]:
@@ -1927,13 +2100,25 @@ def _dismiss_cookie_modals(page) -> None:
         except Exception:  # noqa: BLE001
             continue
 
-def _click_target_visible(page, text: str, timeout_ms: int = 1500) -> bool:
+def _visible_text_locator(page, text: str, timeout_ms: int = 1500):
+    """Return a visible text match instead of Playwright's often-hidden `.first`."""
     try:
-        loc = page.get_by_text(text, exact=False).first
-        loc.wait_for(state="visible", timeout=timeout_ms)
-        return True
+        matches = page.get_by_text(text, exact=False)
+        count = min(matches.count(), 20)
+        for index in range(count):
+            loc = matches.nth(index)
+            try:
+                loc.wait_for(state="visible", timeout=timeout_ms)
+                return loc
+            except Exception:  # noqa: BLE001
+                continue
     except Exception:  # noqa: BLE001
-        return False
+        pass
+    return None
+
+
+def _click_target_visible(page, text: str, timeout_ms: int = 1500) -> bool:
+    return _visible_text_locator(page, text, timeout_ms=timeout_ms) is not None
 
 def _verify_priority(url: str, query: str) -> int:
     path = unquote(urlparse(url).path).lower()
@@ -2305,7 +2490,13 @@ def _browser_resolve_document_uncached(page_url: str, domain: str | None,
     def _domain_ok(url: str) -> bool:
         if BROWSER_ALLOW_OFFDOMAIN_DOCS:
             return True
-        return not domain or _registrable(urlparse(url).netloc) == _registrable(domain)
+        return (
+            not domain
+            or _registrable(urlparse(url).netloc) == _registrable(domain)
+            # Known document CDNs are accepted only inside the browser path,
+            # where the URL was harvested from an official company page.
+            or _is_known_document_cdn(url)
+        )
 
     resolved: dict | None = None
     had_candidates = False
@@ -2555,14 +2746,14 @@ def _browser_resolve_document_uncached(page_url: str, domain: str | None,
                                       f"query, not class-dependent): {txt[:40]!r} "
                                       f"[{known_bad[click_key]}]")
                                 continue
-                            if not _click_target_visible(page, txt):
+                            loc = _visible_text_locator(page, txt)
+                            if loc is None:
                                 print(f"[browser] click target not visible "
                                       f"(fast-skip): {txt[:40]!r}")
                                 if known_bad is not None:
                                     known_bad[click_key] = "not visible (fast-skip)"
                                 continue
                             try:
-                                loc = page.get_by_text(txt, exact=False).first
                                 with page.expect_download(
                                         timeout=BROWSER_CLICK_TIMEOUT_MS) as di:
                                     loc.click(timeout=8000)
@@ -2723,9 +2914,13 @@ def _browser_resolve_document_uncached(page_url: str, domain: str | None,
                             and _bedrock is not None and _time_left()):
                         vres = _browser_vision_resolve(page, query, domain,
                                                        final_url or page_url,
-                                                       _acceptable)
+                                                       _acceptable,
+                                                       verify_fn=verify_fn)
                         if vres and vres.get("body"):
-                            if verify_fn is None or verify_fn(vres):
+                            already_verified = (
+                                vres.get("_verified_for") == query)
+                            if (already_verified or verify_fn is None
+                                    or verify_fn(vres)):
                                 if verify_fn is not None:
                                     vres["verified"] = True
                                     vres["_verified_for"] = query
@@ -2750,7 +2945,8 @@ def _browser_resolve_document_uncached(page_url: str, domain: str | None,
 
 
 def _browser_vision_resolve(page, query: str, domain: str | None,
-                            current_url: str, acceptable_fn) -> dict | None:
+                            current_url: str, acceptable_fn,
+                            verify_fn=None) -> dict | None:
     try:
         shot = page.screenshot(full_page=True, type="png")
     except Exception as exc:  # noqa: BLE001
@@ -2789,51 +2985,166 @@ def _browser_vision_resolve(page, query: str, domain: str | None,
         return None
 
     print(f"[browser][vision] model chose control text: {link_text!r}")
-    try:
-        loc = page.get_by_text(link_text, exact=False).first
-        # The vision model reads the FULL-PAGE screenshot, so it routinely picks
-        # a control that is real in the DOM but not currently actionable: below
-        # the fold, inside a collapsed accordion, or in a hover-reveal menu
-        # (observed on Edwards IR: "Annual Reports & Proxy Statements" resolved
-        # but 'element is not visible' -> click timed out through every retry).
-        # Try to make it actionable before clicking, then fall back to a forced
-        # click that bypasses Playwright's visibility/stability wait as a last
-        # resort. Each step is best-effort; failure just proceeds to the click.
+
+    def _domain_ok(url: str) -> bool:
+        return (
+            not domain
+            or _registrable(urlparse(url).netloc) == _registrable(domain)
+            or _is_known_document_cdn(url)
+        )
+
+    def _fetch_document(url: str, referer: str) -> dict | None:
+        if (not _is_safe_remote_document_url(url)
+                or not _domain_ok(url)
+                or _is_junk_host(url)
+                or _is_press_release_url(url)):
+            return None
         try:
-            loc.scroll_into_view_if_needed(timeout=3000)
-        except Exception:  # noqa: BLE001
-            pass
-        if not _click_target_visible(page, link_text, timeout_ms=2000):
-            try:
-                loc.hover(timeout=2000, force=True)
-                page.wait_for_timeout(300)
-            except Exception:  # noqa: BLE001
-                pass
-        with page.expect_download(timeout=BROWSER_CLICK_TIMEOUT_MS) as di:
-            try:
-                loc.click(timeout=8000)
-            except Exception:  # noqa: BLE001
-                # Last resort: bypass the actionability check. Safe here because
-                # a spurious download is still run through the same fail-closed
-                # verify_fn as every other candidate before anything is stored.
-                loc.click(timeout=4000, force=True)
-        dl = di.value
-        with open(dl.path(), "rb") as fh:
-            body = fh.read()
-        fname = dl.suggested_filename or ""
+            response = page.context.request.get(
+                url, headers={"referer": referer},
+                timeout=BROWSER_SESSION_TIMEOUT * 1000)
+            ctype = (response.headers or {}).get(
+                "content-type", "").split(";")[0].lower()
+            if response.status >= 400 or not acceptable_fn(url, ctype):
+                return None
+            body = response.body()
+        except Exception as exc:  # noqa: BLE001
+            print(f"[browser][vision] document fetch failed ({url}): {exc}")
+            return None
         if not body or len(body) > BROWSER_MAX_DOC_BYTES:
             return None
-        ctype = ("application/pdf" if fname.lower().endswith(".pdf")
-                 else "application/octet-stream")
-        dl_url = ""
+        candidate = {
+            "url": url,
+            "body": body,
+            "ctype": ctype or "application/pdf",
+            "via": "browser_vision_navigation",
+        }
+        if verify_fn is not None:
+            if not verify_fn(candidate):
+                return None
+            candidate["verified"] = True
+            candidate["_verified_for"] = query
+        return candidate
+
+    def _harvest_after_navigation() -> dict | None:
         try:
-            dl_url = dl.url
-        except Exception:  # noqa: BLE001
-            pass
-        print(f"[browser][vision] resolved via vision-guided click: "
-              f"{fname or dl_url} ({len(body)} bytes)")
-        return {"url": dl_url or current_url, "body": body, "ctype": ctype,
-                "via": "browser_vision_click"}
+            page.wait_for_timeout(BROWSER_SETTLE_MS)
+            _dismiss_cookie_modals(page)
+            links = page.evaluate(_JS_HARVEST_LINKS) or []
+        except Exception as exc:  # noqa: BLE001
+            print(f"[browser][vision] post-navigation harvest failed: {exc}")
+            return None
+        docs = sorted(
+            [
+                item for item in links
+                if _is_doc_url(item.get("url", ""))
+                and _is_safe_remote_document_url(item["url"])
+                and _domain_ok(item["url"])
+                and not _is_junk_host(item["url"])
+                and not _is_press_release_url(
+                    item["url"], item.get("text", ""))
+            ],
+            key=lambda item: (
+                _verify_priority(item["url"], query),
+                _doc_candidate_score(
+                    item["url"], item.get("text", ""), query, domain),
+            ),
+            reverse=True,
+        )
+        print(f"[browser][vision] navigated to {page.url}; harvested "
+              f"{len(docs)} document candidate(s)")
+        for item in docs[:BROWSER_MAX_VERIFY_CANDIDATES]:
+            candidate = _fetch_document(item["url"], page.url)
+            if candidate:
+                return candidate
+        return None
+
+    try:
+        loc = _visible_text_locator(page, link_text, timeout_ms=1500)
+        href = None
+        if loc is None:
+            # A hidden desktop/mobile-menu duplicate may still expose the real
+            # href. Reading that href is safer than force-clicking a hidden node.
+            try:
+                matches = page.get_by_text(link_text, exact=False)
+                for index in range(min(matches.count(), 20)):
+                    candidate_loc = matches.nth(index)
+                    candidate_href = candidate_loc.evaluate(
+                        """el => {
+                          const a = el.closest('a[href]');
+                          return a ? a.href : null;
+                        }""")
+                    if candidate_href:
+                        loc = candidate_loc
+                        href = candidate_href
+                        break
+            except Exception:  # noqa: BLE001
+                pass
+        elif loc is not None:
+            try:
+                href = loc.evaluate(
+                    """el => {
+                      const a = el.closest('a[href]');
+                      return a ? a.href : null;
+                    }""")
+            except Exception:  # noqa: BLE001
+                href = None
+
+        if href and _is_doc_url(href):
+            direct = _fetch_document(href, page.url or current_url)
+            if direct:
+                print(f"[browser][vision] resolved direct anchor: {href}")
+                return direct
+
+        if href and _is_navigation_href(href, domain):
+            page.goto(href, wait_until=BROWSER_WAIT_UNTIL,
+                      timeout=BROWSER_SESSION_TIMEOUT * 1000)
+            return _harvest_after_navigation()
+
+        if loc is None:
+            print("[browser][vision] text existed only in a hidden non-link "
+                  "control; refusing force-click")
+            return None
+
+        # Button-style controls may emit a native download or navigate via JS.
+        before_url = page.url
+        try:
+            with page.expect_download(
+                    timeout=BROWSER_CLICK_TIMEOUT_MS) as download_info:
+                loc.click(timeout=min(BROWSER_CLICK_TIMEOUT_MS, 8000))
+            download = download_info.value
+            with open(download.path(), "rb") as file_handle:
+                body = file_handle.read()
+            filename = download.suggested_filename or ""
+            if not body or len(body) > BROWSER_MAX_DOC_BYTES:
+                return None
+            download_url = ""
+            try:
+                download_url = download.url
+            except Exception:  # noqa: BLE001
+                pass
+            candidate = {
+                "url": download_url or current_url,
+                "body": body,
+                "ctype": ("application/pdf"
+                          if filename.lower().endswith(".pdf")
+                          else "application/octet-stream"),
+                "via": "browser_vision_click",
+            }
+            if verify_fn is None or verify_fn(candidate):
+                if verify_fn is not None:
+                    candidate["verified"] = True
+                    candidate["_verified_for"] = query
+                return candidate
+            return None
+        except Exception as click_exc:  # noqa: BLE001
+            # expect_download also raises when the click successfully navigates
+            # to an HTML archive. Inspect page state before treating it as a miss.
+            if page.url and page.url != before_url:
+                return _harvest_after_navigation()
+            print(f"[browser][vision] click produced neither download nor "
+                  f"navigation: {click_exc}")
+            return None
     except Exception as exc:  # noqa: BLE001
         print(f"[browser][vision] click failed: {exc}")
         return None
@@ -2881,22 +3192,29 @@ def _presign(s3_key: str) -> str | None:
         return None
 
 
-def _write_metadata_sidecar(s3_key, company, url, digest, ctype, query,
-                            report_class=None, year=None, run_id=""):
+def _write_metadata_sidecar(s3_key, company, url, digest, ctype,
+                            original_query, prepared_query,
+                            request_id="", report_class=None, year=None,
+                            run_id="", company_ctx=None):
     """Write <s3_key>.metadata.json so the downstream Bedrock Knowledge Base can
     filter by company / doc_class / year at retrieval time."""
     if _s3 is None or not BUCKET:
         return
     classes = ([report_class] if report_class
-               else [c for c, _ in _matched_doc_classes(query)])
-    yrs = ([year] if year else sorted(_extract_year_intent(query)))
+               else [c for c, _ in _matched_doc_classes(prepared_query)])
+    yrs = ([year] if year else sorted(_extract_year_intent(prepared_query)))
+    identity = ((company_ctx or {}).get("_identity_validation") or {})
     meta = {
         "company": _slug(company), "company_name": company,
         "doc_class": classes[0] if classes else None,
         "doc_classes": classes,
         "year": (yrs[-1] if yrs else None),
         "source_url": url, "sha256": digest, "content_type": ctype,
-        "run_id": run_id, "query": query,
+        "run_id": run_id, "request_id": request_id,
+        "query": original_query, "prepared_query": prepared_query,
+        "ticker": (company_ctx or {}).get("ticker") or None,
+        "cik": (company_ctx or {}).get("cik") or None,
+        "identity_status": identity.get("status") or "unresolved",
     }
     try:
         _s3.put_object(Bucket=BUCKET, Key=s3_key + ".metadata.json",
@@ -2907,15 +3225,38 @@ def _write_metadata_sidecar(s3_key, company, url, digest, ctype, query,
 
 
 def _store(company: str, run_id: str, url: str, body: bytes, ctype: str,
-           title: str, query: str = "") -> dict:
+           title: str, original_query: str, prepared_query: str,
+           request_id: str = "", report_class: str | None = None,
+           year: int | None = None, company_ctx: dict | None = None) -> dict:
     digest  = hashlib.sha256(body).hexdigest()
-    s3_key  = f"{_slug(company)}/{digest[:12]}-{_safe_name(url, ctype)}"
+    classes = ([report_class] if report_class
+               else [c for c, _ in _matched_doc_classes(prepared_query)])
+    class_slug = _slug(classes[0]) if classes else "uncategorized"
+    # Keep class associations physically distinct. The same combined PDF may
+    # legitimately satisfy two independently verified classes; a single shared
+    # sidecar would otherwise be overwritten by the last query and later
+    # retrieval could fan it out to unrelated questions.
+    s3_key = (
+        f"{_slug(company)}/{class_slug}/"
+        f"{digest[:12]}-{_safe_name(url, ctype)}"
+    )
     _s3_put_if_missing(s3_key, body, ctype,
                        {"source_url": url, "sha256": digest, "run_id": run_id})
-    _write_metadata_sidecar(s3_key, company, url, digest, ctype, query, run_id=run_id)
+    _write_metadata_sidecar(
+        s3_key, company, url, digest, ctype,
+        original_query=original_query, prepared_query=prepared_query,
+        request_id=request_id, report_class=report_class, year=year,
+        run_id=run_id, company_ctx=company_ctx)
+    years = ([year] if year else sorted(_extract_year_intent(prepared_query)))
     wrote = _write_provenance_if_missing({
         "company": _slug(company), "s3_key": s3_key, "run_id": run_id,
-        "report": title or _safe_name(url, ctype), "source_url": url, "query": query,
+        "report": title or _safe_name(url, ctype), "source_url": url,
+        "query": original_query, "prepared_query": prepared_query,
+        "request_id": request_id,
+        "doc_class": classes[0] if classes else None,
+        "year": years[-1] if years else None,
+        "ticker": (company_ctx or {}).get("ticker") or "",
+        "cik": (company_ctx or {}).get("cik") or "",
         "hash": digest, "content_type": ctype,
         "downloaded": dt.datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
         "rag_status": "Pending",
@@ -2927,6 +3268,10 @@ def _store(company: str, run_id: str, url: str, body: bytes, ctype: str,
         "download_url": _presign(s3_key),
         "source_url": url, "content_type": ctype, "sha256": digest,
         "report": title or _safe_name(url, ctype),
+        "query": original_query, "prepared_query": prepared_query,
+        "request_id": request_id,
+        "doc_class": classes[0] if classes else None,
+        "year": years[-1] if years else None,
     }
 
 
@@ -2935,6 +3280,12 @@ def _confident(decision: dict, query: str = "") -> bool:
     if not decision.get("selected_url") or not decision.get("topic_match"):
         return False
     if not decision.get("company_match", True):
+        return False
+    confidence_order = {"low": 0, "medium": 1, "high": 2}
+    required = confidence_order.get(MIN_SELECTION_CONFIDENCE, 2)
+    actual = confidence_order.get(
+        str(decision.get("confidence") or "low").lower(), 0)
+    if actual < required:
         return False
     if _extract_year_intent(query):
         return bool(decision.get("year_match"))
@@ -3022,7 +3373,8 @@ def _find_best_document(search_queries: list[str], limit: int, company: str = ""
                 merged = on_domain_hits
                 domain_mode = "hard(on_domain_hits_found)"
             elif raw_count > 0:
-                domain_mode = "soft_fallback(no_on_domain_hits)"
+                merged = []
+                domain_mode = "hard_reject(no_on_domain_hits)"
             else:
                 domain_mode = "no_hits_to_filter"
         else:
@@ -3129,7 +3481,6 @@ def _llm_generate_search_queries(query, company, domain):
     if cache_key in _LLM_QUERY_GEN_CACHE:
         return _LLM_QUERY_GEN_CACHE[cache_key]
     filtered_rules = _filtered_doc_rules(query)
-    registries = ", ".join(FILING_REGISTRY_HOSTS[:8])
     prompt = (
         "Today is " + dt.date.today().isoformat() + ".\n"
         "You are a search-query optimizer for finding OFFICIAL company documents "
@@ -3141,16 +3492,16 @@ def _llm_generate_search_queries(query, company, domain):
         "Original query: " + query + "\n"
         + (("Matched document-class rules: " + json.dumps(filtered_rules, ensure_ascii=True) + "\n") if filtered_rules else "")
         + "\nCreate a MIX of these query shapes (only where sensible):\n"
-        "1. site:DOMAIN scoped query with the exact document class.\n"
-        "2. An UNSCOPED query: COMPANY DOCUMENTCLASS YEAR filetype:pdf.\n"
-        "3. An IR/investor-subdomain hint query (investors.DOMAIN, "
+        "1. A direct-document query with the exact class and filetype:pdf.\n"
+        "2. An IR/investor-subdomain hint query (investors.DOMAIN, "
         "sustainability.DOMAIN, static.DOMAIN) where the file likely lives.\n"
-        "4. A filing-registry-scoped query using ONE of these hosts if relevant "
-        "to the company jurisdiction: " + registries + ". Example: site:REGISTRY COMPANY CLASS.\n"
-        "5. Regional/naming variants of the class (annual report and accounts, "
+        "3. Regional/naming variants of the class (annual report and accounts, "
         "integrated annual report, BRSR, 10-K, DEF 14A as appropriate).\n\n"
-        "Rules: preserve any year exactly; never invent a year. Keep each query "
-        "under 200 chars. No markdown. Do NOT format domains as markdown links.\n\n"
+        "Rules: preserve any year exactly; never invent a year. Do not search "
+        "filing registries; the caller queries them directly with validated "
+        "identifiers. The caller will force each query onto the official "
+        "company domain. Keep each query under 200 chars. No markdown. Do NOT "
+        "format domains as markdown links.\n\n"
         "Output ONLY a JSON array of strings."
     )
     try:
@@ -3571,6 +3922,28 @@ def _invoke_sync(payload: dict) -> dict:
             "cik": (payload or {}).get("cik") or "",
             "companies_house_number": (payload or {}).get("companies_house_number") or "",
         }
+
+    company_ctx["domain"] = _clean_domain(company_ctx.get("domain"))
+    if not company_ctx["domain"]:
+        # Legacy portal payloads commonly place the official domain only in a
+        # site: operator. Recover it before identity resolution so the grounded
+        # lookup and every downstream official-source gate share one domain.
+        domain_inputs = [
+            (payload or {}).get("search_query") or "",
+            *[
+                value for key, value in sorted((payload or {}).items())
+                if re.match(r"web_query\d+$", str(key), re.I)
+            ],
+        ]
+        for value in domain_inputs:
+            inferred = _domain(str(value or ""))
+            if inferred:
+                company_ctx["domain"] = inferred
+                break
+
+    identity_hint = _vertex_company_identity_hint(company_ctx)
+    company_ctx = registry_tier.enrich_company_identity(
+        company_ctx, identity_hint=identity_hint)
     company_raw = company_ctx["name"]
     company = _slug(company_raw)
 
@@ -3590,7 +3963,7 @@ def _invoke_sync(payload: dict) -> dict:
     reports = (payload or {}).get("reports")
     if isinstance(reports, list) and reports:
         _dom = company_ctx.get("domain") or ""
-        for _r in reports:
+        for _report_index, _r in enumerate(reports, start=1):
             if not isinstance(_r, dict):
                 continue
             _rc = str(_r.get("report_class") or _r.get("class") or "").strip()
@@ -3604,13 +3977,35 @@ def _invoke_sync(payload: dict) -> dict:
             _q = " ".join(_parts)
             if _dom:
                 _q = f"{_q} site:{_dom}"
-            work_items.append({"raw": _q, "report_class": _rc.lower(), "year": _yr})
+            work_items.append({
+                "raw": _q,
+                "original_query": str(_r.get("query") or _q),
+                "request_id": str(_r.get("request_id") or f"report:{_report_index}"),
+                "report_class": _rc.lower(),
+                "year": _yr,
+            })
     else:
-        _queries = {k.strip(): v for k, v in (payload or {}).items()
-                    if re.match(r"web_query\d+$", k.strip(), re.I)
-                    and v and str(v).strip()}
-        for _v in _queries.values():
-            work_items.append({"raw": str(_v), "report_class": None, "year": None})
+        _query_ids = ((payload or {}).get("web_query_ids") or {})
+        if not isinstance(_query_ids, dict):
+            _query_ids = {}
+
+        def _web_query_index(item):
+            match = re.search(r"(\d+)$", str(item[0]))
+            return int(match.group(1)) if match else 0
+
+        _queries = sorted([
+            (str(k).strip(), v) for k, v in (payload or {}).items()
+            if re.match(r"web_query\d+$", str(k).strip(), re.I)
+            and v and str(v).strip()
+        ], key=_web_query_index)
+        for _key, _v in _queries:
+            work_items.append({
+                "raw": str(_v),
+                "original_query": str(_v),
+                "request_id": str(_query_ids.get(_key) or _key.lower()),
+                "report_class": None,
+                "year": None,
+            })
 
     if not work_items:
         return {"error": "payload had neither a `reports` array nor web_query<N> "
@@ -3620,6 +4015,8 @@ def _invoke_sync(payload: dict) -> dict:
         "run_id": run_id,
         "company": company,
         "company_raw": company_raw,
+        "company_identity": company_ctx.get("_identity_validation") or {},
+        "identity_grounding_sources": identity_hint.get("_grounding_sources", []),
         "code_version": CODE_VERSION,
         "search_backend": SEARCH_BACKEND,
         "use_browser_deploy": USE_BROWSER,
@@ -3634,9 +4031,9 @@ def _invoke_sync(payload: dict) -> dict:
     stored: list[dict] = []
     duplicates: list[dict] = []
     failures: list[dict] = []
-    stored_by_url: dict[str, dict] = {}
-    stored_by_hash: dict[str, dict] = {}
+    stored_by_key: dict[str, dict] = {}
     done_queries: set[str] = set()
+    query_results: list[dict] = []
     _root_crawl_cache: dict[str, dict] = {}
     _known_bad: dict[str, str] = {}
 
@@ -3686,22 +4083,35 @@ def _invoke_sync(payload: dict) -> dict:
                   if _extract_year_intent(d["url"]) else -1), reverse=True)
         return hits[0]
 
-    def _commit(resolved: dict, prepared: str, stage: str, base_log: dict) -> dict:
-        rec = _store(company, run_id, resolved["url"], resolved["body"],
-                     resolved["ctype"], "", prepared)
+    def _commit(resolved: dict, prepared: str, stage: str,
+                base_log: dict, work_item: dict) -> dict:
+        rec = _store(
+            company, run_id, resolved["url"], resolved["body"],
+            resolved["ctype"], "",
+            original_query=work_item["original_query"],
+            prepared_query=prepared,
+            request_id=work_item["request_id"],
+            report_class=work_item.get("report_class"),
+            year=base_log.get("known_year"),
+            company_ctx=company_ctx,
+        )
         rec["stage"] = stage
-        digest = rec["sha256"]
-        if digest in stored_by_hash or resolved["url"] in stored_by_url:
+        if rec["s3_key"] in stored_by_key:
             base_log["status"] = "duplicate_existing"
         else:
-            stored_by_url[resolved["url"]] = rec
-            stored_by_hash[digest] = rec
+            stored_by_key[rec["s3_key"]] = rec
             (stored if rec["status"] == "stored" else duplicates).append(rec)
             base_log["status"] = ("ok" if rec["status"] == "stored"
                                   else "duplicate_existing")
         base_log["resolved_via"] = resolved.get("via", stage)
         base_log["stage"] = stage
         base_log["documents"] = [rec["s3_key"]]
+        base_log["result"] = {
+            **rec,
+            "duplicate": rec.get("status") == "duplicate",
+            "status": "downloaded",
+            "stage": stage,
+        }
         print(f"[store] {rec['status'].upper()} ({stage}): {prepared!r} "
               f"-> {rec['s3_key']}")
         return rec
@@ -3709,19 +4119,27 @@ def _invoke_sync(payload: dict) -> dict:
     # ─────────────────────────── per-report loop ───────────────────────────
     for _item in work_items:
         raw = _item["raw"]
+        original_query = _item["original_query"]
+        request_id = _item["request_id"]
         known_class = _item.get("report_class")
         known_year = _item.get("year")
         prepared = _prepare_query(str(raw))
         prepared, inferred_year = _apply_latest_completed_fiscal_year(
             prepared, known_class=known_class, known_year=known_year)
         effective_year = known_year or inferred_year
-        if not prepared or prepared in done_queries:
+        if company_ctx.get("domain"):
+            # The company context is established before discovery. Never let a
+            # legacy payload or generated query redirect web discovery to a
+            # different site.
+            prepared = _scope_to_official_domain(
+                prepared, company_ctx["domain"])
+        if not prepared:
             continue
         done_queries.add(prepared)
         _budget = _QueryBudget()
 
         matched_classes = [c for c, _ in _matched_doc_classes(prepared)]
-        domain = _domain(prepared)
+        domain = _domain(prepared) or company_ctx.get("domain") or None
         browser_reserve = BROWSER_RESERVED_VERIFIES if _use_browser else 0
         prebrowser_verify_fn = _make_browser_verify_fn(
             prepared, budget=_budget, company=company_raw,
@@ -3731,6 +4149,8 @@ def _invoke_sync(payload: dict) -> dict:
 
         base_log: dict = {
             "raw": str(raw).strip(),
+            "original_query": original_query,
+            "request_id": request_id,
             "prepared": prepared,
             "known_class": known_class,
             "known_year": effective_year,
@@ -3741,54 +4161,106 @@ def _invoke_sync(payload: dict) -> dict:
             "documents": [],
         }
 
-        # ── Tier 1: Google (Vertex) search + alias / LLM-generated fan-out ──
-        search_queries = [prepared]
-        for alt in _alias_queries(prepared, region_override):
-            if alt not in search_queries:
-                search_queries.append(alt)
-        for gen in _llm_generate_search_queries(prepared, company_raw, domain):
-            if gen not in search_queries:
-                search_queries.append(gen)
-
-        found = _find_best_document(search_queries, MAX_RESULTS, company=company_raw)
-        decision = found["decision"]
-        base_log["via"] = found.get("via")
-        base_log["domain_mode"] = found.get("domain_mode")
-        base_log["decision_reason"] = decision.get("reason")
-
         resolved: dict | None = None
         stage: str | None = None
+        decision = {
+            "selected_url": None,
+            "topic_match": False,
+            "company_match": False,
+            "year_match": False,
+            "reason": "search-not-run",
+        }
+        found: dict = {"candidate_infos": []}
 
-        if _confident(decision, prepared) and decision.get("selected_url"):
-            sel = decision["selected_url"]
-            body, ctype = _material_for(sel, found)
-            if body is not None:
-                if _is_doc_ctype(ctype) or _is_doc_url(sel):
-                    resolved = {"url": sel, "body": body,
-                                "ctype": ctype or "application/pdf", "via": "search"}
-                    stage = "search"
-                else:
-                    dug = _resolve_from_html(sel, body, domain, prepared,
-                                             prebrowser_verify_fn, _budget)
-                    if dug:
-                        resolved = dug
-                        stage = "search+html_crawl"
+        _reg_class = known_class or (
+            matched_classes[0] if matched_classes else None)
+        _reg_year = effective_year or (
+            max(_extract_year_intent(prepared))
+            if _extract_year_intent(prepared) else None)
+        _identity_validated = (
+            (company_ctx.get("_identity_validation") or {}).get("status")
+            == "validated")
+        _registry_identity_allowed = (
+            not REQUIRE_VALIDATED_REGISTRY_IDENTITY
+            or _identity_validated
+            or bool(company_ctx.get("companies_house_number"))
+        )
+        _registry_eligible = bool(
+            ENABLE_REGISTRY_TIER
+            and _reg_class
+            and report_specs.registries_for(_reg_class)
+            and _registry_identity_allowed
+        )
+        route = _discovery_route(_reg_class, _registry_eligible)
+        attempted_stages: list[str] = []
+        base_log["route"] = route
+        base_log["official_domain"] = domain
+        base_log["web_discovery_allowed"] = bool(
+            domain or not REQUIRE_OFFICIAL_DOMAIN_FOR_WEB)
+        registry_attempted = False
 
-        # ── Tier 2: official registry fallback (SEC EDGAR + Companies House) ──
-        if resolved is None and ENABLE_REGISTRY_TIER:
-            _reg_class = known_class or (matched_classes[0] if matched_classes else None)
-            _reg_year = known_year or (max(_extract_year_intent(prepared))
-                                       if _extract_year_intent(prepared) else None)
-            if _reg_class and report_specs.registries_for(_reg_class):
-                reg = registry_tier.registry_resolve(
-                    company_ctx, _reg_class, _reg_year,
-                    verify_fn=prebrowser_verify_fn)
-                if reg and reg.get("body"):
-                    resolved = reg
-                    stage = "registry"
+        # Registry-first remains configurable, but the deployment default is
+        # empty: annual/proxy requests exhaust the official-company path before
+        # using the validated CIK on SEC EDGAR.
+        if route and route[0] == "registry":
+            attempted_stages.append("registry")
+            registry_attempted = True
+            reg = registry_tier.registry_resolve(
+                company_ctx, _reg_class, _reg_year,
+                verify_fn=prebrowser_verify_fn)
+            if reg and reg.get("body"):
+                resolved = reg
+                stage = "registry"
+                decision["reason"] = "deterministic-registry-first"
+                base_log["decision_reason"] = decision["reason"]
 
-        # ── Tier 3a: sitemap enumeration ──
-        if resolved is None and domain:
+        # ── Direct document URL search through Google-grounded Vertex ──
+        # Every variant is forced onto the established official domain. A
+        # validated ticker gets a dedicated alias probe; the exact CIK is kept
+        # for the registry API rather than used as noisy free-text.
+        search_queries: list[str] = []
+        if (resolved is None and "direct_search" in route
+                and (domain or not REQUIRE_OFFICIAL_DOMAIN_FOR_WEB)):
+            attempted_stages.append("direct_search")
+            aliases = _alias_queries(prepared, region_override)
+            generated = _llm_generate_search_queries(
+                prepared, company_raw, domain)
+            search_queries = _official_search_queries(
+                prepared, company_ctx, aliases, generated)
+            found = _find_best_document(
+                search_queries, MAX_RESULTS, company=company_raw)
+            decision = found["decision"]
+            base_log["via"] = found.get("via")
+            base_log["domain_mode"] = found.get("domain_mode")
+            base_log["decision_reason"] = decision.get("reason")
+
+            if (_confident(decision, prepared)
+                    and decision.get("selected_url")):
+                sel = decision["selected_url"]
+                body, ctype = _material_for(sel, found)
+                if body is not None:
+                    if _is_doc_ctype(ctype) or _is_doc_url(sel):
+                        resolved = {
+                            "url": sel, "body": body,
+                            "ctype": ctype or "application/pdf",
+                            "via": "search",
+                        }
+                        stage = "search"
+                    else:
+                        dug = _resolve_from_html(
+                            sel, body, domain, prepared,
+                            prebrowser_verify_fn, _budget)
+                        if dug:
+                            resolved = dug
+                            stage = "search+html_crawl"
+        elif resolved is None and REQUIRE_OFFICIAL_DOMAIN_FOR_WEB and not domain:
+            decision["reason"] = "official-domain-unresolved-web-search-skipped"
+            base_log["decision_reason"] = decision["reason"]
+            print(f"[search] skipped {prepared!r}: no attested official domain")
+
+        # ── Official website crawl: sitemap + bounded landing pages ──
+        if resolved is None and "official_crawl" in route and domain:
+            attempted_stages.append("official_crawl")
             sm = _sitemap_resolve(
                 domain, prepared, prebrowser_verify_fn,
                 known_bad=_known_bad, budget=_budget,
@@ -3797,45 +4269,25 @@ def _invoke_sync(payload: dict) -> dict:
                 resolved = sm
                 stage = "sitemap"
 
-        # JS-heavy investor-relations pages are both more precise and cheaper
-        # than a broad corporate-site crawl for filing classes. Try the browser
-        # before static recursion while its reserved verification budget is intact.
-        browser_first = bool(
-            _use_browser and set(matched_classes).intersection({
-                "annual report", "proxy statement", "remuneration report",
-            }))
-        browser_attempted = False
-        if resolved is None and browser_first:
+        # ── In-depth same-domain static crawl from the official root ──
+        if resolved is None and "deep_crawl" in route and domain:
             root = _site_root(prepared) or (f"https://{domain}/" if domain else None)
             if root:
-                browser_attempted = True
-                br = _browser_resolve_document(
-                    root, domain, prepared, cache=_root_crawl_cache,
-                    verify_fn=browser_verify_fn, known_bad=_known_bad,
-                    budget=_budget)
-                if br and br.get("body"):
-                    resolved = br
-                    stage = "browser"
-
-        # ── Deep static crawl from the site root ──
-        if resolved is None:
-            root = _site_root(prepared) or (f"https://{domain}/" if domain else None)
-            if root:
-                static_reserve = 0 if browser_attempted else browser_reserve
-                static_verify_fn = (browser_verify_fn if browser_attempted
-                                    else prebrowser_verify_fn)
+                attempted_stages.append("deep_crawl")
                 dc = _deep_static_crawl(
-                    root, domain, prepared, static_verify_fn,
+                    root, domain, prepared, prebrowser_verify_fn,
                     known_bad=_known_bad, budget=_budget,
-                    reserve_verifies=static_reserve)
+                    reserve_verifies=browser_reserve)
                 if dc:
                     resolved = dc
                     stage = "deep_crawl"
 
-        # Browser fallback for non-filing classes keeps the original ordering.
-        if resolved is None and _use_browser and not browser_attempted:
+        # ── JavaScript/deep-navigation browser fallback ──
+        if (resolved is None and "browser" in route and _use_browser
+                and domain):
             root = _site_root(prepared) or (f"https://{domain}/" if domain else None)
             if root:
+                attempted_stages.append("browser")
                 br = _browser_resolve_document(
                     root, domain, prepared, cache=_root_crawl_cache,
                     verify_fn=browser_verify_fn, known_bad=_known_bad,
@@ -3844,14 +4296,52 @@ def _invoke_sync(payload: dict) -> dict:
                     resolved = br
                     stage = "browser"
 
+        # Registry lookup is the final fallback in the deployed route. Annual
+        # reports and proxy statements reach EDGAR here only after official
+        # search, sitemap/landing pages, deep crawl, and browser all fail.
+        if (resolved is None and "registry" in route
+                and not registry_attempted):
+            attempted_stages.append("registry")
+            registry_attempted = True
+            reg = registry_tier.registry_resolve(
+                company_ctx, _reg_class, _reg_year,
+                verify_fn=browser_verify_fn)
+            if reg and reg.get("body"):
+                resolved = reg
+                stage = "registry"
+        elif (ENABLE_REGISTRY_TIER and _reg_class
+              and report_specs.registries_for(_reg_class)
+              and not _registry_identity_allowed):
+            print(f"[registry] skipped {_reg_class!r}: company identity is not "
+                  f"validated and no authoritative company number was supplied")
+
+        base_log["attempted_stages"] = attempted_stages
+
         if resolved is not None:
-            _commit(resolved, prepared, stage or "unknown", base_log)
+            rec = _commit(
+                resolved, prepared, stage or "unknown", base_log, _item)
+            query_results.append({
+                **rec,
+                "duplicate": rec.get("status") == "duplicate",
+                "status": "downloaded",
+                "stage": stage or "unknown",
+            })
         else:
             base_log["status"] = "no_document_found"
             failures.append({
-                "query": prepared,
+                "request_id": request_id,
+                "query": original_query,
+                "prepared_query": prepared,
                 "reason": (decision.get("reason") or "no class-verified document "
                            "found through any tier (failed closed)"),
+            })
+            query_results.append({
+                "request_id": request_id,
+                "query": original_query,
+                "prepared_query": prepared,
+                "status": "failed",
+                "reason": (decision.get("reason") or
+                           "no class-verified document found"),
             })
             print(f"[result] NO DOCUMENT FOUND (failed closed): {prepared!r}")
 
@@ -3871,12 +4361,13 @@ def _invoke_sync(payload: dict) -> dict:
         "company": company,
         "stored": stored,
         "duplicates": duplicates,
+        "results": query_results,
         "no_document_found": failures,
         "counts": {
             "stored": len(stored),
             "duplicates": len(duplicates),
             "not_found": len(failures),
-            "queries": len(done_queries),
+            "queries": len(query_results),
         },
         "diagnostics": diag,
     }

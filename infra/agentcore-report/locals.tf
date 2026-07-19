@@ -24,7 +24,9 @@ locals {
     WEB_SEARCH_MAX_RESULTS                  = tostring(var.web_search_max_results)
     BEST_MATCHES                            = tostring(var.best_matches)
     LLM_MODEL_ID                            = var.llm_model_id
+    MIN_SELECTION_CONFIDENCE                = "high"
     ENFORCE_SITE_DOMAIN                     = tostring(var.enforce_site_domain)
+    DOMAIN_FILTER_MODE                      = "hard"
     GATEWAY_URL                             = local.gateway_url
     GOOGLE_API_KEY                          = var.google_api_key
     GOOGLE_CX                               = var.google_cx
@@ -38,7 +40,9 @@ locals {
     BROWSER_SESSION_TIMEOUT_SECONDS         = "120"
     BROWSER_WAIT_UNTIL                      = "domcontentloaded"
     BROWSER_SETTLE_MS                       = "2500"
+    BROWSER_NAV_MAX_DEPTH                   = "3"
     BROWSER_VISION_MODEL_ID                 = "us.amazon.nova-2-lite-v1:0"
+    BROWSER_ALLOW_OFFDOMAIN_DOCS            = "false"
     BROWSER_MAX_VERIFY_CANDIDATES           = "10"
     BROWSER_RESERVED_VERIFIES               = "20"
     BROWSER_CLICK_TIMEOUT_MS                = "10000"
@@ -49,6 +53,10 @@ locals {
     KNOWN_DOCUMENT_CDN_DOMAINS              = "q4cdn.com"
     EDGAR_USER_AGENT                        = "EDO-CoAnalyst/1.0 compliance-research askdevopscloud@spglobal.com"
     ENABLE_REGISTRY_TIER                    = "true"
+    ENABLE_VERTEX_IDENTITY                  = "true"
+    REGISTRY_FIRST_CLASSES                  = ""
+    REQUIRE_VALIDATED_REGISTRY_IDENTITY     = "true"
+    REQUIRE_OFFICIAL_DOMAIN_FOR_WEB         = "true"
     EDGAR_MAX_REQ_PER_SEC                   = "8"
     EDGAR_SUSTAINABILITY_FTS                = "false"
     SEARCH_BACKEND                          = "vertex_lambda"

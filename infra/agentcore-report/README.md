@@ -1,8 +1,32 @@
 # AgentCore report-download agent
 
 Deploy one AgentCore Runtime. Invoke it from your laptop with a `web_query` JSON;
-it searches the official domain, downloads the report(s) to S3, records provenance
+it resolves company identity, searches the official domain, downloads the
+report(s) to S3, records provenance
 in DynamoDB, and **returns the S3 key(s)**.
+
+## Accuracy-first discovery flow
+
+Company identity is resolved before any document candidate can be accepted.
+Google-grounded Vertex may suggest the legal name, official domain, ticker, and
+CIK, but ticker/CIK are trusted only after they converge on the same official SEC
+record. A validated ticker is added to an official-domain Google query variant;
+the exact CIK is sent directly to EDGAR rather than used as noisy web-search text.
+
+The per-document route is:
+
+1. Direct Google URL search restricted to the established official domain.
+2. Official sitemap and relevant landing-page crawl.
+3. In-depth same-domain static crawl.
+4. AgentCore Browser for JavaScript, archive navigation, and download controls.
+5. For annual reports and proxy statements, validated SEC EDGAR lookup only
+   when the official-company path found nothing; Companies House is the
+   equivalent fallback for applicable UK annual reports.
+6. Other configured registry integrations also run only as a final fallback.
+
+If no official domain can be established, normal web discovery fails closed.
+Deterministic registry lookup may still succeed when an authoritative CIK or
+Companies House number has been validated.
 
 ## Project files
 ```
@@ -143,12 +167,33 @@ year in which the download runs. An undated Annual Report request therefore
 targets `current year - 1`: a run in 2026 requests FY2025, and a run in 2027
 requests FY2026. An explicitly requested historical year is never changed.
 
-For filing classes, the rendered investor-relations path runs before a broad
-corporate-site crawl. Static discovery is capped per page, preserves verification
-capacity for the browser, and may accept any safe remote document URL when the
-link originates directly on the requested company's official investor-relations
-page. Known CDN domains are ranking hints only, never acceptance requirements.
-The deployment defaults are controlled by `LATEST_COMPLETED_FISCAL_YEAR_LAG`,
+For US annual reports and proxy statements, the runtime first asks the existing
+Vertex grounded-search Lambda for company identity hints. Ticker and CIK hints
+are never trusted directly: the runtime requires the supplied company name and
+all available identifiers to converge on one official SEC
+`company_tickers.json` record. It retains the validated CIK while it searches
+and crawls the official company website. EDGAR is queried only if the official
+search, sitemap/landing-page crawl, deep crawl, and browser do not find the
+requested report. Generic partial names and conflicting real tickers fail
+closed.
+
+Web discovery uses hard official-domain filtering. Off-domain results cannot
+become search selections; known document CDNs remain usable when their links
+are harvested from the official company page in the browser. Non-registry
+candidates must receive a high-confidence class/company/year verification
+decision before storage. Every request has
+a stable request ID that is stored in S3 metadata and provenance and echoed to
+the ECS portal, so results are never paired to questions by list position.
+Documents are stored under a class-scoped company prefix to prevent one
+sidecar/class mapping from overwriting another.
+
+After direct URL search, the runtime checks official sitemap and landing-page
+links, performs a bounded same-domain static crawl, and only then opens the
+rendered investor-relations path in AgentCore Browser. Static discovery
+preserves verification capacity for the browser. A known document CDN is
+accepted only when its link was harvested from the requested company's official
+browser page; the CDN list is never sufficient evidence by itself. Deployment
+defaults are controlled by `LATEST_COMPLETED_FISCAL_YEAR_LAG`,
 `DEEP_STATIC_MAX_DOC_CANDIDATES_PER_PAGE`, `BROWSER_RESERVED_VERIFIES`, and
 `KNOWN_DOCUMENT_CDN_DOMAINS` in `locals.tf`.
 
@@ -158,12 +203,14 @@ No `company` field is needed — it's derived from the `site:` domain
 is an HTML governance page, follows the same-domain **PDF** links on it (policies
 are usually PDFs), so you get the actual document, not just the landing page.
 
-## Web search (managed, zero egress)
-The agent uses AWS's **managed Web Search tool** — Amazon's own web index, queries
-never leave AWS, results come back with snippets, URLs, titles, and dates. The
-agent connects to the Gateway over MCP (SigV4-signed), discovers the tool via
-`tools/list`, and calls it. If the gateway is disabled or a call fails, it falls
-back to direct search so a run still returns documents.
+## Web search
+
+The deployed primary search backend is the isolated Vertex Lambda. It calls
+Gemini with Google Search grounding and returns only resolved grounding URLs,
+titles, and snippets; generated answer text is not treated as a document source.
+Each request carries the official domain separately so Google discovery remains
+site-scoped. The AWS managed Web Search Gateway can be enabled as the configured
+fallback when the Vertex call fails.
 
 ### Why part of this is AWS CLI, not pure Terraform
 The Web Search tool is a built-in Gateway **connector** (`connectorId: "web-search"`).

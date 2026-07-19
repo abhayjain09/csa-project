@@ -144,12 +144,13 @@ resource "aws_lambda_function" "vertex_search" {
 
   environment {
     variables = {
-      GCP_SECRET_NAME     = var.gcp_secret_name
-      VERTEX_LOCATION     = var.vertex_location
-      VERTEX_MODEL_ID     = var.vertex_model_id
-      REDIRECT_WORKERS    = "8"
-      REDIRECT_TIMEOUT    = "5"
-      DEFAULT_MAX_RESULTS = "10"
+      GCP_SECRET_NAME      = var.gcp_secret_name
+      VERTEX_LOCATION      = var.vertex_location
+      VERTEX_MODEL_ID      = var.vertex_model_id
+      REDIRECT_WORKERS     = "8"
+      REDIRECT_TIMEOUT     = "5"
+      DEFAULT_MAX_RESULTS  = "10"
+      IDENTITY_MAX_RESULTS = "8"
     }
   }
 

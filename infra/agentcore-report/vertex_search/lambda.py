@@ -3,20 +3,29 @@
 Replaces the AgentCore managed WebSearch tool as the candidate-URL generator
 for the Report IQ / EDO Co-Analyst download agent.
 
-Contract (direct boto3 RequestResponse invoke from the AgentCore runtime):
+Contracts (direct boto3 RequestResponse invoke from the AgentCore runtime):
 
-  IN  : {"query": "<text>", "site": "<domain or ''>", "max_results": <int>}
+  Document discovery:
+  IN  : {"mode": "document_search", "query": "<text>",
+         "site": "<domain or ''>", "max_results": <int>}
   OUT : {"results": [{"title","url","snippet"}, ...],
          "via": "vertex-grounding", "count": <int>}
 
+  Company identity hinting:
+  IN  : {"mode": "company_identity", "company_name": "<name>",
+         "site": "<known domain or ''>"}
+  OUT : {"identity_hint": {"legal_name","ticker","cik","official_domain",
+                           "jurisdiction"},
+         "results": [grounding sources...], "via": "vertex-grounding"}
+
 Design rules that mirror the agent's own principles:
-  * We NEVER return the model's generated answer text. Gemini can emit a
-    hallucinated / reconstructed URL even with grounding on. The ONLY
-    authoritative sources are the grounding chunks, and each of those is a
-    vertexaisearch.cloud.google.com redirect that must be resolved to its real
-    destination. The agent still runs every URL we return through its own
-    fail-closed _llm_select_best + _confident gate — this Lambda is a
-    candidate generator, never a source of truth.
+  * For document search, we NEVER return the model's generated answer text.
+    Gemini can emit a hallucinated / reconstructed URL even with grounding on.
+    The ONLY authoritative URL sources are the grounding chunks.
+  * For company identity, generated identifiers are returned only as HINTS.
+    The agent validates ticker/CIK/name convergence against SEC's official
+    company_tickers.json before using them. An unvalidated Gemini identifier
+    is never used for an EDGAR lookup or written as authoritative metadata.
   * The GCP service-account key is fetched from Secrets Manager into THIS tiny
     function only. It never enters the big agent container that renders
     untrusted third-party pages with Playwright. That isolation is the whole
@@ -45,6 +54,7 @@ VERTEX_MODEL_ID     = os.environ.get("VERTEX_MODEL_ID", "gemini-2.5-flash")
 REDIRECT_WORKERS    = int(os.environ.get("REDIRECT_WORKERS", "8"))
 REDIRECT_TIMEOUT    = int(os.environ.get("REDIRECT_TIMEOUT", "5"))
 DEFAULT_MAX_RESULTS = int(os.environ.get("DEFAULT_MAX_RESULTS", "10"))
+IDENTITY_MAX_RESULTS = int(os.environ.get("IDENTITY_MAX_RESULTS", "8"))
 VERTEX_HTTP_TIMEOUT = int(os.environ.get("VERTEX_HTTP_TIMEOUT", "60"))
 GCP_SCOPES          = ["https://www.googleapis.com/auth/cloud-platform"]
 
@@ -82,6 +92,7 @@ def _vertex_grounded_search(query: str, project_id: str, token: str) -> dict:
     payload = {
         "contents": [{"role": "user", "parts": [{"text": query}]}],
         "tools": [{"google_search": {}}],
+        "generationConfig": {"temperature": 0, "maxOutputTokens": 512},
     }
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     req = urllib.request.Request(
@@ -156,9 +167,80 @@ def _build_snippet_map(grounding: dict) -> dict:
     return {i: " ".join(txts)[:400] for i, txts in idx_to_text.items()}
 
 
+def _generated_text(data: dict) -> str:
+    """Return Gemini's first text part. Used only for non-authoritative hints."""
+    try:
+        parts = data["candidates"][0]["content"]["parts"]
+    except (KeyError, IndexError, TypeError):
+        return ""
+    return "".join(
+        str(part.get("text") or "")
+        for part in parts
+        if isinstance(part, dict)
+    ).strip()
+
+
+def _parse_first_json_object(text: str) -> dict:
+    """Parse one JSON object from fenced or prose-wrapped model output."""
+    cleaned = (text or "").strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.split("\n", 1)[-1]
+        if cleaned.rstrip().endswith("```"):
+            cleaned = cleaned.rstrip()[:-3]
+    start = cleaned.find("{")
+    if start < 0:
+        return {}
+    try:
+        value, _ = json.JSONDecoder().raw_decode(cleaned[start:])
+    except (json.JSONDecodeError, TypeError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def _clean_identity_hint(raw: dict) -> dict:
+    """Keep only the bounded scalar fields allowed by the Lambda contract."""
+    out = {}
+    for key in ("legal_name", "ticker", "cik", "official_domain", "jurisdiction"):
+        value = raw.get(key)
+        if value is None:
+            out[key] = None
+            continue
+        if not isinstance(value, (str, int)):
+            out[key] = None
+            continue
+        text = str(value).strip()
+        out[key] = text[:200] if text else None
+    if out.get("ticker"):
+        out["ticker"] = out["ticker"].upper()[:16]
+    if out.get("cik"):
+        digits = "".join(ch for ch in out["cik"] if ch.isdigit())
+        out["cik"] = digits.zfill(10) if 1 <= len(digits) <= 10 else None
+    if out.get("official_domain"):
+        domain = out["official_domain"].lower()
+        domain = domain.removeprefix("https://").removeprefix("http://")
+        out["official_domain"] = domain.split("/", 1)[0].removeprefix("www.")
+    if out.get("jurisdiction"):
+        out["jurisdiction"] = out["jurisdiction"].lower()[:32]
+    return out
+
+
+def _identity_prompt(company_name: str, known_domain: str) -> str:
+    return (
+        "Use Google Search to identify the exact corporate identity of the "
+        "company below. Prefer the company's official website and SEC.gov. "
+        "Ticker and CIK are only for a US SEC registrant. Do not infer or guess "
+        "an identifier; return null when sources do not support it. The CIK "
+        "must contain digits only. Return ONLY one JSON object with exactly "
+        "these keys: legal_name, ticker, cik, official_domain, jurisdiction.\n\n"
+        f"Company supplied by user: {company_name}\n"
+        f"Known official domain, if supplied: {known_domain or 'unknown'}"
+    )
+
+
 # ─── Handler ─────────────────────────────────────────────────────────────────
 def lambda_handler(event, context):
     event = event or {}
+    mode = str(event.get("mode") or "document_search").strip().lower()
     query = str(event.get("query") or "").strip()
     site = str(event.get("site") or "").strip()
     try:
@@ -166,15 +248,20 @@ def lambda_handler(event, context):
     except (TypeError, ValueError):
         max_results = DEFAULT_MAX_RESULTS
 
-    if not query:
+    company_name = str(event.get("company_name") or "").strip()
+    if mode == "company_identity":
+        query = _identity_prompt(company_name, site)
+        max_results = min(max_results, IDENTITY_MAX_RESULTS)
+
+    if not query or (mode == "company_identity" and not company_name):
         return {"results": [], "via": "vertex-error", "count": 0,
-                "error": "no query provided"}
+                "error": "no query/company_name provided"}
 
     # site scoping is a SOFT hint to Google Search grounding (it reformulates
-    # its own queries), exactly like the managed tool — the agent keeps its
-    # DOMAIN_FILTER_MODE=soft workaround downstream.
+    # its own queries), exactly like the managed tool. The agent independently
+    # enforces its configured official-domain policy downstream.
     search_query = query
-    if site and f"site:{site}" not in query.lower():
+    if mode != "company_identity" and site and f"site:{site}" not in query.lower():
         search_query = f"{query} site:{site}"
 
     try:
@@ -204,8 +291,14 @@ def lambda_handler(event, context):
 
     print(f"[vertex] query={search_query!r} chunks={len(chunks)} "
           f"resolved={len(results)} model={VERTEX_MODEL_ID}")
-    return {
+    response = {
         "results": results[:max_results],
         "via": "vertex-grounding",
         "count": len(results),
     }
+    if mode == "company_identity":
+        # This is deliberately named identity_hint. The caller must validate
+        # it against SEC data before using ticker/CIK as authoritative values.
+        response["identity_hint"] = _clean_identity_hint(
+            _parse_first_json_object(_generated_text(data)))
+    return response

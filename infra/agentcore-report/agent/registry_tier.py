@@ -1,8 +1,8 @@
-"""registry_tier.py — Tier 2 official-registry fallback (v40).
+"""registry_tier.py — official-registry resolver (v43).
 
-Deterministic document resolution from official filing registries, used when
-Tier 1 (Google/Vertex grounded search + synonyms) does not produce a
-class-verified document.
+Deterministic document resolution from official filing registries. Validated
+annual-report and proxy identities may use this before web search; other
+eligible classes use it as a fallback.
 
 Coverage (as specified):
   * SEC EDGAR       -> annual report (10-K / 20-F / 40-F), proxy statement
@@ -14,11 +14,12 @@ Coverage (as specified):
   * Companies House -> annual report ONLY (annual accounts, type AA/AAMD).
 
 Design contracts:
-  * This module NEVER stores anything and NEVER decides on its own that a
-    document is correct. It returns a candidate {url, body, ctype, via} and the
-    caller runs it through the SAME fail-closed verify_fn (_llm_select_best +
-    _confident) as every other tier. Pass verify_fn to have this module apply
-    it inline and skip rejected candidates; omit it to let the caller verify.
+  * This module NEVER stores anything. Deterministic CIK/company-number plus
+    registry form-type matches are accepted without a generic LLM verifier;
+    non-deterministic registry candidates still use the caller's fail-closed
+    verifier.
+  * Vertex/LLM ticker and CIK values are hints only. Available identifiers and
+    the requested legal name must converge on one SEC company_tickers record.
   * EDGAR needs no credentials (public). It requires a compliant User-Agent
     and a polite rate limit (EDGAR_USER_AGENT, EDGAR_MAX_REQ_PER_SEC) — this is
     the fix for the intermittent 403s (fair-access UA, not IP blocking).
@@ -117,9 +118,27 @@ def _http_bytes(url: str, headers: dict, timeout: int) -> tuple[bytes, str]:
         return r.read(), ctype
 
 
-# ─── EDGAR: ticker/name -> CIK ────────────────────────────────────────────────
+# ─── EDGAR: validated ticker/name -> CIK ─────────────────────────────────────
 _EDGAR_TICKER_CACHE: dict[str, str] = {}
 _EDGAR_CACHE_LOCK = threading.Lock()
+_STOPWORDS = {"inc", "incorporated", "the", "and", "corp", "corporation",
+              "ltd", "limited", "plc", "llc", "co", "company", "group",
+              "holdings", "holding", "sa", "ag", "nv", "se"}
+
+
+def _name_words(s: str) -> frozenset[str]:
+    """Normalize only corporate suffixes; never use subset/contains matching."""
+    return frozenset(
+        w for w in re.split(r"[^a-z0-9]+", (s or "").lower())
+        if len(w) > 2 and w not in _STOPWORDS
+    )
+
+
+def _normalise_cik(value) -> str | None:
+    digits = re.sub(r"\D", "", str(value or ""))
+    if not digits or len(digits) > 10:
+        return None
+    return digits.zfill(10)
 
 
 def _load_edgar_ticker_map() -> None:
@@ -147,59 +166,166 @@ def _load_edgar_ticker_map() -> None:
                 _EDGAR_TICKER_CACHE["name::" + nm] = cik
 
 
+def _sec_names_for_cik(cik: str) -> list[str]:
+    return sorted({
+        key[6:] for key, value in _EDGAR_TICKER_CACHE.items()
+        if key.startswith("name::") and value == cik
+    })
+
+
+def _sec_tickers_for_cik(cik: str) -> list[str]:
+    return sorted({
+        key for key, value in _EDGAR_TICKER_CACHE.items()
+        if not key.startswith("name::") and value == cik
+    })
+
+
+def _ciks_for_exact_name(name: str | None) -> set[str]:
+    """Return SEC CIKs whose registered name is an exact normalized match.
+
+    Exact raw names win. Otherwise corporate suffix spelling and punctuation
+    are normalized, but subset/substring matches are intentionally forbidden:
+    "Edwards" must not resolve "Edwards Lifesciences Corporation".
+    """
+    value = (name or "").strip().lower()
+    if not value:
+        return set()
+    exact = _EDGAR_TICKER_CACHE.get("name::" + value)
+    if exact:
+        return {exact}
+    words = _name_words(value)
+    if not words:
+        return set()
+    return {
+        cik for key, cik in _EDGAR_TICKER_CACHE.items()
+        if key.startswith("name::") and _name_words(key[6:]) == words
+    }
+
+
+def enrich_company_identity(company_ctx: dict, identity_hint: dict | None = None) -> dict:
+    """Validate and enrich company identity against SEC's official ticker map.
+
+    Vertex/Gemini values are hints only. A CIK is accepted only when all
+    available identifiers converge on one SEC record and the supplied company
+    name (or grounded legal-name hint) exactly matches that SEC registrant after
+    conservative corporate-suffix normalization.
+    """
+    ctx = dict(company_ctx or {})
+    hint = dict(identity_hint or {})
+    _load_edgar_ticker_map()
+    validation = {
+        "status": "unresolved",
+        "method": None,
+        "reason": "SEC ticker map unavailable",
+        "hint_used": bool(hint),
+    }
+    ctx["_identity_validation"] = validation
+    if not _EDGAR_TICKER_CACHE:
+        return ctx
+
+    requested_name = str(ctx.get("name") or "").strip()
+    requested_name_ciks = _ciks_for_exact_name(requested_name)
+    hint_name = str(hint.get("legal_name") or "").strip()
+    hint_name_ciks = _ciks_for_exact_name(hint_name)
+
+    identifier_signals: list[tuple[str, str]] = []
+    for label, ticker in (
+        ("payload_ticker", ctx.get("ticker")),
+        ("vertex_ticker", hint.get("ticker")),
+    ):
+        value = str(ticker or "").upper().strip()
+        if value:
+            cik = _EDGAR_TICKER_CACHE.get(value)
+            if cik:
+                identifier_signals.append((label, cik))
+    known_ciks = set(_EDGAR_TICKER_CACHE.values())
+    for label, raw_cik in (
+        ("payload_cik", ctx.get("cik")),
+        ("vertex_cik", hint.get("cik")),
+    ):
+        cik = _normalise_cik(raw_cik)
+        if cik and cik in known_ciks:
+            identifier_signals.append((label, cik))
+
+    identifier_ciks = {cik for _, cik in identifier_signals}
+    if len(identifier_ciks) > 1:
+        validation["reason"] = "ticker/CIK signals resolve to different SEC registrants"
+        _log(f"[identity] rejected conflicting identifiers for {requested_name!r}: "
+             f"{identifier_signals}")
+        return ctx
+
+    candidate = next(iter(identifier_ciks), None)
+    if candidate is not None:
+        # A real identifier is still not sufficient when it belongs to a
+        # different company. Require the requested name or the grounded legal
+        # name to match the same SEC registrant exactly after suffix cleanup.
+        if requested_name and requested_name.lower() != "unknown":
+            name_supports_candidate = candidate in requested_name_ciks
+        else:
+            name_supports_candidate = candidate in hint_name_ciks
+        if not name_supports_candidate:
+            validation["reason"] = "identifier is real but company name does not match SEC"
+            _log(f"[identity] rejected real-but-mismatched identifier CIK "
+                 f"{candidate} for {requested_name!r}")
+            return ctx
+    else:
+        # No ticker/CIK was supplied. A unique exact normalized SEC-name match
+        # is deterministic and safe enough to enrich with the official values.
+        name_candidates = (
+            requested_name_ciks
+            if requested_name and requested_name.lower() != "unknown"
+            else hint_name_ciks
+        )
+        if len(name_candidates) != 1:
+            validation["reason"] = (
+                "company name is not a unique exact normalized SEC match")
+            return ctx
+        candidate = next(iter(name_candidates))
+
+    sec_names = _sec_names_for_cik(candidate)
+    sec_tickers = _sec_tickers_for_cik(candidate)
+    ctx["cik"] = candidate
+    if sec_tickers:
+        # Prefer a supplied ticker when it resolves to this CIK; otherwise use
+        # the shortest SEC-listed ticker (usually the primary common stock).
+        supplied = str(ctx.get("ticker") or hint.get("ticker") or "").upper().strip()
+        ctx["ticker"] = supplied if supplied in sec_tickers else min(
+            sec_tickers, key=lambda value: (len(value), value))
+    if sec_names:
+        ctx["official_name"] = sec_names[0]
+    if not ctx.get("domain") and hint.get("_domain_attested"):
+        ctx["domain"] = str(hint.get("official_domain") or "").strip().lower()
+    if not ctx.get("jurisdiction"):
+        ctx["jurisdiction"] = "us"
+    validation.update({
+        "status": "validated",
+        "method": "+".join(label for label, _ in identifier_signals)
+                  or "sec_exact_normalized_name",
+        "reason": "all available signals converge on one SEC registrant",
+        "cik": candidate,
+        "ticker": ctx.get("ticker") or "",
+        "official_name": ctx.get("official_name") or "",
+    })
+    _log(f"[identity] validated {requested_name!r} -> CIK {candidate}, "
+         f"ticker={ctx.get('ticker')!r} via {validation['method']}")
+    return ctx
+
+
 def _edgar_cik(ticker: str | None, name: str | None) -> str | None:
     if not (ticker or name):
         return None
     _load_edgar_ticker_map()
     if not _EDGAR_TICKER_CACHE:
         return None
-    if ticker:
-        c = _EDGAR_TICKER_CACHE.get(ticker.upper().strip())
-        if c:
-            return c
-    if name:
-        nlow = name.lower().strip()
-        c = _EDGAR_TICKER_CACHE.get("name::" + nlow)
-        if c:
-            return c
-        # Loose contains match, BIDIRECTIONAL. The query name and SEC's title
-        # often differ only in the corporate-suffix form ("Edwards Lifesciences
-        # Corporation" vs SEC's "Edwards Lifesciences Corp"). A one-directional
-        # `nlow in sec_name` check misses this whenever the query is the LONGER
-        # string, silently returning no CIK and forcing the whole chain down to
-        # the (slow, WAF-prone) browser tier. Checking both directions catches
-        # the suffix-truncation case. Still accept only if unambiguous.
-        matches = {v for k, v in _EDGAR_TICKER_CACHE.items()
-                   if k.startswith("name::") and (nlow in k[6:] or k[6:] in nlow)}
-        if len(matches) == 1:
-            return next(iter(matches))
-        # Word-set fallback: normalize away corporate suffixes and word order
-        # entirely (via _STOPWORDS + _name_words) and require an EXACT set match.
-        # This resolves "Corp"/"Corporation", "Inc"/"Incorporated", dropped
-        # "Company", etc. It is deliberately exact-set (not subset) so a generic
-        # name like "Edwards" can't collide with a longer registrant — matching
-        # the same fail-closed, no-guessing contract as the rest of this module.
-        qwords = _name_words(name)
-        if qwords:
-            word_matches = {v for k, v in _EDGAR_TICKER_CACHE.items()
-                            if k.startswith("name::") and _name_words(k[6:]) == qwords}
-            if len(word_matches) == 1:
-                cik = next(iter(word_matches))
-                _log(f"[edgar] resolved CIK {cik} for {name!r} via name-word-set "
-                     f"match (suffix/word-order normalized)")
-                return cik
+    resolved = enrich_company_identity(
+        {"name": name or "", "ticker": ticker or "", "cik": ""})
+    if ((resolved.get("_identity_validation") or {}).get("status")
+            == "validated"):
+        return resolved.get("cik")
     return None
 
 
 # ─── EDGAR: LLM-hint CIK fallback (opt-in, suggest-then-validate) ──────────────
-_STOPWORDS = {"inc", "incorporated", "the", "and", "corp", "corporation",
-              "ltd", "limited", "plc", "llc", "co", "company", "group",
-              "holdings", "holding", "sa", "ag", "nv", "se"}
-
-
-def _name_words(s: str) -> set[str]:
-    return {w for w in re.split(r"[^a-z0-9]+", (s or "").lower())
-            if len(w) > 2 and w not in _STOPWORDS}
 
 
 def _parse_llm_json(text: str) -> dict:
@@ -271,13 +397,19 @@ def _edgar_cik_llm_hint(name: str | None, domain: str | None) -> str | None:
         _log(f"[edgar] LLM suggested ticker {ticker!r} for {name!r} but it is "
              f"not in SEC's ticker map — discarding (fail closed)")
         return None
-    # Confirm the SEC-registered name for that ticker actually overlaps the
-    # requested company name, so a real-but-wrong ticker can't slip through.
+    # Confirm the SEC-registered name for that ticker is an exact normalized
+    # match for the requested company. Token overlap is not sufficient: it was
+    # the path by which similarly named companies contaminated one another.
     sec_name = next((k[6:] for k, v in _EDGAR_TICKER_CACHE.items()
                      if k.startswith("name::") and v == cik), "")
-    if sec_name and not (_name_words(name) & _name_words(sec_name)):
+    validated = enrich_company_identity(
+        {"name": name, "domain": domain or "", "ticker": "", "cik": ""},
+        {"ticker": ticker, "cik": cik, "legal_name": sec_name})
+    if ((validated.get("_identity_validation") or {}).get("status")
+            != "validated"):
         _log(f"[edgar] LLM suggested {ticker!r} (SEC: {sec_name!r}) but it "
-             f"shares no name words with {name!r} — likely wrong, discarding")
+             f"does not exactly match {name!r} after suffix normalization — "
+             f"discarding")
         return None
     _log(f"[edgar] LLM ticker hint {ticker!r} validated against SEC "
          f"(CIK {cik}) for {name!r} — accepted")
@@ -299,10 +431,9 @@ def edgar_lookup(company_ctx: dict, report_class: str, year: int | None) -> dict
             return None
         return _edgar_fts(company_ctx, report_class, year)
 
-    cik = re.sub(r"\D", "", str(company_ctx.get("cik") or "")).zfill(10) \
-        if company_ctx.get("cik") else None
-    if not cik or cik == "0000000000":
-        cik = _edgar_cik(company_ctx.get("ticker"), company_ctx.get("name"))
+    validated_ctx = enrich_company_identity(company_ctx)
+    identity_status = (validated_ctx.get("_identity_validation") or {}).get("status")
+    cik = validated_ctx.get("cik") if identity_status == "validated" else None
     if not cik:
         # Deterministic ticker/name match failed. Optionally try the LLM-hint
         # fallback (opt-in via ENABLE_LLM_TICKER_HINT); it still validates any

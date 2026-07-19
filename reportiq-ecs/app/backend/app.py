@@ -73,10 +73,11 @@ Patches in this revision (1-6, plus 7-8 below):
      query in that chunk with either a matched downloaded file or a
      'failed' status — so the portal can render a per-query row instead of
      only chunk-level counts. This is a best-effort pairing: if the agent
-     response tags a downloaded item with its originating query/web_query
-     field, that's used; otherwise items are matched positionally in the
-     order the chunk's queries were sent (the agent processes web_query1..N
-     in order). A new POST /api/sources/upload route lets the portal fall
+     response echoes the stable request_id assigned to each web query. Exact
+     original-query matching is the compatibility fallback; positional
+     matching is forbidden because it can attach a later successful document
+     to an earlier failed question. A new POST /api/sources/upload route lets
+     the portal fall
      back to a manual multipart upload for any query where the agent could
      not find a document; the file is written to S3 under the same slug
      prefix the agent uses, provenance is recorded, and — if a run_id is
@@ -779,21 +780,30 @@ def _summarize_agent_diagnostics(raw: dict) -> dict:
                 aliases = pq.get("generated_alias_queries")
                 if isinstance(aliases, list):
                     alias_query_count += len(aliases)
+    identity = raw.get("company_identity")
+    if not isinstance(identity, dict):
+        identity = {}
     return {
         "alias_query_count": alias_query_count,
         "keys": sorted(raw.keys())[:20],   # visibility without the heavy payload
+        "identity_status": identity.get("status"),
+        "identity_method": identity.get("method"),
+        "identity_ticker": identity.get("ticker"),
+        "identity_cik": identity.get("cik"),
     }
 
 
-def _pair_queries_with_results(chunk_queries: list, downloaded: list, failures: list) -> list:
+def _pair_queries_with_results(chunk_queries: list, downloaded: list,
+                               failures: list, agent_results: list | None = None,
+                               chunk_index: int = 0) -> list:
     """
     PATCH #7: best-effort per-query status for the UI.
 
-    Prefer an explicit query/web_query field carried on a downloaded item (if
-    the agent tags its results that way). If nothing is tagged, fall back to
-    positional pairing — the agent processes web_query1..N in order within a
-    chunk and (in practice) returns downloads in that same order, so the Nth
-    query maps to the Nth successful download once matched ones are excluded.
+    Prefer the stable request_id assigned by this backend and echoed by the
+    agent. Exact original-query matching is the compatibility fallback for an
+    older agent. Positional pairing is intentionally forbidden: when earlier
+    queries fail and a later query succeeds, positional pairing maps the later
+    document to the wrong question — the Ball/Freeport fan-out failure mode.
 
     Every query in the chunk gets exactly one result entry:
       {"query": ..., "status": "downloaded", "s3_key": ..., "file_name": ...,
@@ -805,26 +815,36 @@ def _pair_queries_with_results(chunk_queries: list, downloaded: list, failures: 
     upload button for that specific query.
     """
     dl = [d for d in (downloaded or []) if isinstance(d, dict)]
-
-    # 1) Try explicit tagging first.
-    by_query = {}
-    for d in dl:
-        q = d.get("query") or d.get("web_query")
-        if q:
-            by_query[q] = d
+    authoritative = [
+        item for item in (agent_results or []) if isinstance(item, dict)
+    ]
+    by_request_id = {
+        str(item.get("request_id")): item
+        for item in authoritative
+        if item.get("request_id")
+    }
+    by_exact_query = {}
+    for item in authoritative + dl:
+        query = item.get("query") or item.get("original_query")
+        if query:
+            by_exact_query[str(query)] = item
 
     results = []
-    pos = 0
-    for q in chunk_queries:
-        match = by_query.get(q)
-        if match is None and not by_query and pos < len(dl):
-            # 2) No tagging present anywhere in this chunk — fall back to
-            # positional pairing across the whole chunk.
-            match = dl[pos]
-            pos += 1
-        if match:
+    for position, q in enumerate(chunk_queries, start=1):
+        request_id = f"{chunk_index}:{position}"
+        match = by_request_id.get(request_id) or by_exact_query.get(str(q))
+        if match and match.get("status") not in {"failed", "no_document_found"}:
             key = match.get("s3_key") or match.get("key") or ""
+            if not key:
+                results.append({
+                    "request_id": request_id,
+                    "query": q,
+                    "status": "failed",
+                    "reason": "agent success result had no S3 key",
+                })
+                continue
             results.append({
+                "request_id": request_id,
                 "query":      q,
                 "status":     "downloaded",
                 "s3_key":     key,
@@ -839,10 +859,17 @@ def _pair_queries_with_results(chunk_queries: list, downloaded: list, failures: 
                 # "stored" (a brand-new save). Both are equally real,
                 # equally downloadable successes — this flag is purely
                 # cosmetic, for an "(already in S3)" note in the UI.
-                "duplicate":  match.get("status") == "duplicate",
+                "duplicate":  bool(match.get("duplicate")
+                                   or match.get("status") == "duplicate"),
             })
         else:
-            results.append({"query": q, "status": "failed"})
+            reason = (match or {}).get("reason") or "no exact agent result mapping"
+            results.append({
+                "request_id": request_id,
+                "query": q,
+                "status": "failed",
+                "reason": reason,
+            })
     return results
 
 
@@ -1522,9 +1549,12 @@ def _build_chunk_payload(company: str, run_id: str, search_query: str,
         "run_id":       run_id,          # SAME run_id for every chunk (fix #1/#4)
         "search_query": search_query,
         "chunk_index":  chunk_index,     # informational; agent may ignore it
+        "web_query_ids": {},
     }
     for i, q in enumerate(chunk_queries, start=1):
-        payload["web_query" + str(i)] = q
+        key = "web_query" + str(i)
+        payload[key] = q
+        payload["web_query_ids"][key] = f"{chunk_index}:{i}"
     return payload
 
 
@@ -1568,6 +1598,7 @@ def _invoke_one_chunk(chunk_index: int, chunk_queries: list, company: str,
         stored     = body.get("stored", [])            if isinstance(body, dict) else []
         duplicates = body.get("duplicates", [])        if isinstance(body, dict) else []
         not_found  = body.get("no_document_found", []) if isinstance(body, dict) else []
+        agent_results = body.get("results", [])        if isinstance(body, dict) else []
         downloaded = list(stored) + list(duplicates)
         failures   = list(not_found)
         diag       = body.get("diagnostics", {}) if isinstance(body, dict) else {}
@@ -1577,7 +1608,9 @@ def _invoke_one_chunk(chunk_index: int, chunk_queries: list, company: str,
                 "downloaded": downloaded, "failures": failures,
                 # PATCH #7: pre-computed per-query rows so the UI doesn't have
                 # to re-derive them and so the pairing logic lives in one place.
-                "results": _pair_queries_with_results(chunk_queries, downloaded, failures),
+                "results": _pair_queries_with_results(
+                    chunk_queries, downloaded, failures,
+                    agent_results=agent_results, chunk_index=chunk_index),
                 "diagnostics": diag, "error": None}
     except Exception as e:
         log.error("[run %s] chunk %d ERROR: %s", run_id[:8], chunk_index, e)
@@ -1586,7 +1619,15 @@ def _invoke_one_chunk(chunk_index: int, chunk_queries: list, company: str,
         # instead of only showing an opaque chunk-level error string.
         return {"chunk": chunk_index, "queries": chunk_queries,
                 "downloaded": [], "failures": [], "diagnostics": {},
-                "results": [{"query": q, "status": "failed"} for q in chunk_queries],
+                "results": [
+                    {
+                        "request_id": f"{chunk_index}:{position}",
+                        "query": q,
+                        "status": "failed",
+                        "reason": str(e)[:500],
+                    }
+                    for position, q in enumerate(chunk_queries, start=1)
+                ],
                 "error": str(e)[:500]}
 
 

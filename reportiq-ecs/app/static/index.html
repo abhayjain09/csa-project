@@ -209,6 +209,30 @@ tr.detail-row td{padding:0}
 .footer .footer-brand{color:#fff;font-size:26px;font-weight:700}
 .footer .footer-brand .red{color:var(--red)}
 .footer .footer-note{color:#878787;font-size:12px;display:flex;align-items:flex-end;justify-content:flex-end}
+
+/* Reports page */
+.rp-company-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-top:20px}
+.rp-company-card{border:1px solid var(--border);padding:20px;cursor:pointer;transition:border-color .15s,box-shadow .15s;background:#fff}
+.rp-company-card:hover{border-color:#000;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.rp-company-card .rp-co-name{font-size:17px;font-weight:700;margin-bottom:6px}
+.rp-company-card .rp-co-meta{font-size:12px;color:var(--muted);display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+.rp-cat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin-top:20px}
+.rp-cat-card{border:1px solid var(--border);padding:18px;cursor:pointer;background:#fff;transition:border-color .15s}
+.rp-cat-card:hover{border-color:var(--red)}
+.rp-cat-card .rp-cat-name{font-size:16px;font-weight:700;margin-bottom:6px}
+.rp-cat-card .rp-cat-count{font-size:13px;color:var(--muted)}
+.rp-answer-text{font-size:14px;line-height:1.6;margin-bottom:10px}
+.rp-citation-box{background:#f8f9fb;border-left:3px solid var(--red);padding:12px 16px;margin-top:8px;font-size:13px}
+.rp-citation-quote{font-style:italic;color:#333;line-height:1.6;margin-bottom:6px}
+.rp-citation-meta{font-size:11px;color:var(--muted);display:flex;gap:14px;flex-wrap:wrap}
+.conf-high{color:#147327;font-weight:700}
+.conf-medium{color:#7a5800;font-weight:700}
+.conf-low{color:#a33012;font-weight:700}
+.conf-insufficient{color:var(--muted);font-weight:700}
+.rp-run-btn{display:inline-flex;align-items:center;gap:6px;background:var(--red);color:#fff;border:none;padding:8px 18px;font-size:14px;font-weight:700;cursor:pointer;height:36px}
+.rp-run-btn:hover{background:var(--red-dark)}
+.rp-run-btn:disabled{opacity:.5;cursor:not-allowed}
+.rp-empty{padding:60px 20px;text-align:center;color:var(--muted);font-size:14px}
 </style>
 </head>
 <body>
@@ -228,6 +252,7 @@ tr.detail-row td{padding:0}
       <button class="menu-item" id="nav-runs" onclick="navTo('runs',this)">Runs</button>
       <button class="menu-item" id="nav-sources" onclick="navTo('sources',this)">Sources</button>
       <button class="menu-item" id="nav-pageindex" onclick="navTo('pageindex',this)">Page Index</button>
+      <button class="menu-item" id="nav-reports" onclick="navTo('reports',this)">Reports</button>
     </nav>
     <div style="display:flex;align-items:center;gap:10px">
       <div class="sync-indicator">
@@ -494,6 +519,68 @@ tr.detail-row td{padding:0}
   </div>
 </section>
 
+
+<!-- REPORTS -->
+<section class="page" id="page-reports">
+  <div class="page-body">
+    <div class="breadcrumbs" id="rpBreadcrumbs">
+      <a onclick="navTo('dashboard',document.getElementById('nav-dashboard'))">Home</a> / Reports
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
+      <div>
+        <h1 class="page-title" id="rpPageTitle">Reports</h1>
+        <p class="page-subtitle" id="rpPageSubtitle">Select a company to view ESG questionnaire answers across all categories.</p>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;margin-top:8px">
+        <span id="rpRunStatus" style="font-size:12px;color:var(--muted)"></span>
+        <button class="rp-run-btn" id="rpRunBtn" onclick="rpTriggerRun()" style="display:none">
+          &#9654; Run Answering Agent
+        </button>
+        <button class="btn btn-sm" onclick="rpRefresh()">&#8635; Refresh</button>
+      </div>
+    </div>
+    <!-- company cards -->
+    <div id="rpViewCompanies">
+      <div id="rpCompanyGrid" class="rp-company-grid">
+        <div class="rp-empty"><span class="spinner"></span> Loading&hellip;</div>
+      </div>
+    </div>
+    <!-- category cards -->
+    <div id="rpViewCategories" style="display:none">
+      <div id="rpCatGrid" class="rp-cat-grid"></div>
+    </div>
+    <!-- Q&A table -->
+    <div id="rpViewQA" style="display:none">
+      <div class="toolbar" style="margin-top:20px">
+        <div class="toolbar-left">
+          <input class="form-input" style="max-width:300px;height:36px"
+            placeholder="Search questions..." id="rpQASearch" oninput="rpFilterQA()">
+          <select class="filter-select" id="rpConfFilter" onchange="rpFilterQA()" style="min-width:160px">
+            <option value="">All confidence</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+            <option value="insufficient_evidence">Insufficient</option>
+          </select>
+        </div>
+        <div class="toolbar-right" style="font-size:13px;color:var(--muted)" id="rpQACount"></div>
+      </div>
+      <div class="table-wrapper" style="margin-top:12px">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:56px">#</th>
+              <th>Question</th>
+              <th style="width:120px">Source</th>
+              <th style="width:130px">Confidence</th>
+            </tr>
+          </thead>
+          <tbody id="rpQABody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
 </div><!-- main-wrapper -->
 
 <footer class="footer">
@@ -517,6 +604,7 @@ function onPageEnter(pageId) {
   if (pageId === 'runs')      { loadRuns(); }
   if (pageId === 'sources')   { loadSources(); }
   if (pageId === 'pageindex') { loadPageIndex(); loadPiRuns(); }
+  if (pageId === 'reports')   { rpLoadCompanies(); }
 }
 
 // ─── Toasts ───────────────────────────────────────────────────────────────────
@@ -1614,9 +1702,305 @@ function renderPiRunsTable() {
 }
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
+
+// =============================================================================
+// Reports page
+// =============================================================================
+var rpState = {
+  view: 'companies',
+  companies: [],
+  currentSlug: '',
+  currentCompany: '',
+  currentCats: [],
+  currentCat: '',
+  currentMd: '',
+  allQA: [],
+  filteredQA: [],
+  runPolling: null,
+};
+
+function rpShowView(view) {
+  rpState.view = view;
+  document.getElementById('rpViewCompanies').style.display  = view === 'companies'  ? '' : 'none';
+  document.getElementById('rpViewCategories').style.display = view === 'categories' ? '' : 'none';
+  document.getElementById('rpViewQA').style.display         = view === 'qa'         ? '' : 'none';
+  document.getElementById('rpRunBtn').style.display = view === 'companies' ? '' : 'none';
+}
+
+function rpSetBreadcrumbs(parts) {
+  const bc = document.getElementById('rpBreadcrumbs');
+  const links = [
+    '<a onclick="navTo(\'dashboard\',document.getElementById(\'nav-dashboard\'))">Home</a>',
+    '<a onclick="rpLoadCompanies()">Reports</a>',
+  ];
+  parts.forEach(p => {
+    if (p.onclick) links.push('<a onclick="' + p.onclick + '">' + escH(p.label) + '</a>');
+    else links.push('<span>' + escH(p.label) + '</span>');
+  });
+  bc.innerHTML = links.join(' / ');
+}
+
+async function rpLoadCompanies() {
+  rpShowView('companies');
+  rpSetBreadcrumbs([]);
+  document.getElementById('rpPageTitle').textContent = 'Reports';
+  document.getElementById('rpPageSubtitle').textContent = 'Select a company to view ESG questionnaire answers across all categories.';
+  document.getElementById('rpRunStatus').textContent = '';
+
+  const grid = document.getElementById('rpCompanyGrid');
+  grid.innerHTML = '<div class="rp-empty"><span class="spinner"></span> Loading&hellip;</div>';
+
+  try {
+    const companies = await apiFetch('/api/answering-agent/companies');
+    rpState.companies = companies;
+    if (!companies.length) {
+      grid.innerHTML = '<div class="rp-empty">No results yet. Run the answering agent for a company first.</div>';
+      return;
+    }
+    grid.innerHTML = companies.map(co => {
+      const status = co.status === 'running'
+        ? '<span class="badge running" style="font-size:11px">Running</span>'
+        : co.status === 'complete'
+          ? '<span class="badge complete" style="font-size:11px">Complete</span>'
+          : '<span class="badge pending" style="font-size:11px">' + escH(co.status || 'pending') + '</span>';
+      const cats = co.md_total ? co.md_done + '/' + co.md_total + ' categories' : '';
+      return '<div class="rp-company-card" onclick="rpLoadCategories(\'' + escH(co.company_slug) + '\',\'' + escH(co.company) + '\')">'
+        + '<div class="rp-co-name">' + escH(co.company) + '</div>'
+        + '<div class="rp-co-meta">'
+          + (co.last_run_at ? '<span>' + fmtDt(co.last_run_at) + '</span>' : '')
+          + (cats ? '<span>' + escH(cats) + '</span>' : '')
+          + status
+        + '</div>'
+        + '</div>';
+    }).join('');
+  } catch(e) {
+    grid.innerHTML = '<div class="rp-empty">Failed to load companies.</div>';
+  }
+}
+
+async function rpTriggerRun() {
+  const company = prompt('Enter company name to run answering agent:');
+  if (!company || !company.trim()) return;
+  const btn = document.getElementById('rpRunBtn');
+  btn.disabled = true;
+  btn.textContent = 'Running...';
+  try {
+    const res = await apiFetch('/api/answering-agent/run', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({company: company.trim()}),
+    });
+    toast('info', 'Run triggered', company + ' started.');
+    rpPollRun(res.run_id);
+  } catch(e) {
+    btn.disabled = false;
+    btn.textContent = 'Run Answering Agent';
+  }
+}
+
+function rpPollRun(runId) {
+  if (rpState.runPolling) clearInterval(rpState.runPolling);
+  rpState.runPolling = setInterval(async () => {
+    try {
+      const run = await apiFetch('/api/answering-agent/runs/' + runId);
+      const statusEl = document.getElementById('rpRunStatus');
+      if (run.status === 'running') {
+        statusEl.textContent = run.company + ' — ' + (run.md_done||0) + '/' + (run.md_total||'?') + ' categories done';
+      } else {
+        clearInterval(rpState.runPolling);
+        rpState.runPolling = null;
+        statusEl.textContent = '';
+        const btn = document.getElementById('rpRunBtn');
+        btn.disabled = false;
+        btn.textContent = 'Run Answering Agent';
+        if (run.status === 'complete') {
+          toast('success', 'Complete', run.company + ' — all categories answered.');
+          rpLoadCompanies();
+        } else {
+          toast('error', 'Run failed', run.error_msg || 'Check logs.');
+        }
+      }
+    } catch(e) {}
+  }, 10000);
+}
+
+async function rpLoadCategories(slug, company) {
+  rpState.currentSlug = slug;
+  rpState.currentCompany = company;
+  rpShowView('categories');
+  rpSetBreadcrumbs([{label: company}]);
+  document.getElementById('rpPageTitle').innerHTML = escH(company) + ' <span style="font-weight:300;font-size:22px">Reports</span>';
+  document.getElementById('rpPageSubtitle').textContent = 'Select a category to view answers.';
+
+  const grid = document.getElementById('rpCatGrid');
+  grid.innerHTML = '<div class="rp-empty"><span class="spinner"></span> Loading&hellip;</div>';
+
+  try {
+    const data = await apiFetch('/api/answering-agent/companies/' + encodeURIComponent(slug));
+    rpState.currentCats = data.categories || [];
+    if (!rpState.currentCats.length) {
+      grid.innerHTML = '<div class="rp-empty">No categories found for this company.</div>';
+      return;
+    }
+    grid.innerHTML = rpState.currentCats.map(cat => {
+      return '<div class="rp-cat-card" onclick="rpLoadQA(\'' + escH(slug) + '\',\'' + escH(cat.md_file) + '\',\'' + escH(cat.category) + '\')">'
+        + '<div class="rp-cat-name">' + escH(cat.category) + '</div>'
+        + '<div class="rp-cat-count">' + escH(String(cat.question_count)) + ' questions</div>'
+        + '</div>';
+    }).join('');
+  } catch(e) {
+    grid.innerHTML = '<div class="rp-empty">Failed to load categories.</div>';
+  }
+}
+
+async function rpLoadQA(slug, mdFile, category) {
+  rpState.currentCat = category;
+  rpState.currentMd  = mdFile;
+  rpShowView('qa');
+  rpSetBreadcrumbs([
+    {label: rpState.currentCompany, onclick: 'rpLoadCategories(\'' + escH(slug) + '\',\'' + escH(rpState.currentCompany) + '\')'},
+    {label: category},
+  ]);
+  document.getElementById('rpPageTitle').innerHTML = escH(category);
+  document.getElementById('rpPageSubtitle').textContent = rpState.currentCompany;
+  document.getElementById('rpQASearch').value = '';
+  document.getElementById('rpConfFilter').value = '';
+
+  const tbody = document.getElementById('rpQABody');
+  tbody.innerHTML = '<tr><td colspan="4" class="empty-state"><span class="spinner"></span> Loading&hellip;</td></tr>';
+
+  try {
+    const catSlug = mdFile.replace('.md','').replace(/_/g,'-');
+    const data = await apiFetch('/api/answering-agent/companies/' + encodeURIComponent(slug) + '/' + encodeURIComponent(catSlug));
+    rpState.allQA = data.results || [];
+    rpState.filteredQA = [...rpState.allQA];
+    rpRenderQA();
+  } catch(e) {
+    tbody.innerHTML = '<tr><td colspan="4" class="empty-state">Failed to load answers.</td></tr>';
+  }
+}
+
+function rpFilterQA() {
+  const q    = (document.getElementById('rpQASearch').value || '').toLowerCase();
+  const conf = document.getElementById('rpConfFilter').value;
+  rpState.filteredQA = rpState.allQA.filter(r => {
+    const matchQ = !q    || (r.question_label||'').toLowerCase().includes(q);
+    const matchC = !conf || r.confidence === conf;
+    return matchQ && matchC;
+  });
+  rpRenderQA();
+}
+
+function rpRefresh() {
+  if (rpState.view === 'companies')  rpLoadCompanies();
+  if (rpState.view === 'categories') rpLoadCategories(rpState.currentSlug, rpState.currentCompany);
+  if (rpState.view === 'qa')         rpLoadQA(rpState.currentSlug, rpState.currentMd, rpState.currentCat);
+}
+
+function rpConfLabel(conf) {
+  if (!conf) return 'Unknown';
+  if (conf === 'insufficient_evidence') return 'Insufficient';
+  return conf.charAt(0).toUpperCase() + conf.slice(1);
+}
+function rpConfClass(conf) {
+  if (conf === 'insufficient_evidence') return 'conf-insufficient';
+  return 'conf-' + (conf || 'insufficient');
+}
+
+function rpRenderQA() {
+  const tbody = document.getElementById('rpQABody');
+  const total = rpState.filteredQA.length;
+  document.getElementById('rpQACount').textContent = total + ' question' + (total !== 1 ? 's' : '');
+
+  if (!total) {
+    tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No results match your filters.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rpState.filteredQA.map((r, idx) => {
+    const qNum = 'Q.' + (idx + 1);
+    const conf  = r.confidence || 'insufficient_evidence';
+    const cClass = rpConfClass(conf);
+    const cLabel = rpConfLabel(conf);
+
+    // Answer value
+    let answerText = '';
+    if (r.answer && typeof r.answer === 'object') {
+      const val  = r.answer.value !== undefined ? r.answer.value : JSON.stringify(r.answer);
+      const unit = r.answer.unit ? ' ' + r.answer.unit : '';
+      answerText = (val !== null && val !== undefined)
+        ? escH(String(val) + unit)
+        : '<em class="muted">No value</em>';
+    } else if (r.error) {
+      answerText = '<span style="color:var(--err)">Error: ' + escH(r.error) + '</span>';
+    }
+
+    // Citations
+    const cits = (r.citations || []).map(c => {
+      const docLabel = escH(c.doc_name || '');
+      const pages    = c.page_start
+        ? 'p.' + c.page_start + (c.page_end && c.page_end !== c.page_start ? '-' + c.page_end : '')
+        : '';
+      const keyPath = c.s3_uri
+        ? c.s3_uri.replace('s3://','').split('/').slice(1).join('/')
+        : '';
+      const s3Link = keyPath
+        ? '<a class="url-ref" href="/api/sources/download-url?key=' + encodeURIComponent(keyPath) + '" target="_blank">open source</a>'
+        : '';
+      return '<div class="rp-citation-box">'
+        + (c.quoted_span ? '<div class="rp-citation-quote">&ldquo;' + escH(c.quoted_span) + '&rdquo;</div>' : '')
+        + '<div class="rp-citation-meta">'
+          + (docLabel ? '<span>' + docLabel + '</span>' : '')
+          + (pages    ? '<span>' + escH(pages) + '</span>' : '')
+          + (c.node_path ? '<span title="' + escH(c.node_path) + '">' + escH(c.node_path.split(' > ').pop()) + '</span>' : '')
+          + (s3Link ? s3Link : '')
+        + '</div>'
+      + '</div>';
+    }).join('');
+
+    const hasCitations = (r.citations || []).length > 0;
+    const srcLabel = hasCitations
+      ? '<span class="url-ref">official</span>'
+      : '<span class="muted" style="font-size:12px">—</span>';
+
+    const detailId = 'rpDetail_' + idx;
+    return '<tr class="expandable" onclick="rpToggleDetail(this)">'
+      + '<td style="font-size:13px;color:var(--muted);white-space:nowrap;font-family:var(--mono)">' + qNum + '</td>'
+      + '<td>'
+        + '<div style="font-weight:600;font-size:14px;margin-bottom:2px">' + escH(r.question_label || '') + '</div>'
+        + '<div style="font-size:13px;color:var(--muted)">' + escH(rpState.currentCompany) + '</div>'
+      + '</td>'
+      + '<td>' + srcLabel + '</td>'
+      + '<td><span class="' + cClass + '">' + escH(cLabel) + '</span></td>'
+    + '</tr>'
+    + '<tr class="detail-row" id="' + detailId + '" style="display:none">'
+      + '<td colspan="4">'
+        + '<div class="detail-panel">'
+          + '<div class="rp-answer-text">' + answerText + '</div>'
+          + (cits || '<div class="muted" style="font-size:13px">No citations recorded.</div>')
+          + '<div style="margin-top:14px;display:flex;gap:20px;font-size:12px;color:var(--muted)">'
+            + '<span>Confidence: <strong class="' + cClass + '">' + escH(cLabel) + '</strong></span>'
+            + '<span>Tool calls: ' + (r.tool_calls_used || 0) + '</span>'
+            + (r.flags && r.flags.length ? '<span>Flags: ' + escH(r.flags.join(', ')) + '</span>' : '')
+          + '</div>'
+        + '</div>'
+      + '</td>'
+    + '</tr>';
+  }).join('');
+}
+
+function rpToggleDetail(row) {
+  const next = row.nextElementSibling;
+  if (next && next.classList.contains('detail-row')) {
+    const isOpen = next.style.display !== 'none';
+    next.style.display = isOpen ? 'none' : '';
+  }
+}
+
+
 loadStats();
 loadDashRuns();
 schedulSync();
 </script>
 </body>
-</html>
+</html>  

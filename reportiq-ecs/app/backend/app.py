@@ -22,11 +22,20 @@ PageIndex endpoints:
   GET    /api/pageindex/runs                 List all indexing runs
   GET    /api/pageindex/runs/<run_id>        Get status of a specific run
 
+Answering Agent endpoints:
+  GET    /api/answering-agent/questionnaires              List questionnaire MD files in S3
+  POST   /api/answering-agent/run                         Trigger answering run for a company
+  GET    /api/answering-agent/runs/<run_id>               Poll run status
+  GET    /api/answering-agent/companies                   List all companies with results
+  GET    /api/answering-agent/companies/<slug>            Get categories for a company
+  GET    /api/answering-agent/companies/<slug>/<category> Get Q&A for one category
+
 Shared:
   GET    /health                             Health check
+"""
 
-
-Patches in this revision (1–6, plus 7-8 below):
+"""
+Patches in this revision (1-6, plus 7-8 below):
   1. company + run_id are now included in the AgentCore payload. Previously
      only search_query + web_query* were sent, so the agent stored every file
      under s3 key prefix "unknown/" and wrote provenance with PK company=
@@ -120,6 +129,16 @@ PAGEINDEX_RUNTIME_ARN = os.environ.get(
     "arn:aws:bedrock-agentcore:us-east-1:610639371721:runtime/pageindex_runtime-rucFhA3V8V")
 PAGEINDEX_QUALIFIER   = os.environ.get("PAGEINDEX_QUALIFIER",   "DEFAULT")
 PAGEINDEX_RUNS_TABLE  = os.environ.get("PAGEINDEX_RUNS_TABLE",  "pageindex-runs")
+
+# Answering Agent runtime
+ANSWERING_RUNTIME_ARN   = os.environ.get(
+    "ANSWERING_RUNTIME_ARN",
+    "arn:aws:bedrock-agentcore:us-east-1:610639371721:runtime/report_iq_aswering_agent_dev-0cS5fh9bFb")
+ANSWERING_QUALIFIER      = os.environ.get("ANSWERING_QUALIFIER",     "DEFAULT")
+ANSWERING_RUNS_TABLE     = os.environ.get("ANSWERING_RUNS_TABLE",    "answering-runs")
+ANSWERING_RESULTS_TABLE  = os.environ.get("ANSWERING_RESULTS_TABLE", "answering-results")
+QUESTIONNAIRES_PREFIX    = os.environ.get("QUESTIONNAIRES_PREFIX",   "questionnaires/")
+QUESTIONNAIRES_BUCKET    = os.environ.get("QUESTIONNAIRES_BUCKET",   REPORTS_BUCKET)
 
 # Per-CHUNK read timeout. Each invoke carries only AGENT_CHUNK_SIZE web queries.
 # Raised 300s -> 600s after confirming via AWS docs that AgentCore's own
@@ -2003,10 +2022,16 @@ def _invoke_pageindex_runtime(bucket: str, s3_key: str, label: str) -> dict:
     return result["index"]
 
 
-def _write_run_status(run_id: str, update: dict, dynamo=None):
-    """Generic DynamoDB updater for pageindex-runs. Never raises."""
+def _write_run_status(run_id: str, update: dict, dynamo=None, company: str = None):
+    """Generic DynamoDB updater for pageindex-runs. Never raises.
+    Table schema: PK=company, SK=run_id — both are required for every write.
+    company defaults to 'unknown' if not supplied (should always be supplied).
+    """
     if dynamo is None:
         dynamo = get_dynamo()
+    # company is required by the table's composite key; fall back to 'unknown'
+    # only as a safety net so we never silently drop a status write.
+    key_company = company or update.get("company") or "unknown"
     try:
         expr_names  = {}
         expr_values = {}
@@ -2018,7 +2043,7 @@ def _write_run_status(run_id: str, update: dict, dynamo=None):
             expr_values[val_key]  = v
             set_parts.append(f"{safe_key} = {val_key}")
         dynamo.Table(PAGEINDEX_RUNS_TABLE).update_item(
-            Key={"run_id": run_id},
+            Key={"company": key_company, "run_id": run_id},
             UpdateExpression="SET " + ", ".join(set_parts),
             ExpressionAttributeNames=expr_names,
             ExpressionAttributeValues=expr_values,
@@ -2055,16 +2080,18 @@ def _update_provenance_rag_status(company: str, s3_key: str, status: str, dynamo
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def _async_pageindex(company: str, s3_prefix: str, force: bool) -> str:
-    run_id  = str(uuid.uuid4())
-    now_iso = datetime.now(timezone.utc).isoformat()
+    run_id      = str(uuid.uuid4())
+    now_iso     = datetime.now(timezone.utc).isoformat()
+    # company is the PK — must be consistent with every subsequent _write_run_status call.
+    key_company = (company or s3_prefix or "unknown").strip()
     try:
         get_dynamo().Table(PAGEINDEX_RUNS_TABLE).put_item(Item={
-            "run_id":    run_id,
-            "company":   company or s3_prefix or "unknown",
-            "s3_prefix": s3_prefix or "",
-            "status":    "pending",
+            "company":    key_company,       # PK
+            "run_id":     run_id,            # SK
+            "s3_prefix":  s3_prefix or "",
+            "status":     "pending",
             "started_at": now_iso,
-            "force":     force,
+            "force":      force,
         })
     except Exception as ex:
         log.error("[pageindex][run %s] Initial DynamoDB write failed: %s", run_id[:8], ex)
@@ -2075,6 +2102,7 @@ def _async_pageindex(company: str, s3_prefix: str, force: bool) -> str:
 
 
 def _do_pageindex(run_id: str, company: str, s3_prefix: str, force: bool):
+    key_company = (company or s3_prefix or "unknown").strip()
     try:
         _do_pageindex_inner(run_id, company, s3_prefix, force)
     except Exception as e:
@@ -2084,7 +2112,7 @@ def _do_pageindex(run_id: str, company: str, s3_prefix: str, force: bool):
                 "status":      "failed",
                 "finished_at": datetime.now(timezone.utc).isoformat(),
                 "error_msg":   str(e)[:1000],
-            })
+            }, company=key_company)
         except Exception as ex2:
             log.error("[pageindex][run %s] Could not write fatal status: %s", run_id[:8], ex2)
 
@@ -2105,6 +2133,8 @@ def _do_pageindex_inner(run_id: str, company: str, s3_prefix: str, force: bool):
         resolved_bucket = REPORTS_BUCKET
         pdfs, resolved_prefix = _list_pdfs_for_company_pi(display_company, s3)
 
+    # key_company must match what _async_pageindex wrote as the PK
+    key_company      = (company or s3_prefix or "unknown").strip()
     pageindex_key    = _pageindex_s3_key(resolved_prefix, slug)
     pageindex_s3_uri = f"s3://{resolved_bucket}/{pageindex_key}"
 
@@ -2115,7 +2145,7 @@ def _do_pageindex_inner(run_id: str, company: str, s3_prefix: str, force: bool):
         "s3_prefix":        resolved_prefix,
         "pageindex_s3_uri": pageindex_s3_uri,
         "started_at":       now_iso,
-    }, dynamo)
+    }, dynamo, company=key_company)
 
     if not pdfs:
         log.warning("[pageindex][run %s] No PDFs found for company=%r", run_id[:8], display_company)
@@ -2125,7 +2155,7 @@ def _do_pageindex_inner(run_id: str, company: str, s3_prefix: str, force: bool):
             "error_msg":   f"No PDFs found under prefix {resolved_prefix}",
             "indexed":     json.dumps([]),
             "skipped":     json.dumps([]),
-        }, dynamo)
+        }, dynamo, company=key_company)
         return
 
     existing        = {} if force else _load_existing_index(resolved_bucket, pageindex_key, s3)
@@ -2180,7 +2210,7 @@ def _do_pageindex_inner(run_id: str, company: str, s3_prefix: str, force: bool):
         _write_run_status(run_id, {
             "indexed": json.dumps(indexed),
             "skipped": json.dumps(skipped),
-        }, dynamo)
+        }, dynamo, company=key_company)
 
     if indexed:
         final_status = "complete"
@@ -2198,7 +2228,7 @@ def _do_pageindex_inner(run_id: str, company: str, s3_prefix: str, force: bool):
         "skipped":          json.dumps(skipped),
         "pageindex_s3_uri": pageindex_s3_uri,
         "error_msg":        error_msg or "",
-    }, dynamo)
+    }, dynamo, company=key_company)
 
     log.info("[pageindex][run %s] Done. status=%s indexed=%d skipped=%d pageindex=%s",
              run_id[:8], final_status, len(indexed), len(skipped), pageindex_s3_uri)
@@ -2245,12 +2275,652 @@ def list_pageindex_runs():
 
 @app.route("/api/pageindex/runs/<run_id>", methods=["GET"])
 def get_pageindex_run(run_id):
+    """
+    Table schema is PK=company, SK=run_id — we don't have company in this
+    route, so we scan with a filter on run_id. This is acceptable because
+    run IDs are UUIDs (unique) and runs tables are small.
+    For high-volume use, add a GSI on run_id.
+    """
     dynamo = get_dynamo()
-    resp   = dynamo.Table(PAGEINDEX_RUNS_TABLE).get_item(Key={"run_id": run_id})
-    item   = resp.get("Item")
-    if not item:
+    try:
+        resp = dynamo.Table(PAGEINDEX_RUNS_TABLE).scan(
+            FilterExpression="#rid = :rid",
+            ExpressionAttributeNames={"#rid": "run_id"},
+            ExpressionAttributeValues={":rid": run_id},
+        )
+        items = resp.get("Items", [])
+        # handle pagination (unlikely for a UUID lookup but correct to handle)
+        while "LastEvaluatedKey" in resp:
+            resp = dynamo.Table(PAGEINDEX_RUNS_TABLE).scan(
+                FilterExpression="#rid = :rid",
+                ExpressionAttributeNames={"#rid": "run_id"},
+                ExpressionAttributeValues={":rid": run_id},
+                ExclusiveStartKey=resp["LastEvaluatedKey"],
+            )
+            items += resp.get("Items", [])
+    except Exception as ex:
+        log.error("[pageindex] get_run scan failed run_id=%s: %s", run_id[:8], ex)
+        return jsonify({"error": str(ex)}), 500
+    if not items:
         return jsonify({"error": "Run not found"}), 404
-    return jsonify(item)
+    return jsonify(items[0])
+
+
+# ─── Health ───────────────────────────────────────────────────────────────────
+@app.route("/health")
+def health():
+    return jsonify({"status": "ok", "ts": datetime.now(timezone.utc).isoformat()})
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Answering Agent — helpers
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _category_from_filename(filename: str) -> str:
+    """
+    Derive a human-readable category name from an MD filename.
+    code_of_conduct.md  ->  Code Of Conduct
+    water_metrics.md    ->  Water Metrics
+    """
+    name = filename
+    if name.endswith(".md"):
+        name = name[:-3]
+    return name.replace("_", " ").replace("-", " ").title()
+
+
+def _list_questionnaire_md_files() -> list:
+    """
+    List all .md files under QUESTIONNAIRES_PREFIX in QUESTIONNAIRES_BUCKET.
+    Returns list of { filename, s3_key, s3_uri, category }.
+    """
+    s3  = get_s3()
+    out = []
+    try:
+        paginator = s3.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=QUESTIONNAIRES_BUCKET,
+                                       Prefix=QUESTIONNAIRES_PREFIX):
+            for obj in page.get("Contents", []):
+                key = obj["Key"]
+                if not key.lower().endswith(".md"):
+                    continue
+                filename = key.split("/")[-1]
+                out.append({
+                    "filename": filename,
+                    "s3_key":   key,
+                    "s3_uri":   f"s3://{QUESTIONNAIRES_BUCKET}/{key}",
+                    "category": _category_from_filename(filename),
+                })
+    except ClientError as e:
+        log.error("[answering] list_questionnaire_md_files error: %s", e)
+    return out
+
+
+def _invoke_answering_runtime(
+    questionnaire_s3_uri: str,
+    pageindex_s3_uri: str,
+    company: str,
+    run_id: str,
+) -> dict:
+    """
+    Invoke the answering agent runtime for ONE questionnaire MD file.
+    Same pattern as _invoke_pageindex_runtime.
+    Raises RuntimeError on error status.
+    """
+    payload_bytes = json.dumps({
+        "run_id":           run_id,
+        "company":          company,
+        "pageindex":        {"s3_uri": pageindex_s3_uri},
+        "questionnaire_md": {"s3_uri": questionnaire_s3_uri},
+    }).encode("utf-8")
+
+    log.info(
+        "[answering][agentcore] invoking runtime — company=%r md=%s",
+        company, questionnaire_s3_uri,
+    )
+    raw = _invoke_agentcore(
+        ANSWERING_RUNTIME_ARN,
+        ANSWERING_QUALIFIER,
+        payload_bytes,
+    )
+    if not raw:
+        raise RuntimeError("Empty response from answering runtime")
+
+    response = json.loads(raw.decode("utf-8"))
+    if response.get("status") != "ok":
+        raise RuntimeError(
+            f"Answering runtime returned error: "
+            f"{response.get('message') or response.get('error_type')}"
+        )
+
+    log.info(
+        "[answering][agentcore] completed — company=%r md=%s",
+        company, questionnaire_s3_uri,
+    )
+    return response["result"]
+
+
+def _write_answering_run_status(run_id: str, update: dict, dynamo=None, session_id: str = None):
+    """
+    Generic DynamoDB updater for answering-runs table.
+    Table schema: PK=session_id, SK=run_id — both required for every write.
+    session_id should be passed explicitly; falls back to scanning for the row.
+    Never raises.
+    """
+    if dynamo is None:
+        dynamo = get_dynamo()
+
+    # If session_id not supplied, look it up via scan (slower but safe fallback)
+    key_session = session_id
+    if not key_session:
+        try:
+            resp = dynamo.Table(ANSWERING_RUNS_TABLE).scan(
+                FilterExpression="#rid = :rid",
+                ExpressionAttributeNames={"#rid": "run_id"},
+                ExpressionAttributeValues={":rid": run_id},
+                ProjectionExpression="session_id",
+            )
+            items = resp.get("Items", [])
+            key_session = items[0]["session_id"] if items else "unknown"
+        except Exception:
+            key_session = "unknown"
+
+    try:
+        expr_names  = {}
+        expr_values = {}
+        set_parts   = []
+        for k, v in update.items():
+            safe_key = f"#f_{k}"
+            val_key  = f":v_{k}"
+            expr_names[safe_key]  = k
+            expr_values[val_key]  = v
+            set_parts.append(f"{safe_key} = {val_key}")
+        dynamo.Table(ANSWERING_RUNS_TABLE).update_item(
+            Key={"session_id": key_session, "run_id": run_id},
+            UpdateExpression="SET " + ", ".join(set_parts),
+            ExpressionAttributeNames=expr_names,
+            ExpressionAttributeValues=expr_values,
+        )
+    except Exception as ex:
+        log.error(
+            "[answering][run %s] DynamoDB run status write failed: %s",
+            run_id[:8], ex,
+        )
+
+
+def _write_answering_results(run_result: dict, dynamo=None):
+    """
+    Write every question result from a RunResult dict into the
+    answering-results DynamoDB table.
+
+    Table schema: PK=run_id (String), SK=result_id (String)
+    result_id format: md_file#question_id  (e.g. code_of_conduct.md#q1)
+
+    company_slug is stored as a regular attribute so the query routes
+    can still filter/group by company.
+    """
+    if dynamo is None:
+        dynamo = get_dynamo()
+
+    company_slug = run_result.get("company_slug", "")
+    md_file      = run_result.get("md_file", "")
+    category     = run_result.get("category", "")
+    run_id       = run_result.get("run_id", "")
+    company      = run_result.get("company", "")
+    created_at   = datetime.now(timezone.utc).isoformat()
+    table        = dynamo.Table(ANSWERING_RESULTS_TABLE)
+
+    for q in run_result.get("results", []):
+        question_id = q.get("question_id", "")
+        result_id   = f"{md_file}#{question_id}"
+        try:
+            table.put_item(Item={
+                "run_id":          run_id,        # PK
+                "result_id":       result_id,     # SK  (md_file#question_id)
+                "company_slug":    company_slug,  # regular attribute for filtering
+                "company":         company,
+                "md_file":         md_file,
+                "category":        category,
+                "question_id":     question_id,
+                "question_label":  q.get("question_label", ""),
+                "answer":          json.dumps(q.get("answer_payload", {})),
+                "confidence":      q.get("confidence", {}).get("final", ""),
+                "confidence_full": json.dumps(q.get("confidence", {})),
+                "citations":       json.dumps([
+                    {
+                        "id":          c.get("id", ""),
+                        "doc_name":    c.get("doc_name", ""),
+                        "page_start":  c.get("page_start"),
+                        "page_end":    c.get("page_end"),
+                        "quoted_span": c.get("quoted_span", ""),
+                        "node_path":   c.get("node_path", ""),
+                        "s3_uri":      c.get("s3_uri", ""),
+                    }
+                    for c in q.get("citations", [])
+                ]),
+                "flags":           json.dumps(q.get("flags", [])),
+                "tool_calls_used": q.get("tool_calls_used", 0),
+                "error":           q.get("error") or "",
+                "created_at":      created_at,
+            })
+        except Exception as ex:
+            log.error(
+                "[answering][run %s] DynamoDB result write failed for %s: %s",
+                run_id[:8], result_id, ex,
+            )
+
+
+def _async_answering(company: str, pageindex_s3_uri: str) -> str:
+    """
+    Start a background answering run for one company across all MD files.
+    Returns run_id immediately. Same async pattern as _async_pageindex.
+    """
+    run_id   = str(uuid.uuid4())
+    now_iso  = datetime.now(timezone.utc).isoformat()
+    md_files = _list_questionnaire_md_files()
+
+    # answering-runs table schema: PK=session_id (String), SK=run_id (String).
+    # We have no separate session concept — use company slug as session_id so
+    # all runs for a company share a logical session and can be queried together.
+    session_id = _agent_slug(company)
+    try:
+        get_dynamo().Table(ANSWERING_RUNS_TABLE).put_item(Item={
+            "session_id":       session_id,      # PK
+            "run_id":           run_id,          # SK
+            "company":          company,
+            "company_slug":     _agent_slug(company),
+            "pageindex_s3_uri": pageindex_s3_uri,
+            "status":           "running",
+            "started_at":       now_iso,
+            "heartbeat_at":     now_iso,
+            "md_total":         len(md_files),
+            "md_done":          0,
+            "md_files":         json.dumps([f["filename"] for f in md_files]),
+            "error_msg":        "",
+        })
+    except Exception as ex:
+        log.error(
+            "[answering][run %s] Initial DynamoDB write failed: %s",
+            run_id[:8], ex,
+        )
+
+    t = threading.Thread(
+        target=_do_answering,
+        args=(run_id, company, pageindex_s3_uri, md_files),
+        daemon=True,
+    )
+    t.start()
+    return run_id
+
+
+def _do_answering(run_id: str, company: str, pageindex_s3_uri: str, md_files: list):
+    """Outer wrapper — ensures run never stays stuck on 'running'."""
+    session_id = _agent_slug(company)
+    try:
+        _do_answering_inner(run_id, company, pageindex_s3_uri, md_files, session_id)
+    except Exception as e:
+        log.error("[answering][run %s] FATAL: %s", run_id[:8], e)
+        try:
+            _write_answering_run_status(run_id, {
+                "status":      "failed",
+                "finished_at": datetime.now(timezone.utc).isoformat(),
+                "error_msg":   str(e)[:1000],
+            }, session_id=session_id)
+        except Exception as ex2:
+            log.error(
+                "[answering][run %s] Could not write fatal status: %s",
+                run_id[:8], ex2,
+            )
+
+
+def _do_answering_inner(
+    run_id: str,
+    company: str,
+    pageindex_s3_uri: str,
+    md_files: list,
+    session_id: str = None,
+):
+    """
+    Loop through every MD file, invoke the answering runtime, write results.
+    Same pattern as _do_pageindex_inner.
+    """
+    dynamo     = get_dynamo()
+    md_done    = 0
+    any_error  = False
+    session_id = session_id or _agent_slug(company)
+
+    for md in md_files:
+        try:
+            run_result = _invoke_answering_runtime(
+                questionnaire_s3_uri=md["s3_uri"],
+                pageindex_s3_uri=pageindex_s3_uri,
+                company=company,
+                run_id=run_id,
+            )
+            _write_answering_results(run_result, dynamo)
+        except Exception as ex:
+            log.error(
+                "[answering][run %s] Failed for md=%s: %s",
+                run_id[:8], md["filename"], ex,
+            )
+            any_error = True
+
+        md_done += 1
+        _write_answering_run_status(run_id, {
+            "md_done":      md_done,
+            "heartbeat_at": datetime.now(timezone.utc).isoformat(),
+        }, dynamo, session_id=session_id)
+
+    final_status = "failed" if (any_error and md_done == 0) else "complete"
+    _write_answering_run_status(run_id, {
+        "status":      final_status,
+        "finished_at": datetime.now(timezone.utc).isoformat(),
+        "md_done":     md_done,
+    }, dynamo, session_id=session_id)
+
+    log.info(
+        "[answering][run %s] Done. status=%s md_done=%d/%d",
+        run_id[:8], final_status, md_done, len(md_files),
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Answering Agent — routes
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/api/answering-agent/questionnaires", methods=["GET"])
+def list_questionnaires():
+    """List all questionnaire MD files available in S3."""
+    return jsonify(_list_questionnaire_md_files())
+
+
+@app.route("/api/answering-agent/run", methods=["POST"])
+def trigger_answering_run():
+    """
+    Trigger an answering run for one company across all questionnaire MD files.
+
+    Body:
+        { "company": "Paccar" }
+        or
+        { "company": "Paccar", "pageindex_s3_uri": "s3://..." }
+
+    If pageindex_s3_uri is not supplied, it is resolved automatically from
+    the most recent completed pageindex run for this company.
+    """
+    body = request.get_json(force=True, silent=True)
+    if not body:
+        return jsonify({"error": "Invalid JSON body"}), 400
+
+    company          = (body.get("company") or "").strip()
+    pageindex_s3_uri = (body.get("pageindex_s3_uri") or "").strip()
+
+    if not company:
+        return jsonify({"error": "company is required"}), 400
+
+    # Auto-resolve pageindex_s3_uri from the most recent completed
+    # pageindex run if not supplied by the caller.
+    if not pageindex_s3_uri:
+        try:
+            dynamo = get_dynamo()
+            resp   = dynamo.Table(PAGEINDEX_RUNS_TABLE).scan(
+                FilterExpression="#co = :c AND #st = :s",
+                ExpressionAttributeNames={"#co": "company", "#st": "status"},
+                ExpressionAttributeValues={":c": company, ":s": "complete"},
+            )
+            items = resp.get("Items", [])
+            if items:
+                latest           = max(items, key=lambda x: x.get("started_at", ""))
+                pageindex_s3_uri = latest.get("pageindex_s3_uri", "")
+        except Exception as ex:
+            log.error("[answering] pageindex lookup failed for company=%r: %s", company, ex)
+
+    if not pageindex_s3_uri:
+        return jsonify({
+            "error": (
+                f"No completed pageindex run found for company '{company}'. "
+                "Run /api/pageindex first, or supply pageindex_s3_uri explicitly."
+            )
+        }), 400
+
+    run_id = _async_answering(company, pageindex_s3_uri)
+
+    log.info(
+        "[answering][api] triggered run=%s company=%r pageindex=%s",
+        run_id[:8], company, pageindex_s3_uri,
+    )
+    return jsonify({
+        "run_id":           run_id,
+        "status":           "triggered",
+        "company":          company,
+        "pageindex_s3_uri": pageindex_s3_uri,
+    }), 202
+
+
+@app.route("/api/answering-agent/runs/<run_id>", methods=["GET"])
+def get_answering_run(run_id):
+    """
+    Poll the status of an answering run.
+    Table schema is PK=session_id, SK=run_id — we don't have session_id in
+    this route so we scan with a filter. For high-volume use, add a GSI on run_id.
+    """
+    dynamo = get_dynamo()
+    try:
+        resp = dynamo.Table(ANSWERING_RUNS_TABLE).scan(
+            FilterExpression="#rid = :rid",
+            ExpressionAttributeNames={"#rid": "run_id"},
+            ExpressionAttributeValues={":rid": run_id},
+        )
+        items = resp.get("Items", [])
+        while "LastEvaluatedKey" in resp:
+            resp = dynamo.Table(ANSWERING_RUNS_TABLE).scan(
+                FilterExpression="#rid = :rid",
+                ExpressionAttributeNames={"#rid": "run_id"},
+                ExpressionAttributeValues={":rid": run_id},
+                ExclusiveStartKey=resp["LastEvaluatedKey"],
+            )
+            items += resp.get("Items", [])
+    except Exception as ex:
+        log.error("[answering] get_run scan failed run_id=%s: %s", run_id[:8], ex)
+        return jsonify({"error": str(ex)}), 500
+    if not items:
+        return jsonify({"error": "Run not found"}), 404
+    return jsonify(items[0])
+
+
+@app.route("/api/answering-agent/companies", methods=["GET"])
+def list_answering_companies():
+    """
+    List all companies that have answering results stored.
+    Scans answering-runs for distinct companies, returns the most recent
+    run per company.
+    """
+    dynamo = get_dynamo()
+    table  = dynamo.Table(ANSWERING_RUNS_TABLE)
+    result = table.scan()
+    items  = result.get("Items", [])
+    while "LastEvaluatedKey" in result:
+        result = table.scan(ExclusiveStartKey=result["LastEvaluatedKey"])
+        items += result.get("Items", [])
+
+    # Deduplicate by company_slug — keep the most recent run per company.
+    by_slug = {}
+    for item in items:
+        slug = item.get("company_slug", "")
+        if not slug:
+            continue
+        existing = by_slug.get(slug)
+        if existing is None or item.get("started_at", "") > existing.get("started_at", ""):
+            by_slug[slug] = item
+
+    companies = [
+        {
+            "company":      v.get("company", ""),
+            "company_slug": v.get("company_slug", ""),
+            "last_run_id":  v.get("run_id", ""),
+            "last_run_at":  v.get("started_at", ""),
+            "status":       v.get("status", ""),
+            "md_done":      v.get("md_done", 0),
+            "md_total":     v.get("md_total", 0),
+        }
+        for v in sorted(
+            by_slug.values(),
+            key=lambda x: x.get("started_at", ""),
+            reverse=True,
+        )
+    ]
+    return jsonify(companies)
+
+
+@app.route("/api/answering-agent/companies/<slug>", methods=["GET"])
+def get_answering_company(slug):
+    """
+    Return all categories (one per MD file) for a company.
+    answering-results table: PK=run_id, SK=result_id.
+    company_slug is a regular attribute — scan with filter.
+    For high-volume use, add a GSI on company_slug.
+    """
+    dynamo = get_dynamo()
+    table  = dynamo.Table(ANSWERING_RESULTS_TABLE)
+
+    try:
+        resp = table.scan(
+            FilterExpression="#cs = :slug",
+            ExpressionAttributeNames={"#cs": "company_slug"},
+            ExpressionAttributeValues={":slug": slug},
+            ProjectionExpression=(
+                "md_file, category, question_id, confidence, created_at, run_id, company"
+            ),
+        )
+        items = resp.get("Items", [])
+        while "LastEvaluatedKey" in resp:
+            resp = table.scan(
+                FilterExpression="#cs = :slug",
+                ExpressionAttributeNames={"#cs": "company_slug"},
+                ExpressionAttributeValues={":slug": slug},
+                ExclusiveStartKey=resp["LastEvaluatedKey"],
+                ProjectionExpression=(
+                    "md_file, category, question_id, confidence, created_at, run_id, company"
+                ),
+            )
+            items += resp.get("Items", [])
+    except Exception as ex:
+        log.error(
+            "[answering] company scan failed for slug=%s: %s", slug, ex,
+        )
+        return jsonify({"error": str(ex)}), 500
+
+    if not items:
+        return jsonify({"error": "Company not found"}), 404
+
+    # Group by md_file.
+    by_md = {}
+    for item in items:
+        md = item.get("md_file", "")
+        if md not in by_md:
+            by_md[md] = {
+                "md_file":        md,
+                "category":       item.get("category", _category_from_filename(md)),
+                "question_count": 0,
+                "run_id":         item.get("run_id", ""),
+                "last_updated":   item.get("created_at", ""),
+            }
+        by_md[md]["question_count"] += 1
+
+    company_name = items[0].get("company", slug) if items else slug
+
+    return jsonify({
+        "company":      company_name,
+        "company_slug": slug,
+        "categories":   sorted(by_md.values(), key=lambda x: x["category"]),
+    })
+
+
+@app.route("/api/answering-agent/companies/<slug>/<category>", methods=["GET"])
+def get_answering_category(slug, category):
+    """
+    Return all Q&A results for one company + category.
+    answering-results table: PK=run_id, SK=result_id.
+    Scan with filter on company_slug + md_file.
+
+    <category> accepts either:
+    - URL slug form:  code-of-conduct
+    - Exact md_file:  code_of_conduct.md
+    Both are tried.
+    """
+    dynamo = get_dynamo()
+    table  = dynamo.Table(ANSWERING_RESULTS_TABLE)
+
+    # Normalise category param to md_file name.
+    md_file_guess = category.replace("-", "_")
+    if not md_file_guess.endswith(".md"):
+        md_file_guess += ".md"
+
+    try:
+        resp = table.scan(
+            FilterExpression="#cs = :slug AND #mf = :md",
+            ExpressionAttributeNames={"#cs": "company_slug", "#mf": "md_file"},
+            ExpressionAttributeValues={":slug": slug, ":md": md_file_guess},
+        )
+        items = resp.get("Items", [])
+        while "LastEvaluatedKey" in resp:
+            resp = table.scan(
+                FilterExpression="#cs = :slug AND #mf = :md",
+                ExpressionAttributeNames={"#cs": "company_slug", "#mf": "md_file"},
+                ExpressionAttributeValues={":slug": slug, ":md": md_file_guess},
+                ExclusiveStartKey=resp["LastEvaluatedKey"],
+            )
+            items += resp.get("Items", [])
+    except Exception as ex:
+        log.error(
+            "[answering] category scan failed slug=%s category=%s: %s",
+            slug, category, ex,
+        )
+        return jsonify({"error": str(ex)}), 500
+
+    if not items:
+        return jsonify({"error": "Category not found"}), 404
+
+    # Parse JSON-stored fields back to objects.
+    results = []
+    for item in items:
+        try:
+            citations = json.loads(item.get("citations", "[]"))
+        except Exception:
+            citations = []
+        try:
+            confidence_full = json.loads(item.get("confidence_full", "{}"))
+        except Exception:
+            confidence_full = {}
+        try:
+            flags = json.loads(item.get("flags", "[]"))
+        except Exception:
+            flags = []
+        try:
+            answer = json.loads(item.get("answer", "{}"))
+        except Exception:
+            answer = {}
+
+        results.append({
+            "question_id":     item.get("question_id", ""),
+            "question_label":  item.get("question_label", ""),
+            "answer":          answer,
+            "confidence":      item.get("confidence", ""),
+            "confidence_full": confidence_full,
+            "citations":       citations,
+            "flags":           flags,
+            "tool_calls_used": item.get("tool_calls_used", 0),
+            "error":           item.get("error", "") or None,
+        })
+
+    results.sort(key=lambda r: r["question_id"])
+    category_name = items[0].get("category", "") if items else category
+
+    return jsonify({
+        "company_slug": slug,
+        "category":     category_name,
+        "md_file":      md_file_guess,
+        "results":      results,
+        "total":        len(results),
+    })
 
 
 # ─── Health ───────────────────────────────────────────────────────────────────

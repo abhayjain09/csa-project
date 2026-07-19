@@ -2791,8 +2791,32 @@ def _browser_vision_resolve(page, query: str, domain: str | None,
     print(f"[browser][vision] model chose control text: {link_text!r}")
     try:
         loc = page.get_by_text(link_text, exact=False).first
+        # The vision model reads the FULL-PAGE screenshot, so it routinely picks
+        # a control that is real in the DOM but not currently actionable: below
+        # the fold, inside a collapsed accordion, or in a hover-reveal menu
+        # (observed on Edwards IR: "Annual Reports & Proxy Statements" resolved
+        # but 'element is not visible' -> click timed out through every retry).
+        # Try to make it actionable before clicking, then fall back to a forced
+        # click that bypasses Playwright's visibility/stability wait as a last
+        # resort. Each step is best-effort; failure just proceeds to the click.
+        try:
+            loc.scroll_into_view_if_needed(timeout=3000)
+        except Exception:  # noqa: BLE001
+            pass
+        if not _click_target_visible(page, link_text, timeout_ms=2000):
+            try:
+                loc.hover(timeout=2000, force=True)
+                page.wait_for_timeout(300)
+            except Exception:  # noqa: BLE001
+                pass
         with page.expect_download(timeout=BROWSER_CLICK_TIMEOUT_MS) as di:
-            loc.click(timeout=8000)
+            try:
+                loc.click(timeout=8000)
+            except Exception:  # noqa: BLE001
+                # Last resort: bypass the actionability check. Safe here because
+                # a spurious download is still run through the same fail-closed
+                # verify_fn as every other candidate before anything is stored.
+                loc.click(timeout=4000, force=True)
         dl = di.value
         with open(dl.path(), "rb") as fh:
             body = fh.read()

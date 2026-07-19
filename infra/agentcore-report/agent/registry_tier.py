@@ -162,17 +162,39 @@ def _edgar_cik(ticker: str | None, name: str | None) -> str | None:
         c = _EDGAR_TICKER_CACHE.get("name::" + nlow)
         if c:
             return c
-        # loose contains match — accept only if unambiguous
+        # Loose contains match, BIDIRECTIONAL. The query name and SEC's title
+        # often differ only in the corporate-suffix form ("Edwards Lifesciences
+        # Corporation" vs SEC's "Edwards Lifesciences Corp"). A one-directional
+        # `nlow in sec_name` check misses this whenever the query is the LONGER
+        # string, silently returning no CIK and forcing the whole chain down to
+        # the (slow, WAF-prone) browser tier. Checking both directions catches
+        # the suffix-truncation case. Still accept only if unambiguous.
         matches = {v for k, v in _EDGAR_TICKER_CACHE.items()
-                   if k.startswith("name::") and nlow in k[6:]}
+                   if k.startswith("name::") and (nlow in k[6:] or k[6:] in nlow)}
         if len(matches) == 1:
             return next(iter(matches))
+        # Word-set fallback: normalize away corporate suffixes and word order
+        # entirely (via _STOPWORDS + _name_words) and require an EXACT set match.
+        # This resolves "Corp"/"Corporation", "Inc"/"Incorporated", dropped
+        # "Company", etc. It is deliberately exact-set (not subset) so a generic
+        # name like "Edwards" can't collide with a longer registrant — matching
+        # the same fail-closed, no-guessing contract as the rest of this module.
+        qwords = _name_words(name)
+        if qwords:
+            word_matches = {v for k, v in _EDGAR_TICKER_CACHE.items()
+                            if k.startswith("name::") and _name_words(k[6:]) == qwords}
+            if len(word_matches) == 1:
+                cik = next(iter(word_matches))
+                _log(f"[edgar] resolved CIK {cik} for {name!r} via name-word-set "
+                     f"match (suffix/word-order normalized)")
+                return cik
     return None
 
 
 # ─── EDGAR: LLM-hint CIK fallback (opt-in, suggest-then-validate) ──────────────
-_STOPWORDS = {"inc", "the", "and", "corp", "ltd", "plc", "llc", "co",
-              "company", "group", "holdings", "sa", "ag", "nv", "se"}
+_STOPWORDS = {"inc", "incorporated", "the", "and", "corp", "corporation",
+              "ltd", "limited", "plc", "llc", "co", "company", "group",
+              "holdings", "holding", "sa", "ag", "nv", "se"}
 
 
 def _name_words(s: str) -> set[str]:

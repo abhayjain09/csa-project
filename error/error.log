@@ -1,32 +1,28 @@
 [class-parity] OK — 11 document classes aligned across _DOC_CLASS_RULES and report_specs.REPORT_SPECS
 WARNING:  Invalid HTTP request received.
-[llm-querygen] generated 5 variants for 'site:spglobal.com Sustainability Report'
-[llm-querygen] rejected 2 variant(s) that invented or dropped a year
+[identity] Vertex hint for 'S&P Global': ticker='SPGI' cik='0000064040' domain='spglobal.com' sources=0 (untrusted until SEC validation)
+[identity] validated 'S&P Global' -> CIK 0000064040, ticker='SPGI' via vertex_ticker+vertex_cik
+[llm-querygen] generated 8 variants for 'Code of Conduct site:spglobal.com'
 [search] vertex returned nothing (vertex-grounding); falling back to gateway
 [search] vertex returned nothing (vertex-grounding); falling back to gateway
-[find][query] 'site:spglobal.com Sustainability Report' -> 2 hits via=vertex-grounding
-[find][query] 'site:spglobal.com csrd report' -> 3 hits via=vertex-grounding
-[find][query] 'site:spglobal.com esrs report' -> 4 hits via=vertex-grounding
-[find][query] 'site:spglobal.com sustainability statement' -> 3 hits via=vertex-grounding
-[find][query] 'site:spglobal.com esg report' -> 7 hits via=vertex-grounding
-[find][query] 'site:spglobal.com impact report' -> 5 hits via=vertex-grounding
-[find][query] 'site:spglobal.com business responsibility and sustainability reporting' -> 8 hits via=gateway(native-site)
-[find][query] 'investors.spglobal.com Sustainability Report' -> 1 hits via=vertex-grounding
-[find][query] 'site:sec.gov S&P Global Sustainability Report' -> 1 hits via=vertex-grounding
-[find][query] 'site:spglobal.com ESG Report' -> 10 hits via=vertex-grounding
-[find][query] 'sustainability.spglobal.com Sustainability Report' -> 1 hits via=vertex-grounding
-[find][query] 'site:companieshouse.gov.uk S&P Global Sustainability Report' -> 6 hits via=gateway(native-site)
-[find] dropped 1 junk-host candidate(s) (app store / media / social / aggregator subdomains — generic, not company-specific)
-[find] dropped 1 sample/template/specimen candidate(s) (not a real deliverable for any class)
-[find] dropped 2 wrong-class filename candidate(s) (e.g. DEFA14A/additional-proxy, near-neighbor documents) before LLM selection
-[find] domain_mode=soft(on_domain=15,off_domain_kept=29) | HEAD pre-filtering 10 candidates for: site:spglobal.com Sustainability Report
+[find][query] 'Code of Conduct site:spglobal.com' -> 2 hits via=vertex-grounding
+[find][query] 'Code of Conduct ticker "SPGI" site:spglobal.com' -> 9 hits via=gateway(native-site)
+[find][query] 'code of business conduct and ethics site:spglobal.com' -> 4 hits via=vertex-grounding
+[find][query] 'code of conduct for board of employees, directors and senior management site:spglobal.com' -> 3 hits via=vertex-grounding
+[find][query] 'code of ethics site:spglobal.com' -> 4 hits via=vertex-grounding
+[find][query] 'code of fair disclosure and conduct site:spglobal.com' -> 10 hits via=gateway(native-site)
+[find][query] 'employee code of conduct site:spglobal.com' -> 3 hits via=vertex-grounding
+[find][query] 'Code of Conduct filetype:pdf site:spglobal.com' -> 5 hits via=vertex-grounding
+[find][query] 'Code of Fair Disclosure and Conduct filetype:pdf site:spglobal.com' -> 4 hits via=vertex-grounding
+[find][query] 'Code of Business Conduct and Ethics filetype:pdf site:spglobal.com' -> 2 hits via=vertex-grounding
+[find] domain_mode=hard(on_domain_hits_found) | HEAD pre-filtering 10 candidates for: Code of Conduct site:spglobal.com
 [find] 10/10 passed HEAD pre-filter
-[find] sample fetch failed (https://www.spglobal.com/marketintelligence/en/news-insights/blog/new-csrd-sustainability-reporting-covering-more-companies-and-more-disclosures): HTTP Error 403: Forbidden
-[find] sample fetch failed (https://www.spglobal.com/esg/insights/featured/special-editorial/double-materiality-is-gaining-traction-in-corporate-reporting): HTTP Error 403: Forbidden
-[find] sample fetch failed (https://www.spglobal.com/esg/csa/insights/achieving-the-sdgs): HTTP Error 403: Forbidden
-[find] sample fetch failed (https://www.spglobal.com/esg/insights/featured/special-editorial/navigating-csrd-regional-regulations-global-repercussions): HTTP Error 403: Forbidden
-[llm] select decision: selected=https://www.sustainabilityreports.com/s-and-p-global/2025/annual-report topic=True company=True year=True conf=high reason=Exact S&P Global sustainability report URL.
-[edgar] no standard form for sustainability report; skipping (set EDGAR_SUSTAINABILITY_FTS=true to attempt full-text search)
+[find] sample fetch failed (https://www.spglobal.com/content/dam/spglobal/corporate/en/documents/organization/who-we-are/sp-global-vendor-code-of-conduct.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.spglobal.com/content/dam/spglobal/corporate/en/documents/organization/who-we-are/Modern-Slavery-Act-Statement-2019.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.spglobal.com/en/who-we-are/corporate-responsibility/impact-report/responsible-business-conduct/responsible-sourcing-and-supply-chain-management): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.spglobal.com/esg/insights/featured/special-editorial/assessing-the-missing-links-in-sustainable-supply-chain-management?): HTTP Error 403: Forbidden
+[llm] contamination guard: selected https://www.spglobal.com/content/dam/spglobal/corporate/en/documents/organization/who-we-are/sp-global-vendor-code-of-conduct.pdf has no readable content sample (0 chars) but a company match was required — cannot confirm company identity from filename alone; FAILING CLOSED
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=company-unverifiable-empty-sample-failed-closed
 [deep-crawl] fetch failed (https://spglobal.com/): HTTP Error 403: Forbidden
 [browser] redirected: requested=https://spglobal.com/ final=https://www.spglobal.com/ referer_sent='https://spglobal.com/'
 [browser] possible WAF/bot-challenge page (matched 'access denied') at https://www.spglobal.com/
@@ -34,573 +30,484 @@ WARNING:  Invalid HTTP request received.
 [browser] harvested 0 links: 0 doc-file candidates, 0 download-labeled controls (verify_budget=10, click_budget=10) | block_marker=access denied
 [browser][vision] model found no download control
 [browser] https://spglobal.com/: no document resolved through any tier
-[result] NO DOCUMENT FOUND (failed closed): 'site:spglobal.com Sustainability Report'
+[result] NO DOCUMENT FOUND (failed closed): 'Code of Conduct site:spglobal.com'
 {
-    "timestamp": "2026-07-19T13:58:33.252Z",
+    "timestamp": "2026-07-19T20:48:02.447Z",
     "level": "INFO",
-    "message": "Invocation completed successfully (50.271s)",
+    "message": "Invocation completed successfully (47.311s)",
     "logger": "bedrock_agentcore.app",
-    "requestId": "c768962a-d2c0-4a2c-8101-a1903fb8ac06",
-    "sessionId": "10ab7dfe-84fb-4c00-a8af-f216c854c571"
+    "requestId": "3739acd0-0e89-4664-b1f9-451e4bc69647",
+    "sessionId": "397962bc-5cb7-4872-bf9f-fb208f468f3f"
 }
 [class-parity] OK — 11 document classes aligned across _DOC_CLASS_RULES and report_specs.REPORT_SPECS
 WARNING:  Invalid HTTP request received.
-[year] latest completed fiscal year: 'site:www.edwards.com Annual Report' -> 'Annual Report 2025 site:www.edwards.com'
-[llm-querygen] generated 6 variants for 'Annual Report 2025 site:www.edwards.com'
-[llm-querygen] rejected 1 variant(s) that invented or dropped a year
+[identity] Vertex hint for 'S&P Global': ticker='SPGI' cik='0000064040' domain='spglobal.com' sources=0 (untrusted until SEC validation)
+[identity] validated 'S&P Global' -> CIK 0000064040, ticker='SPGI' via vertex_ticker+vertex_cik
+[llm-querygen] generated 8 variants for 'Supplier Code of Conduct site:spglobal.com'
 [search] vertex returned nothing (vertex-grounding); falling back to gateway
-[find][query] 'Annual Report 2025 site:www.edwards.com' -> 5 hits via=vertex-grounding
-[find][query] 'annual report and accounts 2025 site:www.edwards.com' -> 10 hits via=gateway(stripped-site)
-[find][query] 'universal registration document 2025 site:www.edwards.com' -> 5 hits via=vertex-grounding
-[find][query] 'integrated annual report 2025 site:www.edwards.com' -> 5 hits via=vertex-grounding
-[find][query] 'Edwards Lifesciences Corporation Annual Report 2025 filetype:pdf' -> 2 hits via=vertex-grounding
-[find][query] 'site:investors.edwards.com Annual Report 2025' -> 4 hits via=vertex-grounding
-[find][query] 'Edwards Lifesciences Corporation Annual Report and Accounts 2025' -> 3 hits via=vertex-grounding
-[find][query] 'site:sustainability.edwards.com Annual Report 2025' -> 4 hits via=vertex-grounding
-[find][query] 'Edwards Lifesciences Corporation Integrated Annual Report 2025 filetype:pdf' -> 2 hits via=vertex-grounding
-[find][query] 'site:www.edwards.com Universal Registration Document 2025' -> 5 hits via=vertex-grounding
-[find] domain_mode=soft(on_domain=11,off_domain_kept=16) | HEAD pre-filtering 10 candidates for: Annual Report 2025 site:www.edwards.com
-[find] 10/10 passed HEAD pre-filter
-[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No matching annual report found for Edwards Lifesciences 2025.
-[edgar] could not resolve CIK for 'Edwards Lifesciences Corporation'/''; skipping
-[ch] no API key configured (CH_SECRET_NAME); skipping
-[sitemap] edwards.com: 2083 urls -> 744 candidates -> top 40
-[sitemap] inspected 12 landing page(s), discovered 0 linked document(s); 0 total document candidate(s)
-[browser] hover-reveal: harvested grew to 68 links after menu hover
-[browser] harvested 68 links: 0 doc-file candidates, 0 download-labeled controls (verify_budget=10, click_budget=10)
-[browser][nav] IR-prioritized frontier: 4/59 nav links (IR-nav first, query terms ['annual', 'report', '2025'] secondary)
-[browser][nav] https://www.edwards.com/legal/privacy-policy: 1 doc candidates (depth=1, pages=1)
-[llm] select decision: selected=None topic=False company=True year=False conf=high reason=No 2025 Annual Report found
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/1e1fabce-7dfe-4293-8ac0-4c44e1c65396/Privacy-Policy-jan-2026.pdf): No 2025 Annual Report found
-[browser][nav] https://www.edwards.com/compliance-toolkit-for-distributors: 0 doc candidates (depth=1, pages=2)
-[browser][nav] https://www.edwards.com/legal/consumer-health-data-privacy-policy: 0 doc candidates (depth=1, pages=3)
-[browser][nav] https://www.edwards.com/impact-report: 20 doc candidates (depth=1, pages=4)
-[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Impact Report not Annual Report
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/26952ac8-e856-4225-8bc7-fc3c6015bd90/Edwards%202025%20Corporate%20Impact%20Report-FINAL%204.7.26.pdf): Impact Report not Annual Report
-[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an Annual Report, just a Content Index.
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/f4f0135c-8fbe-4892-b1f9-b57723effa34/2025%20Corporate%20Impact%20Report%20Content%20Index.pdf): Not an Annual Report, just a Content Index.
-[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Not a full annual report, just a summary.
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/19427c8f-68f5-4039-be8e-616900f2b9a2/Edwards%202025%20CIR%20Summary.pdf): Not a full annual report, just a summary.
-[llm] select decision: selected=None topic=False company=False year=True conf=high reason=ESG metrics, not annual report.
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/b195baf6-0d7d-455b-9933-2d6bdf2535c9/2025%20ESG%20Metrics_FINAL_07.08.26_Updates.pdf): ESG metrics, not annual report.
-[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 annual report found for Edwards Lifesciences.
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/195a670c-12af-4028-9f09-bdd1f458209f/2021-EHS-Report-Final.pdf): No 2025 annual report found for Edwards Lifesciences.
-[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 annual report found for Edwards Lifesciences.
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/a35863cd-1d21-4eac-aea8-1e0e8489e173/2020%20EHS%20Report.pdf): No 2025 annual report found for Edwards Lifesciences.
-[llm] select decision: selected=None topic=False company=False year=False conf=high reason=Wrong year, not an annual report
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/6be34baa-5c04-4fa8-9ecd-62a2992407c5/2019%20EHS%20Report.pdf): Wrong year, not an annual report
-[llm] select decision: selected=None topic=False company=False year=False conf=high reason=Wrong year and company
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/1c2cbcf8-7724-4d00-b017-48d74f196899/2019-EHS-Annual-Report-2018-performance.pdf): Wrong year and company
-[llm] select decision: selected=None topic=False company=False year=False conf=high reason=Year 2025 not present, wrong year document.
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/0fd48367-4354-427c-9099-cfa407e16275/2017_Edwards_EHS_Annual_Report.pdf): Year 2025 not present, wrong year document.
-[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025 report
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/146b1215-18ff-4744-8bda-850367ee4b24/2024-corporate-impact-report.pdf): Wrong year, not 2025 report
-[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025 Annual Report
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/ad2130a0-a145-49b2-85f9-24e0ca2534ee/EDW_SusReport_2023_R6_8.19.24.pdf): Wrong year, not 2025 Annual Report
-[llm] select decision: selected=None topic=False company=False year=False conf=high reason=Wrong year, not an annual report
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/56160902-a501-4118-9d85-003d369afcfe/EW%202023%20Corporate%20Impact%20Report%20ESG%20Metrics%20-%20for%20upload.pdf): Wrong year, not an annual report
-[llm] select decision: selected=None topic=False company=False year=False conf=high reason=Wrong year and class
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/63c43e58-f72c-400d-99ee-d835c1af542c/EW_2022_Sust_Report_Final.pdf): Wrong year and class
-[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/4c48dcaa-ed1b-4967-971f-0ff7997b33e9/EDW_2021_SusReport%20pdf_FINAL.pdf): Wrong year, not 2025
-[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025 Annual Report
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/8c15a2bf-63d3-48c9-91ea-5d6e4307451f/2024-esg-metrics.pdf): Wrong year, not 2025 Annual Report
-[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not an annual report
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/abbd18ba-eb7a-4679-98bf-43985fcddf1f/Edwards_Lifesciences_Corp_-_CDP_Water_Security_Questionnaire_2022_-_Final.pdf): Wrong year, not an annual report
-[llm] select decision: selected=None topic=False company=False year=False conf=high reason=Wrong year, not Edwards Lifesciences
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/919ebce0-c312-4303-9d74-ba3bfcf9327d/2021%20Water%20Security%20Responses.pdf): Wrong year, not Edwards Lifesciences
-[llm] select decision: selected=None topic=False company=False year=False conf=high reason=Wrong year and not an annual report
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/d0ffba09-78d6-4b9c-8151-e5cfa9d468a4/EDW_2020_SustainRep_FINAL_Web.pdf): Wrong year and not an annual report
-[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not 2025 Annual Report
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/03907bf6-406f-4f42-a6b1-ae4913f2226c/Edwards%20Lifesciences%202023%20GHG%20Verification%20Statement_final.pdf): Wrong year, not 2025 Annual Report
-[verify] STRICT reject (near-neighbor filename, no LLM): https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/247a3499-6990-441f-baed-2b513dfcba3e/2025%20GHG%20Assurance%20Statement.pdf
-[browser][nav] https://www.edwards.com/about-us/corporate-responsibility: 14 doc candidates (depth=2, pages=5)
-[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an annual report; third-party code of conduct
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/099b84b0-ba15-4ba0-97f6-9f0009288719/Third%20Party%20Code%20of%20Conduct%20-%20Feb%202025.pdf): Not an annual report; third-party code of conduct
-[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 Annual Report found for Edwards Lifesciences
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/d2644569-74ac-477c-abb3-064eb7526b04/English%20Titanium%20Book.pdf): No 2025 Annual Report found for Edwards Lifesciences
-[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 annual report for Edwards Lifesciences
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/6d455498-4ad7-41ee-8123-0790031224c6/Vietnamese%20Titanium%20Book.pdf): No 2025 annual report for Edwards Lifesciences
-[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 Annual Report found
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/419633b8-ed99-46e5-9f42-3e3f0e1c0c24/63177_2.pdf): No 2025 Annual Report found
-[llm] select decision: selected=None topic=False company=False year=False conf=high reason=Not an annual report, lacks year 2025.
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/91ad64dd-5dc7-4e58-ae03-992a547a9dd3/codiceetico_eng.pdf): Not an annual report, lacks year 2025.
-[llm] select decision: selected=None topic=False company=False year=False conf=high reason=Wrong company and no 2025 year
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/a83d3c07-9e7d-4b85-82b4-ac741b35eeae/Chinese%20Titanium%20Book.pdf): Wrong company and no 2025 year
-[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 Annual Report found for Edwards Lifesciences.
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/a07a1a24-e12a-4617-8220-d72645e7416d/French%20Titanium%20Book.pdf): No 2025 Annual Report found for Edwards Lifesciences.
-[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 Annual Report present
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/7cbd85e9-2ecd-470b-8404-b06d27db0c89/Japanese%20Titanium%20Book.pdf): No 2025 Annual Report present
-[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 Annual Report found for Edwards Lifesciences.
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/83fe6d0e-ac76-494e-814b-f0dae4cab62e/Portuguese%20Titanium%20Book.pdf): No 2025 Annual Report found for Edwards Lifesciences.
-[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 annual report found for Edwards Lifesciences
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/5b4591d7-0252-4d55-a686-821131710695/Spanish%20Titanium%20Book.pdf): No 2025 annual report found for Edwards Lifesciences
-[llm] select decision: selected=None topic=False company=False year=False conf=high reason=Not Edwards Lifesciences, no 2025 year
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/f3617432-efa7-4c2f-b1a1-4346d16a9393/Korean%20Titanium%20Book.pdf): Not Edwards Lifesciences, no 2025 year
-[llm] select decision: selected=None topic=False company=False year=False conf=high reason=Not an annual report, wrong content type.
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/0f47de5e-2095-4d06-8c3d-dc082b4cffb7/Medical-Device-Code-of-Ethical-V6%20SAMED.pdf): Not an annual report, wrong content type.
-[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Not an annual report, policy document mismatch.
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/dedfeb79-d21e-43e4-9d7f-f38d8686c0bd/edwards-lifesciences-unilateral-pro-innovation-policy-2026B.pdf): Not an annual report, policy document mismatch.
-[browser][nav] https://ir.edwards.com/overview/default.aspx: 3 doc candidates (depth=2, pages=6)
-[verify] STRICT reject (near-neighbor filename, no LLM): https://s27.q4cdn.com/788244549/files/doc_financials/2025/ar/2026-ASM-Transcript.pdf
-[verify] STRICT reject (near-neighbor filename, no LLM): https://s27.q4cdn.com/788244549/files/doc_financials/2026/q1/EW-USQ_Transcript_2026-04-23.pdf
-[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 Annual Report found
-[browser] candidate REJECTED by class check (https://s27.q4cdn.com/788244549/files/doc_financials/2026/q1/82aca192-08e6-4c1f-bd05-e2fe94e1fadd.pdf): No 2025 Annual Report found
-[browser][vision] model chose control text: 'Annual Reports'
-[browser][vision] click failed: Locator.click: Timeout 8000ms exceeded.
-Call log:
-  - waiting for get_by_text("Annual Reports").first
-    - locator resolved to <span class="text">Annual Reports & Proxy Statements</span>
-  - attempting click action
-    2 × waiting for element to be visible, enabled and stable
-      - element is not visible
-    - retrying click action
-    - waiting 20ms
-    2 × waiting for element to be visible, enabled and stable
-      - element is not visible
-    - retrying click action
-      - waiting 100ms
-    15 × waiting for element to be visible, enabled and stable
-       - element is not visible
-     - retrying click action
-       - waiting 500ms
-[browser] https://www.edwards.com/: no document resolved through any tier
-[deep-crawl] https://www.edwards.com/ (depth=0, page=1): 0 doc candidates
-[deep-crawl] https://www.edwards.com/impact-report (depth=1, page=2): 0 doc candidates
-[result] NO DOCUMENT FOUND (failed closed): 'Annual Report 2025 site:www.edwards.com'
-{
-    "timestamp": "2026-07-19T16:44:56.002Z",
-    "level": "INFO",
-    "message": "Invocation completed successfully (173.453s)",
-    "logger": "bedrock_agentcore.app",
-    "requestId": "bc81d5bc-0b48-443c-bf4d-0255302e02e9",
-    "sessionId": "bedb8b2d-c1ac-4bd5-905f-5bb0ec9bb14f"
-}
-
-
-[class-parity] OK — 11 document classes aligned across _DOC_CLASS_RULES and report_specs.REPORT_SPECS
-WARNING:  Invalid HTTP request received.
-[llm-querygen] generated 6 variants for 'site:www.edwards.com Environment Policy'
-[llm-querygen] rejected 2 variant(s) that invented or dropped a year
-[find][query] 'site:www.edwards.com Environment Policy' -> 10 hits via=vertex-grounding
-[find][query] 'site:www.edwards.com Environment Policy environmental policy' -> 4 hits via=vertex-grounding
-[find][query] 'site:www.edwards.com Environment Policy environmental management policy' -> 8 hits via=vertex-grounding
-[find][query] 'site:www.edwards.com Environment Policy sustainability policy' -> 8 hits via=vertex-grounding
-[find][query] 'site:www.edwards.com Environment Policy climate change policy' -> 7 hits via=vertex-grounding
-[find][query] 'site:www.edwards.com Environment Policy climate action policy' -> 9 hits via=vertex-grounding
-[find][query] 'site:www.edwards.com environmental policy' -> 7 hits via=vertex-grounding
-[find][query] 'site:investors.edwards.com environmental policy' -> 3 hits via=vertex-grounding
-[find][query] 'site:sec.gov Edwards Lifesciences Corporation environmental policy' -> 5 hits via=vertex-grounding
-[find][query] 'site:sustainability.edwards.com environmental management policy' -> 4 hits via=vertex-grounding
-[find][query] 'site:www.edwards.com sustainability policy' -> 10 hits via=vertex-grounding
-[find][query] 'site:www.edwards.com climate change policy' -> 8 hits via=vertex-grounding
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[find][query] 'Supplier Code of Conduct site:spglobal.com' -> 10 hits via=gateway(native-site)
+[find][query] 'Supplier Code of Conduct ticker "SPGI" site:spglobal.com' -> 2 hits via=vertex-grounding
+[find][query] 'vendor code of conduct site:spglobal.com' -> 10 hits via=gateway(native-site)
+[find][query] 'third-party code of conduct site:spglobal.com' -> 8 hits via=gateway(native-site)
+[find][query] 'business partner code of conduct site:spglobal.com' -> 1 hits via=vertex-grounding
+[find][query] 'supply chain code of conduct site:spglobal.com' -> 10 hits via=gateway(native-site)
+[find][query] 'sustainable supply chain policy site:spglobal.com' -> 1 hits via=vertex-grounding
+[find][query] 'responsible sourcing policy site:spglobal.com' -> 9 hits via=gateway(native-site)
+[find][query] 'supplier charter site:spglobal.com' -> 10 hits via=gateway(native-site)
+[find][query] 'procurement code of conduct site:spglobal.com' -> 10 hits via=gateway(native-site)
+[find][query] 'supplier esg policy site:spglobal.com' -> 1 hits via=vertex-grounding
+[find][query] 'Supplier Code of Conduct filetype:pdf site:spglobal.com' -> 10 hits via=gateway(native-site)
+[find][query] 'procurement code of conduct filetype:pdf site:spglobal.com' -> 10 hits via=gateway(native-site)
 [find] dropped 1 junk-host candidate(s) (app store / media / social / aggregator subdomains — generic, not company-specific)
-[find] domain_mode=soft(on_domain=9,off_domain_kept=32) | HEAD pre-filtering 10 candidates for: site:www.edwards.com Environment Policy
+[find] dropped 3 wrong-class filename candidate(s) (e.g. DEFA14A/additional-proxy, near-neighbor documents) before LLM selection
+[find] domain_mode=hard(on_domain_hits_found) | HEAD pre-filtering 10 candidates for: Supplier Code of Conduct site:spglobal.com
 [find] 10/10 passed HEAD pre-filter
-[llm] select decision: selected=None topic=False company=False year=True conf=high reason=No exact environmental policy document found
-[sitemap] edwards.com: 2083 urls -> 744 candidates -> top 40
-[sitemap] inspected 11 landing page(s), discovered 0 linked document(s); 0 total document candidate(s)
-[deep-crawl] https://www.edwards.com/ (depth=0, page=1): 0 doc candidates
-[deep-crawl] https://www.edwards.com/legal/privacy-policy (depth=1, page=2): 0 doc candidates
-[deep-crawl] https://www.edwards.com/legal/consumer-health-data-privacy-policy (depth=1, page=3): 0 doc candidates
-[deep-crawl] https://www.edwards.com/legal/consumer-health-data-privacy-policy#changes (depth=2, page=4): 0 doc candidates
-[deep-crawl] https://www.edwards.com/legal/consumer-health-data-privacy-policy#nevada (depth=2, page=5): 0 doc candidates
-[browser] hover-reveal: harvested grew to 68 links after menu hover
-[browser] harvested 68 links: 0 doc-file candidates, 0 download-labeled controls (verify_budget=10, click_budget=10)
-[browser][nav] IR-prioritized frontier: 3/59 nav links (IR-nav first, query terms ['environment'] secondary)
-[browser][nav] https://www.edwards.com/legal/privacy-policy: 1 doc candidates (depth=1, pages=1)
-[llm] select decision: selected=None topic=False company=False year=True conf=high reason=No environmental policy document found
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/1e1fabce-7dfe-4293-8ac0-4c44e1c65396/Privacy-Policy-jan-2026.pdf): No environmental policy document found
-[browser][nav] https://www.edwards.com/compliance-toolkit-for-distributors: 0 doc candidates (depth=1, pages=2)
-[browser][nav] https://www.edwards.com/legal/consumer-health-data-privacy-policy: 0 doc candidates (depth=1, pages=3)
-[browser][nav] https://www.edwards.com/about-us/corporate-responsibility: 14 doc candidates (depth=2, pages=4)
-[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an environmental policy document
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/dedfeb79-d21e-43e4-9d7f-f38d8686c0bd/edwards-lifesciences-unilateral-pro-innovation-policy-2026B.pdf): Not an environmental policy document
-[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Document is code of ethics, not environment policy.
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/0f47de5e-2095-4d06-8c3d-dc082b4cffb7/Medical-Device-Code-of-Ethical-V6%20SAMED.pdf): Document is code of ethics, not environment policy.
-[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Document is third party code, not environment policy
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/099b84b0-ba15-4ba0-97f6-9f0009288719/Third%20Party%20Code%20of%20Conduct%20-%20Feb%202025.pdf): Document is third party code, not environment policy
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=PDF not related to Edwards Lifesciences policy
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/d2644569-74ac-477c-abb3-064eb7526b04/English%20Titanium%20Book.pdf): PDF not related to Edwards Lifesciences policy
-[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not Edwards Lifesciences, irrelevant content
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/6d455498-4ad7-41ee-8123-0790031224c6/Vietnamese%20Titanium%20Book.pdf): Not Edwards Lifesciences, irrelevant content
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No explicit environmental policy document found.
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/419633b8-ed99-46e5-9f42-3e3f0e1c0c24/63177_2.pdf): No explicit environmental policy document found.
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is a code of ethics, not an environmental policy.
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/91ad64dd-5dc7-4e58-ae03-992a547a9dd3/codiceetico_eng.pdf): Document is a code of ethics, not an environmental policy.
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document unrelated to Edwards Lifesciences policies.
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/a83d3c07-9e7d-4b85-82b4-ac741b35eeae/Chinese%20Titanium%20Book.pdf): Document unrelated to Edwards Lifesciences policies.
-[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Document unrelated to Edwards Lifesciences Corporation
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/a07a1a24-e12a-4617-8220-d72645e7416d/French%20Titanium%20Book.pdf): Document unrelated to Edwards Lifesciences Corporation
-[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Document unrelated to Edwards Lifesciences Corporation
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/7cbd85e9-2ecd-470b-8404-b06d27db0c89/Japanese%20Titanium%20Book.pdf): Document unrelated to Edwards Lifesciences Corporation
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document unrelated to Edwards Lifesciences Corporation
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/83fe6d0e-ac76-494e-814b-f0dae4cab62e/Portuguese%20Titanium%20Book.pdf): Document unrelated to Edwards Lifesciences Corporation
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=PDF not an environmental policy
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/5b4591d7-0252-4d55-a686-821131710695/Spanish%20Titanium%20Book.pdf): PDF not an environmental policy
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document unrelated to Edwards Lifesciences
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/f3617432-efa7-4c2f-b1a1-4346d16a9393/Korean%20Titanium%20Book.pdf): Document unrelated to Edwards Lifesciences
-[browser][nav] https://ir.edwards.com/overview/default.aspx: 3 doc candidates (depth=2, pages=5)
-[verify] STRICT reject (near-neighbor filename, no LLM): https://s27.q4cdn.com/788244549/files/doc_financials/2026/q1/EW-USQ_Transcript_2026-04-23.pdf
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document not Edwards Lifesciences's policy
-[browser] candidate REJECTED by class check (https://s27.q4cdn.com/788244549/files/doc_financials/2026/q1/82aca192-08e6-4c1f-bd05-e2fe94e1fadd.pdf): Document not Edwards Lifesciences's policy
-[verify] STRICT reject (near-neighbor filename, no LLM): https://s27.q4cdn.com/788244549/files/doc_financials/2025/ar/2026-ASM-Transcript.pdf
+[find] sample fetch failed (https://www.spglobal.com/content/dam/spglobal/corporate/en/documents/organization/who-we-are/sp-global-vendor-code-of-conduct.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.spglobal.com/sustainable1/en/csa/insights/elevating-supplier-esg-maturity-managing-supply-chain-risks-through-assessment-development): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.spglobal.com/en/who-we-are/corporate-responsibility/impact-report/responsible-business-conduct/responsible-sourcing-and-supply-chain-management): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.spglobal.com/en/who-we-are/corporate-responsibility/reports-commitments/global-human-rights-policy-2022-.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.spglobal.com/sustainable1/en/csa/insights/supplier-codes-of-conduct-show-notable-gap-in-environmental-requirements): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.spglobal.com/en/who-we-are/corporate-responsibility/impact-report/responsible-business1/responsible-sourcing-and-supply-chain-management): HTTP Error 403: Forbidden
+[llm] contamination guard: selected https://www.spglobal.com/content/dam/spglobal/corporate/en/documents/organization/who-we-are/sp-global-vendor-code-of-conduct.pdf has no readable content sample (0 chars) but a company match was required — cannot confirm company identity from filename alone; FAILING CLOSED
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=company-unverifiable-empty-sample-failed-closed
+[deep-crawl] fetch failed (https://spglobal.com/): HTTP Error 403: Forbidden
+[browser] redirected: requested=https://spglobal.com/ final=https://www.spglobal.com/ referer_sent='https://spglobal.com/'
+[browser] possible WAF/bot-challenge page (matched 'access denied') at https://www.spglobal.com/
+[browser] hover-reveal: harvested grew to 0 links after menu hover
+[browser] harvested 0 links: 0 doc-file candidates, 0 download-labeled controls (verify_budget=10, click_budget=10) | block_marker=access denied
 [browser][vision] model found no download control
-[browser] https://www.edwards.com/: no document resolved through any tier
-[result] NO DOCUMENT FOUND (failed closed): 'site:www.edwards.com Environment Policy'
+[browser] https://spglobal.com/: no document resolved through any tier
+[result] NO DOCUMENT FOUND (failed closed): 'Supplier Code of Conduct site:spglobal.com'
 {
-    "timestamp": "2026-07-19T16:45:21.813Z",
+    "timestamp": "2026-07-19T20:49:11.418Z",
     "level": "INFO",
-    "message": "Invocation completed successfully (174.949s)",
+    "message": "Invocation completed successfully (53.432s)",
     "logger": "bedrock_agentcore.app",
-    "requestId": "1216c78e-7fdc-4e4f-9dc3-3a63ddf13ca7",
-    "sessionId": "cd246d81-4d9a-4999-b43d-b12af4b72ab8"
+    "requestId": "9305ca1e-1377-4074-b7b8-55ba0927c7fa",
+    "sessionId": "34dc6f68-3643-4651-a628-d6e10684f3b0"
+}
+No more records within selected time range 
+Auto retry paused.
+ 
+Resume
+ [class-parity] OK — 11 document classes aligned across _DOC_CLASS_RULES and report_specs.REPORT_SPECS
+WARNING:  Invalid HTTP request received.
+[identity] Vertex hint for 'S&P Global': ticker='SPGI' cik='0000064040' domain='spglobal.com' sources=0 (untrusted until SEC validation)
+[identity] validated 'S&P Global' -> CIK 0000064040, ticker='SPGI' via vertex_ticker+vertex_cik
+[llm-querygen] generated 8 variants for 'Discrimination and Harassment Policy site:spglobal.com'
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[find][query] 'Discrimination and Harassment Policy site:spglobal.com' -> 10 hits via=gateway(native-site)
+[find][query] 'Discrimination and Harassment Policy ticker "SPGI" site:spglobal.com' -> 2 hits via=vertex-grounding
+[find][query] 'Discrimination and Harassment Policy filetype:pdf site:spglobal.com' -> 3 hits via=vertex-grounding
+[find][query] 'Policy Discrimination Harassment site:spglobal.com' -> 10 hits via=gateway(native-site)
+[find][query] 'Harassment and Discrimination Policy site:spglobal.com' -> 1 hits via=vertex-grounding
+[find][query] 'Employee Conduct Policy site:spglobal.com' -> 8 hits via=vertex-grounding
+[find][query] 'Code of Conduct site:spglobal.com' -> 3 hits via=vertex-grounding
+[find] domain_mode=hard(on_domain_hits_found) | HEAD pre-filtering 10 candidates for: Discrimination and Harassment Policy site:spglobal.com
+[find] 10/10 passed HEAD pre-filter
+[find] sample fetch failed (https://www.spglobal.com/en/who-we-are/corporate-responsibility/reports-commitments/global-human-rights-policy-2022-.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.spglobal.com/market-intelligence/en/news-insights/articles/2023/1/biden-administration-ai-policy-efforts-to-be-complex-balancing-act-in-2023-73477426): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.spglobal.com/sustainable1/en/insights/creating-visibility-and-positive-recognition-lgbtq-inclusion-in-the-workplace): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.spglobal.com/marketintelligence/en/news-insights/latest-news-headlines/weighing-risks-of-using-nondisclosure-agreements-in-sexual-misconduct-cases-57052975): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.spglobal.com/en/research-insights/special-reports/social-justice-as-a-social-factor?): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.spglobal.com/en/research-insights/featured/markets-in-motion/social-justice-as-a-social-factor): HTTP Error 403: Forbidden
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=No exact Discrimination and Harassment Policy document found.
+[deep-crawl] fetch failed (https://spglobal.com/): HTTP Error 403: Forbidden
+[browser] redirected: requested=https://spglobal.com/ final=https://www.spglobal.com/ referer_sent='https://spglobal.com/'
+[browser] possible WAF/bot-challenge page (matched 'access denied') at https://www.spglobal.com/
+[browser] hover-reveal: harvested grew to 0 links after menu hover
+[browser] harvested 0 links: 0 doc-file candidates, 0 download-labeled controls (verify_budget=10, click_budget=10) | block_marker=access denied
+[browser][vision] model found no download control
+[browser] https://spglobal.com/: no document resolved through any tier
+[result] NO DOCUMENT FOUND (failed closed): 'Discrimination and Harassment Policy site:spglobal.com'
+{
+    "timestamp": "2026-07-19T20:48:39.586Z",
+    "level": "INFO",
+    "message": "Invocation completed successfully (35.442s)",
+    "logger": "bedrock_agentcore.app",
+    "requestId": "92eb6e70-21a3-4f9f-8527-d027698d353c",
+    "sessionId": "ac2fbfe3-aea3-40dd-9f01-16d3bb175fbc"
 }
 
 [class-parity] OK — 11 document classes aligned across _DOC_CLASS_RULES and report_specs.REPORT_SPECS
 WARNING:  Invalid HTTP request received.
-[llm-querygen] generated 6 variants for 'site:www.edwards.com Environment Health and Safety Policy'
-[llm-querygen] rejected 2 variant(s) that invented or dropped a year
+[identity] Vertex hint for 'Cisco Systems, Inc.': ticker='CSCO' cik='0000858877' domain='cisco.com' sources=0 (untrusted until SEC validation)
+[identity] validated 'Cisco Systems, Inc.' -> CIK 0000858877, ticker='CSCO' via vertex_ticker+vertex_cik
+[llm-querygen] generated 8 variants for 'Conflicts of Interest Policy site:cisco.com'
 [search] vertex returned nothing (vertex-grounding); falling back to gateway
-[search] vertex returned nothing (vertex-grounding); falling back to gateway
-[search] vertex returned nothing (vertex-grounding); falling back to gateway
-[find][query] 'site:www.edwards.com Environment Health and Safety Policy' -> 1 hits via=gateway(native-site)
-[find][query] 'site:www.edwards.com Environment occupational health & safety policy' -> 7 hits via=vertex-grounding
-[find][query] 'site:www.edwards.com Environment occupational health and safety policy' -> 1 hits via=vertex-grounding
-[find][query] 'site:www.edwards.com Environment ohs policy' -> 5 hits via=vertex-grounding
-[find][query] 'site:www.edwards.com Environment workplace health and safety policy' -> 10 hits via=vertex-grounding
-[find][query] 'site:www.edwards.com Environment health, safety and wellbeing policy' -> 3 hits via=vertex-grounding
-[find][query] 'site:www.edwards.com Environment hsse policy' -> 5 hits via=vertex-grounding
-[find][query] 'site:www.edwards.com Environment safety policy statement' -> 1 hits via=gateway(native-site)
-[find][query] 'site:www.edwards.com Environment she policy' -> 6 hits via=vertex-grounding
-[find][query] 'site:www.edwards.com Environment qhse policy' -> 4 hits via=vertex-grounding
-[find][query] 'site:www.edwards.com Environment Health and Safety Policy environmental policy' -> 5 hits via=vertex-grounding
-[find][query] 'site:www.edwards.com Environment Health and Safety Policy environmental management policy' -> 3 hits via=vertex-grounding
-[find][query] 'site:www.edwards.com Environment Health and Safety Policy sustainability policy' -> 1 hits via=gateway(native-site)
-[find][query] 'site:www.edwards.com Environment Health and Safety Policy climate change policy' -> 7 hits via=vertex-grounding
-[find][query] 'site:www.edwards.com Environment Health and Safety Policy climate action policy' -> 7 hits via=vertex-grounding
-[find][query] 'site:www.edwards.com Environmental Health and Safety Policy' -> 1 hits via=vertex-grounding
-[find][query] 'site:sustainability.edwards.com Environmental Health and Safety Policy' -> 2 hits via=vertex-grounding
-[find][query] 'site:sec.gov Edwards Lifesciences Corporation environmental policy' -> 5 hits via=vertex-grounding
-[find][query] 'site:www.edwards.com health and safety policy' -> 6 hits via=vertex-grounding
-[find][query] 'site:investors.edwards.com Environmental Health and Safety Policy' -> 4 hits via=vertex-grounding
-[find][query] 'site:www.edwards.com hsse policy' -> 6 hits via=vertex-grounding
+[find][query] 'Conflicts of Interest Policy site:cisco.com' -> 4 hits via=vertex-grounding
+[find][query] 'Conflicts of Interest Policy ticker "CSCO" site:cisco.com' -> 2 hits via=vertex-grounding
+[find][query] 'Conflicts of Interest Policy filetype:pdf site:cisco.com' -> 3 hits via=vertex-grounding
+[find][query] 'investors.cisco.com conflicts of interest policy site:cisco.com' -> 2 hits via=vertex-grounding
+[find][query] 'governance.cisco.com conflicts of interest policy site:cisco.com' -> 1 hits via=vertex-grounding
+[find][query] 'cisco.com governance conflicts of interest policy site:cisco.com' -> 3 hits via=vertex-grounding
+[find][query] 'cisco.com policies conflicts of interest site:cisco.com' -> 10 hits via=gateway(native-site)
+[find][query] 'sustainability.cisco.com conflicts of interest policy site:cisco.com' -> 1 hits via=vertex-grounding
+[find][query] 'cisco.com pdf conflicts of interest policy site:cisco.com' -> 2 hits via=vertex-grounding
+[find][query] 'static.cisco.com conflicts of interest policy site:cisco.com' -> 1 hits via=vertex-grounding
 [find] dropped 1 junk-host candidate(s) (app store / media / social / aggregator subdomains — generic, not company-specific)
-[find] domain_mode=soft(on_domain=6,off_domain_kept=29) | HEAD pre-filtering 10 candidates for: site:www.edwards.com Environment Health and Safety Policy
+[find] domain_mode=hard(on_domain_hits_found) | HEAD pre-filtering 10 candidates for: Conflicts of Interest Policy site:cisco.com
 [find] 10/10 passed HEAD pre-filter
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No exact Edwards OHS policy found
-[sitemap] edwards.com: 2083 urls -> 744 candidates -> top 40
-[sitemap] inspected 12 landing page(s), discovered 0 linked document(s); 0 total document candidate(s)
-[deep-crawl] https://www.edwards.com/ (depth=0, page=1): 0 doc candidates
-[deep-crawl] https://www.edwards.com/healthcare-professionals/products-services/support/mri-safety (depth=1, page=2): 0 doc candidates
-[deep-crawl] https://www.edwards.com/legal/consumer-health-data-privacy-policy (depth=1, page=3): 0 doc candidates
-[deep-crawl] https://www.edwards.com/healthcare-professionals/products-services/transcatheter-heart (depth=1, page=4): 0 doc candidates
-[deep-crawl] https://www.edwards.com/healthcare-professionals/products-services/transcatheter-mitral-tricuspid-technologies (depth=2, page=5): 0 doc candidates
-[deep-crawl] https://www.edwards.com/legal/consumer-health-data-privacy-policy#changes (depth=2, page=6): 0 doc candidates
-[deep-crawl] https://www.edwards.com/legal/consumer-health-data-privacy-policy#nevada (depth=2, page=7): 0 doc candidates
-[browser] hover-reveal: harvested grew to 68 links after menu hover
-[browser] harvested 68 links: 0 doc-file candidates, 0 download-labeled controls (verify_budget=10, click_budget=10)
-[browser][nav] IR-prioritized frontier: 19/59 nav links (IR-nav first, query terms ['environment', 'health', 'safety'] secondary)
-[browser][nav] https://www.edwards.com/legal/privacy-policy: 1 doc candidates (depth=1, pages=1)
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No matching policy document found
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/1e1fabce-7dfe-4293-8ac0-4c44e1c65396/Privacy-Policy-jan-2026.pdf): No matching policy document found
-[browser][nav] https://www.edwards.com/compliance-toolkit-for-distributors: 0 doc candidates (depth=1, pages=2)
-[browser][nav] https://www.edwards.com/legal/consumer-health-data-privacy-policy: 0 doc candidates (depth=1, pages=3)
-[browser][nav] https://www.edwards.com/healthcare-professionals/products-services/transcatheter-heart: 0 doc candidates (depth=1, pages=4)
-[browser][nav] https://www.edwards.com/healthcare-professionals/products-services/transcatheter-mitral-tricuspid-technologies: 0 doc candidates (depth=1, pages=5)
-[browser][nav] https://www.edwards.com/healthcare-professionals/products-services/surgical-heart: 0 doc candidates (depth=1, pages=6)
-[browser][nav] https://www.edwards.com/healthcare-professionals/products-services/advanced-tissue/resilia: 4 doc candidates (depth=1, pages=7)
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No exact policy document found
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/df4bbce9-0d91-410a-8f84-1f84c07e9141/RESILIA%20Tissue%20Surgical%20Valve%20Portfolio%20Brochure.pdf): No exact policy document found
-[llm] select decision: selected=None topic=False company=False year=True conf=high reason=No matching policy document found
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/622a9df4-08f2-461a-9b00-68bc499788f2/pp--us-6533v1-0-inspiris-resilia_prodsheet.pdf): No matching policy document found
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is a product sheet, not a policy
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/35b01d59-e42b-4800-a6b8-37cea101756e/pp--us-6534v1-0-konect-resilia_productsheet.pdf): Document is a product sheet, not a policy
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not Edwards Lifesciences OHS or Environmental Policy document
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/bb0554be-0f94-4373-825c-38de33b8b035/PP--US-6535-v1-0-MITRIS-RESILIA-ProductSheet%20%281%29.pdf): Not Edwards Lifesciences OHS or Environmental Policy document
-[browser][nav] https://www.edwards.com/healthcare-professionals/products-services/support: 2 doc candidates (depth=1, pages=8)
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document unrelated to Edwards Lifesciences policies
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/9f02c256-7535-4dd0-a89c-9bf8a3152121/OUS%20MRI%20Letter_PP--US-0941_v9.0_2-4-2025.pdf): Document unrelated to Edwards Lifesciences policies
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is MRI letter, not policy
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/b8d853c9-f822-4191-8852-81cecfa23d18/US_MRI_Letter%20v17.0-3-12-25.pdf): Document is MRI letter, not policy
-[browser][nav] https://www.edwards.com/healthcare-professionals/conditions-procedures/aortic-regurgitation: 4 doc candidates (depth=1, pages=9)
-[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Document is clinical summary, not policy
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/002d38a8-3f88-4f08-b9ff-6b5aa484e0c7/ThouraniAorticReg_ClinicalSummary_2022_v9.pdf): Document is clinical summary, not policy
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is unrelated to requested policy.
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/b62da0ad-41fc-47dc-a674-9a3ec4d1eb85/PP--US-6634%20v1.0%20Edwards%20One%20Pager%20Timely%20Intervention.pdf): Document is unrelated to requested policy.
-[verify] STRICT reject (near-neighbor filename, no LLM): https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/3427e9b3-191e-442f-ad49-09ef2cfa4e21/AHA-ACC%20Guidelines%20for%20Aortic%20Regurgitation.pdf
-[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not the requested policy document class.
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/9985e25f-7e8d-4d57-9eb8-5962978bdaca/PP--US-5334%20v1.0%20UnderstandingAorticRegurgitationPatientBrochure_SPREADS.pdf): Not the requested policy document class.
-[browser][nav] https://www.edwards.com/healthcare-professionals/conditions-procedures/surgical-valve-selection: 0 doc candidates (depth=1, pages=10)
-[browser][nav] https://www.edwards.com/healthcare-professionals/medical-specialties/cardiac-heart-teams: 0 doc candidates (depth=1, pages=11)
-[browser][nav] https://www.edwards.com/healthcare-professionals/medical-specialties/cardiologists/overview: 0 doc candidates (depth=1, pages=12)
-[browser][nav] https://www.edwards.com/healthcare-professionals/clinical-medical-affairs/clinical-research-trials: 0 doc candidates (depth=1, pages=13)
-[browser][nav] https://www.edwards.com/healthcare-professionals/clinical-medical-affairs/medical-affairs: 0 doc candidates (depth=1, pages=14)
-[browser][nav] https://www.edwards.com/healthcare-professionals/additional-resources/surgical-education: 0 doc candidates (depth=1, pages=15)
-[browser][nav] https://www.edwards.com/healthcare-professionals/additional-resources/reimbursement: 7 doc candidates (depth=1, pages=16)
-[llm] select decision: selected=None topic=False company=False year=True conf=high reason=No matching policy document found
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/9a84bd56-702a-4576-858a-81ba00943280/2026%20THV%20Facility%20and%20Physician%20Billing%20Guide.pdf): No matching policy document found
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document unrelated to policy, wrong content type.
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/1a37db06-4003-446f-b995-c5bd12807a1e/2026%20Transcatheter%20Mitral%20Valve%20Billing%20Guide.pdf): Document unrelated to policy, wrong content type.
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not Edwards Lifesciences OHS/Environmental policy document
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/f55d123f-0c4a-4a1a-9b13-7ea0942b98ec/2026%20EVOQUE%20Billing%20Guide_V1.pdf): Not Edwards Lifesciences OHS/Environmental policy document
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is billing guide, not policy
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/221511a3-80d2-483a-b74d-62c7d6036b27/2026%20Surgical%20Heart%20Valve%20Therapy%20Billing%20Guide%20PP--US-0125%20v19.0.pdf): Document is billing guide, not policy
-[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not the requested policy document.
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/78085fc0-a8ce-4160-a731-511ec418e320/2026%20Cordella%20Quick%20Reference%20Billing%20Guide.pdf): Not the requested policy document.
-[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Wrong company, not Edwards Lifesciences document
-[browser] candidate REJECTED by class check (https://www.bd.com/content/dam/bd-assets/na/advanced-patient-monitoring/documents/customer-support/bd-vascular-products-2025-billing-guide.pdf): Wrong company, not Edwards Lifesciences document
-[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Wrong company and document type
-[browser] candidate REJECTED by class check (https://www.bd.com/content/dam/bd-assets/na/advanced-patient-monitoring/documents/customer-support/advanced-patient-monitoring-products-2025-billing-guide.pdf): Wrong company and document type
-[browser][nav] https://www.edwards.com/healthcare-professionals/products-services/pap-guided-therapy: 0 doc candidates (depth=1, pages=17)
-[browser][nav] https://www.edwards.com/healthcare-professionals/critical-care: 0 doc candidates (depth=1, pages=18)
-[browser][nav] https://www.edwards.com/healthcare-professionals/products-services/support/mri-safety: 2 doc candidates (depth=1, pages=19)
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No matching policy document found
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/05b42efb-3edd-446d-8224-931f171c4dc2/US_MRI_letter_v19.pdf): No matching policy document found
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No matching policy document found
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/6a4411bb-77d3-49bf-bb7a-128fc6798a9e/OUS%20MRI%20Letter_PP--US-0941_v11.pdf): No matching policy document found
-[browser][nav] https://www.edwards.com/about-us/corporate-responsibility: 14 doc candidates (depth=2, pages=20)
-[llm] select decision: selected=None topic=False company=False year=True conf=high reason=No exact Environment Health and Safety Policy found.
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/dedfeb79-d21e-43e4-9d7f-f38d8686c0bd/edwards-lifesciences-unilateral-pro-innovation-policy-2026B.pdf): No exact Environment Health and Safety Policy found.
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is a code of ethics, not policy
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/0f47de5e-2095-4d06-8c3d-dc082b4cffb7/Medical-Device-Code-of-Ethical-V6%20SAMED.pdf): Document is a code of ethics, not policy
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No matching policy document found
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/099b84b0-ba15-4ba0-97f6-9f0009288719/Third%20Party%20Code%20of%20Conduct%20-%20Feb%202025.pdf): No matching policy document found
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=PDF not related to Edwards Lifesciences policies
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/d2644569-74ac-477c-abb3-064eb7526b04/English%20Titanium%20Book.pdf): PDF not related to Edwards Lifesciences policies
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document unrelated to Edwards Lifesciences policies
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/6d455498-4ad7-41ee-8123-0790031224c6/Vietnamese%20Titanium%20Book.pdf): Document unrelated to Edwards Lifesciences policies
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No exact policy document found for Edwards Lifesciences
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/419633b8-ed99-46e5-9f42-3e3f0e1c0c24/63177_2.pdf): No exact policy document found for Edwards Lifesciences
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No matching policy document found
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/91ad64dd-5dc7-4e58-ae03-992a547a9dd3/codiceetico_eng.pdf): No matching policy document found
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document unrelated to Edwards Lifesciences policies.
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/a83d3c07-9e7d-4b85-82b4-ac741b35eeae/Chinese%20Titanium%20Book.pdf): Document unrelated to Edwards Lifesciences policies.
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Wrong company, not Edwards Lifesciences
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/a07a1a24-e12a-4617-8220-d72645e7416d/French%20Titanium%20Book.pdf): Wrong company, not Edwards Lifesciences
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document unrelated to Edwards Lifesciences policies
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/7cbd85e9-2ecd-470b-8404-b06d27db0c89/Japanese%20Titanium%20Book.pdf): Document unrelated to Edwards Lifesciences policies
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document unrelated to Edwards Lifesciences policies
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/83fe6d0e-ac76-494e-814b-f0dae4cab62e/Portuguese%20Titanium%20Book.pdf): Document unrelated to Edwards Lifesciences policies
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=PDF not relevant to Edwards Lifesciences OHS policy
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/5b4591d7-0252-4d55-a686-821131710695/Spanish%20Titanium%20Book.pdf): PDF not relevant to Edwards Lifesciences OHS policy
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document unrelated to Edwards Lifesciences policies
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/f3617432-efa7-4c2f-b1a1-4346d16a9393/Korean%20Titanium%20Book.pdf): Document unrelated to Edwards Lifesciences policies
-[browser][nav] https://ir.edwards.com/overview/default.aspx: 3 doc candidates (depth=2, pages=21)
-[verify] STRICT reject (near-neighbor filename, no LLM): https://s27.q4cdn.com/788244549/files/doc_financials/2026/q1/EW-USQ_Transcript_2026-04-23.pdf
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No exact policy document found
-[browser] candidate REJECTED by class check (https://s27.q4cdn.com/788244549/files/doc_financials/2026/q1/82aca192-08e6-4c1f-bd05-e2fe94e1fadd.pdf): No exact policy document found
-[verify] STRICT reject (near-neighbor filename, no LLM): https://s27.q4cdn.com/788244549/files/doc_financials/2025/ar/2026-ASM-Transcript.pdf
-[browser][nav] https://www.edwards.com/healthcare-professionals/products-services/transcatheter-heart/transcatheter-sapien-3-ultra-resilia: 0 doc candidates (depth=2, pages=22)
-[browser][nav] https://www.edwards.com/healthcare-professionals/products-services/transcatheter-heart/transcatheter-sapien-3-ultra: 0 doc candidates (depth=2, pages=23)
-[browser][nav] https://www.edwards.com/healthcare-professionals/products-services/transcatheter-heart/transcatheter-sapien-3-valve-pulmonic#transformation: 1 doc candidates (depth=2, pages=24)
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No exact policy document found for Edwards Lifesciences
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/7b9cc18d-b6f9-48ac-96ee-e165527659e3/Pulmonic-Valve-Therapy-Patient-Brochure-DOC-0032339B.pdf): No exact policy document found for Edwards Lifesciences
-[browser][nav] https://www.edwards.com/healthcare-professionals/products-services/transcatheter-mitral-tricuspid-technologies/pascal-precision-system: 3 doc candidates (depth=2, pages=25)
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No relevant policy document found
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/1b8c550e-7898-4b30-87ae-ebc6b4337e00/TVT-R_1%20Year_Brochure.pdf): No relevant policy document found
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not Edwards Lifesciences document, unrelated content
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/72f46e1c-34dd-4a5c-95d9-a2718f791654/PASCAL%20US%20Takeaway%20Brochure.pdf): Not Edwards Lifesciences document, unrelated content
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document unrelated to requested policy
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/13621ef6-4ac4-4d60-9ca7-bc876c7a3865/PASCAL%20Precision%20US%20Spec%20Sheet.pdf): Document unrelated to requested policy
-[browser][nav] https://www.edwards.com/healthcare-professionals/products-services/transcatheter-mitral-tricuspid-technologies/sapien-m3: 2 doc candidates (depth=2, pages=26)
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not the requested policy document class
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/c6df2131-e04b-4889-a502-4d5c5e054ebc/Step3_DIGITAL%20PP--US-11559%20v1.0%20SAPIEN%20M3%20US%20Brochure.pdf): Not the requested policy document class
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is technical spec, not policy
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/42d74f9c-743b-442d-abd4-cbebc7583f18/DIGITAL%20PP--US-11563%20SAPIEN%20M3%20Tech%20Spec%20Sheet.pdf): Document is technical spec, not policy
-[browser][nav] https://www.edwards.com/healthcare-professionals/products-services/transcatheter-mitral-tricuspid-technologies/evoque-tricuspid-valve-replacement-system: 2 doc candidates (depth=2, pages=27)
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document unrelated to requested policy class.
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/daaeffe0-fea9-4263-9bdd-b88090c016d9/EVOQUE%20HCP%20Brochure.pdf): Document unrelated to requested policy class.
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not the requested policy document
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/298ff239-413d-40cc-bc3e-6b95ac9730ba/EVOQUE%20TR%20US%20Technical%20Sheet.pdf): Not the requested policy document
-[browser][nav] https://www.edwards.com/healthcare-professionals/products-services/surgical-heart/inspiris-resilia: 3 doc candidates (depth=2, pages=28)
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No matching policy document found
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/4045f159-0ee2-42dc-92a5-748eb5d0764d/INSPIRIS%20Brochure%202025.pdf): No matching policy document found
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not the requested policy document
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/65d6de90-6481-4776-8896-52ba9b878f3d/INSPIRIS%20VFIT%20One%20Pager.pdf): Not the requested policy document
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is clinical trial summary, not policy
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/7531e2cb-9bbb-4050-b4d5-07f79ee7a218/commence-trial-5-year-clinical-summary.pdf): Document is clinical trial summary, not policy
-[browser][nav] https://www.edwards.com/healthcare-professionals/products-services/surgical-heart/konect-resilia: 1 doc candidates (depth=2, pages=29)
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=PDF is a brochure, not policy document
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/9ad932f6-e33d-46bd-b89a-c5958680e2bd/PP--US-3573_KONECT-Brochure.pdf): PDF is a brochure, not policy document
+[find] sample fetch failed (https://www.cisco.com/c/dam/assets/about/ethics/cobc/ebook/2016/pdf/COBC_FY16_English.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (http://www.cisco.com/web/learning/exams/policies.html): HTTP Error 403: Forbidden
+[find] sample fetch failed (http://www.cisco.com/assets/about/ethics/cobc/ebook/page/09-conflicts-of-interest.html): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.cisco.com/c/en/us/about/suppliers/policies/code-of-ethics.html): HTTP Error 403: Forbidden
+[llm] contamination guard: selected http://www.cisco.com/assets/about/ethics/cobc/ebook/page/09-conflicts-of-interest.html has no readable content sample (0 chars) but a company match was required — cannot confirm company identity from filename alone; FAILING CLOSED
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=company-unverifiable-empty-sample-failed-closed
+[deep-crawl] fetch failed (https://cisco.com/): HTTP Error 403: Forbidden
+[browser] redirected: requested=https://cisco.com/ final=https://www.cisco.com/ referer_sent='https://cisco.com/'
+[browser] possible WAF/bot-challenge page (matched 'akamai') at https://www.cisco.com/
+[browser] hover-reveal: harvested grew to 383 links after menu hover
+[browser] harvested 383 links: 3 doc-file candidates, 0 download-labeled controls (verify_budget=10, click_budget=10) | block_marker=akamai
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=PDF is a purpose report, not a policy.
+[browser] candidate REJECTED by class check (https://www.cisco.com/c/dam/m/en_us/about/purpose/reporting-hub/_pdf/purpose-report-2025.pdf): PDF is a purpose report, not a policy.
+[browser] in-session candidate 1/10 not accepted (https://www.cisco.com/c/dam/m/en_us/about/purpose/reporting-hub/_pdf/purpose-report-2025.pdf): PDF is a purpose report, not a policy.; trying next candidate
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=No exact Conflicts of Interest Policy found
+[browser] candidate REJECTED by class check (https://www.cisco.com/c/dam/en_us/partners/cisco-partner-designations-faq.pdf): No exact Conflicts of Interest Policy found
+[browser] in-session candidate 2/10 not accepted (https://www.cisco.com/c/dam/en_us/partners/cisco-partner-designations-faq.pdf): No exact Conflicts of Interest Policy found; trying next candidate
+[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Document is Modern Slavery Statement, not Conflicts of Interest Policy.
+[browser] candidate REJECTED by class check (https://www.cisco.com/c/dam/en_us/about/supply-chain/cisco-modern-slavery-statement.pdf): Document is Modern Slavery Statement, not Conflicts of Interest Policy.
+[browser] in-session candidate 3/10 not accepted (https://www.cisco.com/c/dam/en_us/about/supply-chain/cisco-modern-slavery-statement.pdf): Document is Modern Slavery Statement, not Conflicts of Interest Policy.; trying next candidate
+[browser][nav] IR-prioritized frontier: 1/324 nav links (IR-nav first, query terms ['conflicts', 'interest'] secondary)
+[browser][nav] https://www.cisco.com/site/us/en/solutions/industries/financial-services/index.html: 4 doc candidates (depth=1, pages=1)
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Document is not a Conflicts of Interest Policy.
+[browser] candidate REJECTED by class check (https://www.cisco.com/c/dam/en/us/solutions/industries/financial-services/from-autonomous-ai-to-controlled-outcomes.pdf): Document is not a Conflicts of Interest Policy.
+[browser][nav] https://investor.cisco.com/overview/default.aspx: 8 doc candidates (depth=2, pages=2)
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Investor deck, not policy document
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_presentations/2026/05/Cisco-Investor-Relations-Deck-5-17-2026.pdf): Investor deck, not policy document
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No Conflicts of Interest Policy document found.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_news/Cisco-Unveils-Agentic-Platform-for-Operating-and-Defending-Critical-IT-Infrastructure-2026.pdf): No Conflicts of Interest Policy document found.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not Cisco, unrelated content
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_news/The-600-Billion-Wake-up-Call-New-Splunk-Research-Reveals-Downtime-is-a-Systemic-Business-Crisis-2026.pdf): Not Cisco, unrelated content
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Earnings report, not policy document
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_news/CISCO-REPORTS-THIRD-QUARTER-EARNINGS-2026.pdf): Earnings report, not policy document
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not a conflicts of interest policy document
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_news/Cisco-to-Participate-in-May--June-Events-with-the-Financial-Community-2026.pdf): Not a conflicts of interest policy document
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No exact Conflicts of Interest Policy document found.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2026/q3/Q3FY26-Earnings-Slides.pdf): No exact Conflicts of Interest Policy document found.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Earnings transcript, not policy document
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_earnings/2026/q3/transcript/Q3FY26-Prepared-Remarks.pdf): Earnings transcript, not policy document
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not a conflicts of interest policy document
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_earnings/2026/q3/generic/Q3-26-Income-Statements-GAAP-Reconciliation.xlsx): Not a conflicts of interest policy document
+[browser][nav] https://www.cisco.com/site/us/en/solutions/industries/financial-services/why-cisco-for-financial-services.html: 3 doc candidates (depth=2, pages=3)
+[browser][nav] https://www.cisco.com/c/m/en_us/solutions/industries/portfolio-explorer/portfolio-explorer-for-financial-services.html: 1 doc candidates (depth=2, pages=4)
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=No exact Conflicts of Interest Policy document found.
+[browser] candidate REJECTED by class check (https://www.cisco.com/c/dam/en/us/products/collateral/security/kb-securities-infographic-sustainability.pdf): No exact Conflicts of Interest Policy document found.
+[browser][nav] https://www.cisco.com/site/us/en/about/case-studies-customer-stories/myinvestor.html: 3 doc candidates (depth=2, pages=5)
+[browser][nav] https://www.cisco.com/site/us/en/solutions/global-partners/aws/financial-services.html: 3 doc candidates (depth=2, pages=6)
+[browser][nav] https://blogs.cisco.com/tag/financial-services-solutions: 1 doc candidates (depth=2, pages=7)
+[browser][nav] https://investor.cisco.com/overview/investor.cisco.com: 0 doc candidates (depth=3, pages=8)
+[browser][nav] https://investor.cisco.com/financials/quarterly-results/default.aspx: 20 doc candidates (depth=3, pages=9)
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Earnings slides, not policy document
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2026/q2/Q2-26-Earnings-Slides.pdf): Earnings slides, not policy document
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is not a Conflicts of Interest Policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2026/q2/Q2FY26-Prepared-Remarks.pdf): Document is not a Conflicts of Interest Policy.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is not a conflicts of interest policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2026/q2/ac19bfc8-b091-48d9-be7b-1ffd74e455a1.pdf): Document is not a conflicts of interest policy.
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Earnings slides, not policy document
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2026/q1/Q1-26-Earnings-Slides.pdf): Earnings slides, not policy document
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Not a conflicts of interest policy document.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2026/q1/Q1FY26-Prepared-Remarks.pdf): Not a conflicts of interest policy document.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not a Conflicts of Interest Policy document
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2026/q1/d85cf96e-2601-4c51-b3f6-2ae6a42e1f6b.pdf): Not a Conflicts of Interest Policy document
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is earnings slides, not policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q4/Q4FY25-Earnings-Slides.pdf): Document is earnings slides, not policy.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not the exact Conflicts of Interest Policy document.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q4/Q4FY25-Prepared-Remarks.pdf): Not the exact Conflicts of Interest Policy document.
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Document is not a Conflicts of Interest Policy
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q4/6c821d1a-cf4e-4310-9801-df9399aa701b.pdf): Document is not a Conflicts of Interest Policy
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Quarterly remarks, not policy document.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q1/Cisco-1Q25-Prepared-Remarks.pdf): Quarterly remarks, not policy document.
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Not the exact Conflicts of Interest Policy document.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q2/Q2FY25-Prepared-Remarks-IR.pdf): Not the exact Conflicts of Interest Policy document.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is a financial remark, not policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q3/Q3FY25-Prepared-Remarks.pdf): Document is a financial remark, not policy.
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Document is not a Conflicts of Interest Policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q1/6b3cfcbf-0877-43bd-ae39-29379794b5f4.pdf): Document is not a Conflicts of Interest Policy.
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=PDF content not readable, likely not policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q2/csco-20250125.pdf): PDF content not readable, likely not policy.
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=PDF is a financial report, not policy document
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q3/960df9bc-19e9-4f49-a441-2b48ff0af251.pdf): PDF is a financial report, not policy document
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is earnings slides, not policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q1/Q1FY25-Earnings-Slides-Web.pdf): Document is earnings slides, not policy.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not a conflicts of interest policy document
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q2/Q2FY25-Earnings-Slides.pdf): Not a conflicts of interest policy document
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No Conflicts of Interest Policy document found
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q3/Q3FY25-Earnings-Slides.pdf): No Conflicts of Interest Policy document found
+[browser][nav] https://investor.cisco.com/financials/annual-reports/default.aspx: 9 doc candidates (depth=3, pages=10)
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Annual Report, not Conflicts of Interest Policy
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/ar/2025-Cisco-Full-Annual-Report.pdf): Annual Report, not Conflicts of Interest Policy
+[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Annual report, not conflicts policy
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/ar/2025-Cisco-Summary-Report.pdf): Annual report, not conflicts policy
+[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Proxy does not contain Conflicts of Interest Policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/ar/2025-Cisco-Proxy.pdf): Proxy does not contain Conflicts of Interest Policy.
+[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Annual report, not conflicts of interest policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2024/ar/2024-Cisco-Full-Annual-Report.pdf): Annual report, not conflicts of interest policy.
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Annual report, not Conflicts of Interest Policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2023/ar/cisco-annual-report-2023.pdf): Annual report, not Conflicts of Interest Policy.
+[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Annual report, not Conflicts of Interest Policy
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2022/ar/cisco-annual-report-2022.pdf): Annual report, not Conflicts of Interest Policy
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Annual report, not conflicts policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2021/ar/cisco-annual-report-2021.pdf): Annual report, not conflicts policy.
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Annual report, not conflicts policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2020/ar/cisco-annual-report-2020.pdf): Annual report, not conflicts policy.
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Annual report, not Conflicts of Interest Policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2019/ar/cisco-annual-report-2019.pdf): Annual report, not Conflicts of Interest Policy.
+[browser][nav] https://investor.cisco.com/financials/sec-filings/default.aspx: 0 doc candidates (depth=3, pages=11)
+[browser][nav] https://investor.cisco.com/financials/Annual-Meeting/default.aspx: 0 doc candidates (depth=3, pages=12)
+[browser][nav] https://investor.cisco.com/default.aspx: 8 doc candidates (depth=3, pages=13)
+[browser][nav] https://investor.cisco.com/governance/Governance-Highlights/default.aspx: 0 doc candidates (depth=3, pages=14)
+[browser][nav] https://investor.cisco.com/governance/executive-management/default.aspx: 0 doc candidates (depth=3, pages=15)
+[browser][nav] https://investor.cisco.com/governance/board-of-directors/default.aspx: 0 doc candidates (depth=3, pages=16)
+[browser][nav] https://investor.cisco.com/governance/Governance-Documents/default.aspx: 7 doc candidates (depth=3, pages=17)
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Document is committee charter, not policy
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/committee/2026/Cisco-s-Public-Policy-Committee-Charter-effective-5-28-26.pdf): Document is committee charter, not policy
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Document is governance guidelines, not conflicts policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/1/Corporate-Governance-Guidelines-Aug-2025.pdf): Document is governance guidelines, not conflicts policy.
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Document is bylaws, not policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/1/Amended-and-Restated-Bylaws-August-2025.pdf): Document is bylaws, not policy.
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not a Conflicts of Interest Policy document.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/committee/Audit-Committee-Charter-Aug-2025.pdf): Not a Conflicts of Interest Policy document.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not a Conflicts of Interest Policy document
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/committee/Compensation-Committee-Charter-Dec-2025.pdf): Not a Conflicts of Interest Policy document
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not the exact Conflicts of Interest Policy document.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/committee/Nomination-and-Governance-Committee-Charter-Aug-2025.pdf): Not the exact Conflicts of Interest Policy document.
+[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Document is Certificate of Incorporation, not policy
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/1/Cisco-Certificate-of-Incorporation.pdf): Document is Certificate of Incorporation, not policy
+[browser][nav] https://investor.cisco.com/governance/committee-composition/default.aspx: 4 doc candidates (depth=3, pages=18)
+[browser][nav] https://investor.cisco.com/governance/Code-of-Business-Conduct/default.aspx: 16 doc candidates (depth=3, pages=19)
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Document is a Code of Conduct, not Conflicts policy
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/new-new-codeofconduct/FY26COBC_Arabic.pdf): Document is a Code of Conduct, not Conflicts policy
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Document is Code of Conduct, not Conflicts of Interest Policy
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/code-of-conduct-new/FY26COBC_Indonesian.pdf): Document is Code of Conduct, not Conflicts of Interest Policy
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not a conflicts of interest policy document
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/code-of-conduct-new/FY26COBC_Malay.pdf): Not a conflicts of interest policy document
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not the exact Conflicts of Interest Policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/new-new-codeofconduct/FY26COBC_Serbian.pdf): Not the exact Conflicts of Interest Policy.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No exact Conflicts of Interest Policy found.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/new-new-codeofconduct/FY26COBC_Thai.pdf): No exact Conflicts of Interest Policy found.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is a Code of Conduct, not Conflicts policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/new-new-codeofconduct/FY26COBC_Vietnamese.pdf): Document is a Code of Conduct, not Conflicts policy.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is Code of Conduct, not Conflicts of Interest Policy
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/code-of-conduct-v3/FY26COBC_Chinese-1.pdf): Document is Code of Conduct, not Conflicts of Interest Policy
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is not a Conflicts of Interest Policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/code-of-conduct-v3/FY26COBC_Dutch-1.pdf): Document is not a Conflicts of Interest Policy.
+[llm] select decision: selected=https://s21.q4cdn.com/812015656/files/doc_downloads/new-new-codeofconduct/FY26COBC_French.pdf topic=True company=True year=True conf=high reason=Exact Conflicts of Interest Policy document from Cisco.
+[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Document is a Code of Conduct, not Conflicts policy
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/new-new-codeofconduct/FY26COBC_German.pdf): Document is a Code of Conduct, not Conflicts policy
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is a code of conduct, not conflicts policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/code-of-conduct-v3/FY26COBC_Japanese-1.pdf): Document is a code of conduct, not conflicts policy.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is in Korean, not English policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/code-of-conduct-v3/FY26COBC_Korean-1.pdf): Document is in Korean, not English policy.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is not a Conflicts of Interest Policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/new-new-codeofconduct/FY26COBC_Polish.pdf): Document is not a Conflicts of Interest Policy.
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Document is a Code of Conduct, not Conflicts policy
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/code-of-conduct-new/FY26COBC_Portuguese.pdf): Document is a Code of Conduct, not Conflicts policy
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not the exact Conflicts of Interest Policy document.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/code-of-conduct-v3/FY26COBC_Spanish-Latam-1.pdf): Not the exact Conflicts of Interest Policy document.
+[browser][nav] resolved via deep nav: https://s21.q4cdn.com/812015656/files/doc_downloads/new-new-codeofconduct/FY26COBC_French.pdf
+[store] STORED (browser): 'Conflicts of Interest Policy site:cisco.com' -> cisco-systems-inc/uncategorized/d65f057426a1-FY26COBC_French.pdf
+{
+    "timestamp": "2026-07-19T19:25:17.552Z",
+    "level": "INFO",
+    "message": "Invocation completed successfully (475.825s)",
+    "logger": "bedrock_agentcore.app",
+    "requestId": "72d36781-74c0-44f8-8004-152b57c473bc",
+    "sessionId": "5e4edea2-06a0-43e0-81b8-4b2117ba5630"
 
-[browser][nav] https://www.edwards.com/healthcare-professionals/products-services/surgical-heart/mitris-resilia: 1 doc candidates (depth=2, pages=30)
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not Edwards Lifesciences OHS or environmental policy document
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/e107facf-20a0-49cb-b2ac-c48f43c98444/MOMENTIS%20Clinical%20Summary.pdf): Not Edwards Lifesciences OHS or environmental policy document
-[browser][nav] https://www.edwards.com/healthcare-professionals/products-services/surgical-heart/inspiring-results: 4 doc candidates (depth=2, pages=31)
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not Edwards Lifesciences document, unrelated content
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/42aebba8-4730-42e7-a66c-946f0d8c9300/PP--US-12416_Commence_Infographic_OTC_050626.pdf): Not Edwards Lifesciences document, unrelated content
-[llm] select decision: selected=None topic=False company=False year=True conf=high reason=PDF unrelated to safety policy
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/53603eec-5950-4876-a914-85f90a581f62/COMMENCE%20trial%208Y%20data%20vs%20Magna%20Ease%20Infographic%20-%20US%20Version.pdf): PDF unrelated to safety policy
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not the requested policy document
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/da12815b-a21e-4f8c-9da6-2c06f31f2615/RESILIA%207-year%20Results%20in%20BAV%20-%20COMMENCE%20Trial%20Infographic.pdf): Not the requested policy document
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No matching policy document found
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/3fa29c78-5b2f-4501-981c-1aa0fb5f469a/COMMENCE%20Aortic%20Trial%205Y%20Aortic%20Regurgitation%20Sub-Analysis%20Clinical%20Summary.pdf): No matching policy document found
-[browser][nav] https://www.edwards.com/healthcare-professionals/products-services/surgical-heart/aortic: 0 doc candidates (depth=2, pages=32)
-
+} 
 [class-parity] OK — 11 document classes aligned across _DOC_CLASS_RULES and report_specs.REPORT_SPECS
 WARNING:  Invalid HTTP request received.
-[llm-querygen] generated 6 variants for 'site:www.edwards.com Biodiversity Policy'
-[llm-querygen] rejected 1 variant(s) that invented or dropped a year
+[identity] Vertex hint for 'Cisco Systems, Inc.': ticker='CSCO' cik='0000858877' domain='cisco.com' sources=0 (untrusted until SEC validation)
+[identity] validated 'Cisco Systems, Inc.' -> CIK 0000858877, ticker='CSCO' via vertex_ticker+vertex_cik
+[llm-querygen] generated 8 variants for 'Conflicts of Interest Policy site:cisco.com'
 [search] vertex returned nothing (vertex-grounding); falling back to gateway
-[search] vertex returned nothing (vertex-grounding); falling back to gateway
-[find][query] 'site:www.edwards.com Biodiversity Policy' -> 5 hits via=vertex-grounding
-[find][query] 'site:www.edwards.com Biodiversity Policy environmental policy' -> 2 hits via=gateway(native-site)
-[find][query] 'site:www.edwards.com Biodiversity Policy environmental management policy' -> 10 hits via=vertex-grounding
-[find][query] 'site:www.edwards.com Biodiversity Policy sustainability policy' -> 2 hits via=vertex-grounding
-[find][query] 'site:www.edwards.com Biodiversity Policy climate change policy' -> 10 hits via=gateway(stripped-site)
-[find][query] 'site:www.edwards.com Biodiversity Policy climate action policy' -> 4 hits via=vertex-grounding
-[find][query] 'site:sustainability.edwards.com Biodiversity Policy' -> 4 hits via=vertex-grounding
-[find][query] 'site:investors.edwards.com Biodiversity Policy' -> 4 hits via=vertex-grounding
-[find][query] 'site:sec.gov Edwards Lifesciences Corporation environmental management policy' -> 9 hits via=vertex-grounding
-[find][query] 'site:www.edwards.com sustainability policy' -> 10 hits via=vertex-grounding
-[find][query] 'site:www.edwards.com climate action policy' -> 9 hits via=vertex-grounding
-[find][query] 'Edwards Lifesciences Corporation sustainability policy filetype:pdf' -> 5 hits via=vertex-grounding
+[find][query] 'Conflicts of Interest Policy site:cisco.com' -> 4 hits via=vertex-grounding
+[find][query] 'Conflicts of Interest Policy ticker "CSCO" site:cisco.com' -> 2 hits via=vertex-grounding
+[find][query] 'Conflicts of Interest Policy filetype:pdf site:cisco.com' -> 3 hits via=vertex-grounding
+[find][query] 'investors.cisco.com conflicts of interest policy site:cisco.com' -> 2 hits via=vertex-grounding
+[find][query] 'governance.cisco.com conflicts of interest policy site:cisco.com' -> 1 hits via=vertex-grounding
+[find][query] 'cisco.com governance conflicts of interest policy site:cisco.com' -> 3 hits via=vertex-grounding
+[find][query] 'cisco.com policies conflicts of interest site:cisco.com' -> 10 hits via=gateway(native-site)
+[find][query] 'sustainability.cisco.com conflicts of interest policy site:cisco.com' -> 1 hits via=vertex-grounding
+[find][query] 'cisco.com pdf conflicts of interest policy site:cisco.com' -> 2 hits via=vertex-grounding
+[find][query] 'static.cisco.com conflicts of interest policy site:cisco.com' -> 1 hits via=vertex-grounding
 [find] dropped 1 junk-host candidate(s) (app store / media / social / aggregator subdomains — generic, not company-specific)
-[find] dropped 1 wrong-class filename candidate(s) (e.g. DEFA14A/additional-proxy, near-neighbor documents) before LLM selection
-[find] domain_mode=soft(on_domain=12,off_domain_kept=30) | HEAD pre-filtering 10 candidates for: site:www.edwards.com Biodiversity Policy
+[find] domain_mode=hard(on_domain_hits_found) | HEAD pre-filtering 10 candidates for: Conflicts of Interest Policy site:cisco.com
 [find] 10/10 passed HEAD pre-filter
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=No explicit biodiversity policy found.
-[sitemap] edwards.com: 2083 urls -> 744 candidates -> top 40
-[sitemap] inspected 11 landing page(s), discovered 0 linked document(s); 0 total document candidate(s)
-[deep-crawl] https://www.edwards.com/ (depth=0, page=1): 0 doc candidates
-[deep-crawl] https://www.edwards.com/legal/privacy-policy (depth=1, page=2): 0 doc candidates
-[deep-crawl] https://www.edwards.com/legal/consumer-health-data-privacy-policy (depth=1, page=3): 0 doc candidates
-[deep-crawl] https://www.edwards.com/legal/consumer-health-data-privacy-policy#changes (depth=2, page=4): 0 doc candidates
-[deep-crawl] https://www.edwards.com/legal/consumer-health-data-privacy-policy#nevada (depth=2, page=5): 0 doc candidates
-[browser] hover-reveal: harvested grew to 68 links after menu hover
-[browser] harvested 68 links: 0 doc-file candidates, 0 download-labeled controls (verify_budget=10, click_budget=10)
-[browser][nav] IR-prioritized frontier: 3/59 nav links (IR-nav first, query terms ['biodiversity'] secondary)
-[browser][nav] https://www.edwards.com/legal/privacy-policy: 1 doc candidates (depth=1, pages=1)
-[llm] select decision: selected=None topic=False company=False year=True conf=high reason=No Biodiversity Policy document found.
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/1e1fabce-7dfe-4293-8ac0-4c44e1c65396/Privacy-Policy-jan-2026.pdf): No Biodiversity Policy document found.
-[browser][nav] https://www.edwards.com/compliance-toolkit-for-distributors: 0 doc candidates (depth=1, pages=2)
-[browser][nav] https://www.edwards.com/legal/consumer-health-data-privacy-policy: 0 doc candidates (depth=1, pages=3)
-[browser][nav] https://www.edwards.com/about-us/corporate-responsibility: 14 doc candidates (depth=2, pages=4)
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No matching policy document found
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/dedfeb79-d21e-43e4-9d7f-f38d8686c0bd/edwards-lifesciences-unilateral-pro-innovation-policy-2026B.pdf): No matching policy document found
-[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not the exact Biodiversity Policy document.
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/0f47de5e-2095-4d06-8c3d-dc082b4cffb7/Medical-Device-Code-of-Ethical-V6%20SAMED.pdf): Not the exact Biodiversity Policy document.
-[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not the requested policy class
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/099b84b0-ba15-4ba0-97f6-9f0009288719/Third%20Party%20Code%20of%20Conduct%20-%20Feb%202025.pdf): Not the requested policy class
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document not related to Edwards Lifesciences Corporation
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/d2644569-74ac-477c-abb3-064eb7526b04/English%20Titanium%20Book.pdf): Document not related to Edwards Lifesciences Corporation
-[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Document unrelated to Edwards Lifesciences policies.
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/6d455498-4ad7-41ee-8123-0790031224c6/Vietnamese%20Titanium%20Book.pdf): Document unrelated to Edwards Lifesciences policies.
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No exact Biodiversity Policy found.
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/419633b8-ed99-46e5-9f42-3e3f0e1c0c24/63177_2.pdf): No exact Biodiversity Policy found.
-[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an environmental policy document
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/91ad64dd-5dc7-4e58-ae03-992a547a9dd3/codiceetico_eng.pdf): Not an environmental policy document
-[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Wrong company and document type
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/a83d3c07-9e7d-4b85-82b4-ac741b35eeae/Chinese%20Titanium%20Book.pdf): Wrong company and document type
-[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Document unrelated to Edwards Lifesciences Corporation policy
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/a07a1a24-e12a-4617-8220-d72645e7416d/French%20Titanium%20Book.pdf): Document unrelated to Edwards Lifesciences Corporation policy
-[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Document unrelated to Edwards Lifesciences or policy
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/7cbd85e9-2ecd-470b-8404-b06d27db0c89/Japanese%20Titanium%20Book.pdf): Document unrelated to Edwards Lifesciences or policy
-[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Document unrelated to Edwards Lifesciences policy.
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/83fe6d0e-ac76-494e-814b-f0dae4cab62e/Portuguese%20Titanium%20Book.pdf): Document unrelated to Edwards Lifesciences policy.
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No explicit biodiversity policy found
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/5b4591d7-0252-4d55-a686-821131710695/Spanish%20Titanium%20Book.pdf): No explicit biodiversity policy found
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document unrelated to Edwards Lifesciences policy
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/f3617432-efa7-4c2f-b1a1-4346d16a9393/Korean%20Titanium%20Book.pdf): Document unrelated to Edwards Lifesciences policy
-[browser][nav] https://ir.edwards.com/overview/default.aspx: 3 doc candidates (depth=2, pages=5)
-[verify] STRICT reject (near-neighbor filename, no LLM): https://s27.q4cdn.com/788244549/files/doc_financials/2026/q1/EW-USQ_Transcript_2026-04-23.pdf
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No exact Biodiversity Policy document found.
-[browser] candidate REJECTED by class check (https://s27.q4cdn.com/788244549/files/doc_financials/2026/q1/82aca192-08e6-4c1f-bd05-e2fe94e1fadd.pdf): No exact Biodiversity Policy document found.
-[verify] STRICT reject (near-neighbor filename, no LLM): https://s27.q4cdn.com/788244549/files/doc_financials/2025/ar/2026-ASM-Transcript.pdf
-[browser][vision] model found no download control
-[browser] https://www.edwards.com/: no document resolved through any tier
-[result] NO DOCUMENT FOUND (failed closed): 'site:www.edwards.com Biodiversity Policy'
+[find] sample fetch failed (https://www.cisco.com/c/dam/assets/about/ethics/cobc/ebook/2016/pdf/COBC_FY16_English.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (http://www.cisco.com/web/learning/exams/policies.html): HTTP Error 403: Forbidden
+[find] sample fetch failed (http://www.cisco.com/assets/about/ethics/cobc/ebook/page/09-conflicts-of-interest.html): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.cisco.com/c/en/us/about/suppliers/policies/code-of-ethics.html): HTTP Error 403: Forbidden
+[llm] contamination guard: selected http://www.cisco.com/assets/about/ethics/cobc/ebook/page/09-conflicts-of-interest.html has no readable content sample (0 chars) but a company match was required — cannot confirm company identity from filename alone; FAILING CLOSED
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=company-unverifiable-empty-sample-failed-closed
+[deep-crawl] fetch failed (https://cisco.com/): HTTP Error 403: Forbidden
+[browser] redirected: requested=https://cisco.com/ final=https://www.cisco.com/ referer_sent='https://cisco.com/'
+[browser] possible WAF/bot-challenge page (matched 'akamai') at https://www.cisco.com/
+[browser] hover-reveal: harvested grew to 383 links after menu hover
+[browser] harvested 383 links: 3 doc-file candidates, 0 download-labeled controls (verify_budget=10, click_budget=10) | block_marker=akamai
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=PDF is a purpose report, not a policy.
+[browser] candidate REJECTED by class check (https://www.cisco.com/c/dam/m/en_us/about/purpose/reporting-hub/_pdf/purpose-report-2025.pdf): PDF is a purpose report, not a policy.
+[browser] in-session candidate 1/10 not accepted (https://www.cisco.com/c/dam/m/en_us/about/purpose/reporting-hub/_pdf/purpose-report-2025.pdf): PDF is a purpose report, not a policy.; trying next candidate
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=No exact Conflicts of Interest Policy found
+[browser] candidate REJECTED by class check (https://www.cisco.com/c/dam/en_us/partners/cisco-partner-designations-faq.pdf): No exact Conflicts of Interest Policy found
+[browser] in-session candidate 2/10 not accepted (https://www.cisco.com/c/dam/en_us/partners/cisco-partner-designations-faq.pdf): No exact Conflicts of Interest Policy found; trying next candidate
+[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Document is Modern Slavery Statement, not Conflicts of Interest Policy.
+[browser] candidate REJECTED by class check (https://www.cisco.com/c/dam/en_us/about/supply-chain/cisco-modern-slavery-statement.pdf): Document is Modern Slavery Statement, not Conflicts of Interest Policy.
+[browser] in-session candidate 3/10 not accepted (https://www.cisco.com/c/dam/en_us/about/supply-chain/cisco-modern-slavery-statement.pdf): Document is Modern Slavery Statement, not Conflicts of Interest Policy.; trying next candidate
+[browser][nav] IR-prioritized frontier: 1/324 nav links (IR-nav first, query terms ['conflicts', 'interest'] secondary)
+[browser][nav] https://www.cisco.com/site/us/en/solutions/industries/financial-services/index.html: 4 doc candidates (depth=1, pages=1)
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Document is not a Conflicts of Interest Policy.
+[browser] candidate REJECTED by class check (https://www.cisco.com/c/dam/en/us/solutions/industries/financial-services/from-autonomous-ai-to-controlled-outcomes.pdf): Document is not a Conflicts of Interest Policy.
+[browser][nav] https://investor.cisco.com/overview/default.aspx: 8 doc candidates (depth=2, pages=2)
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Investor deck, not policy document
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_presentations/2026/05/Cisco-Investor-Relations-Deck-5-17-2026.pdf): Investor deck, not policy document
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No Conflicts of Interest Policy document found.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_news/Cisco-Unveils-Agentic-Platform-for-Operating-and-Defending-Critical-IT-Infrastructure-2026.pdf): No Conflicts of Interest Policy document found.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not Cisco, unrelated content
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_news/The-600-Billion-Wake-up-Call-New-Splunk-Research-Reveals-Downtime-is-a-Systemic-Business-Crisis-2026.pdf): Not Cisco, unrelated content
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Earnings report, not policy document
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_news/CISCO-REPORTS-THIRD-QUARTER-EARNINGS-2026.pdf): Earnings report, not policy document
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not a conflicts of interest policy document
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_news/Cisco-to-Participate-in-May--June-Events-with-the-Financial-Community-2026.pdf): Not a conflicts of interest policy document
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No exact Conflicts of Interest Policy document found.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2026/q3/Q3FY26-Earnings-Slides.pdf): No exact Conflicts of Interest Policy document found.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Earnings transcript, not policy document
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_earnings/2026/q3/transcript/Q3FY26-Prepared-Remarks.pdf): Earnings transcript, not policy document
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not a conflicts of interest policy document
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_earnings/2026/q3/generic/Q3-26-Income-Statements-GAAP-Reconciliation.xlsx): Not a conflicts of interest policy document
+[browser][nav] https://www.cisco.com/site/us/en/solutions/industries/financial-services/why-cisco-for-financial-services.html: 3 doc candidates (depth=2, pages=3)
+[browser][nav] https://www.cisco.com/c/m/en_us/solutions/industries/portfolio-explorer/portfolio-explorer-for-financial-services.html: 1 doc candidates (depth=2, pages=4)
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=No exact Conflicts of Interest Policy document found.
+[browser] candidate REJECTED by class check (https://www.cisco.com/c/dam/en/us/products/collateral/security/kb-securities-infographic-sustainability.pdf): No exact Conflicts of Interest Policy document found.
+[browser][nav] https://www.cisco.com/site/us/en/about/case-studies-customer-stories/myinvestor.html: 3 doc candidates (depth=2, pages=5)
+[browser][nav] https://www.cisco.com/site/us/en/solutions/global-partners/aws/financial-services.html: 3 doc candidates (depth=2, pages=6)
+[browser][nav] https://blogs.cisco.com/tag/financial-services-solutions: 1 doc candidates (depth=2, pages=7)
+[browser][nav] https://investor.cisco.com/overview/investor.cisco.com: 0 doc candidates (depth=3, pages=8)
+[browser][nav] https://investor.cisco.com/financials/quarterly-results/default.aspx: 20 doc candidates (depth=3, pages=9)
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Earnings slides, not policy document
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2026/q2/Q2-26-Earnings-Slides.pdf): Earnings slides, not policy document
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is not a Conflicts of Interest Policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2026/q2/Q2FY26-Prepared-Remarks.pdf): Document is not a Conflicts of Interest Policy.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is not a conflicts of interest policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2026/q2/ac19bfc8-b091-48d9-be7b-1ffd74e455a1.pdf): Document is not a conflicts of interest policy.
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Earnings slides, not policy document
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2026/q1/Q1-26-Earnings-Slides.pdf): Earnings slides, not policy document
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Not a conflicts of interest policy document.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2026/q1/Q1FY26-Prepared-Remarks.pdf): Not a conflicts of interest policy document.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not a Conflicts of Interest Policy document
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2026/q1/d85cf96e-2601-4c51-b3f6-2ae6a42e1f6b.pdf): Not a Conflicts of Interest Policy document
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is earnings slides, not policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q4/Q4FY25-Earnings-Slides.pdf): Document is earnings slides, not policy.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not the exact Conflicts of Interest Policy document.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q4/Q4FY25-Prepared-Remarks.pdf): Not the exact Conflicts of Interest Policy document.
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Document is not a Conflicts of Interest Policy
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q4/6c821d1a-cf4e-4310-9801-df9399aa701b.pdf): Document is not a Conflicts of Interest Policy
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Quarterly remarks, not policy document.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q1/Cisco-1Q25-Prepared-Remarks.pdf): Quarterly remarks, not policy document.
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Not the exact Conflicts of Interest Policy document.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q2/Q2FY25-Prepared-Remarks-IR.pdf): Not the exact Conflicts of Interest Policy document.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is a financial remark, not policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q3/Q3FY25-Prepared-Remarks.pdf): Document is a financial remark, not policy.
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Document is not a Conflicts of Interest Policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q1/6b3cfcbf-0877-43bd-ae39-29379794b5f4.pdf): Document is not a Conflicts of Interest Policy.
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=PDF content not readable, likely not policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q2/csco-20250125.pdf): PDF content not readable, likely not policy.
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=PDF is a financial report, not policy document
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q3/960df9bc-19e9-4f49-a441-2b48ff0af251.pdf): PDF is a financial report, not policy document
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is earnings slides, not policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q1/Q1FY25-Earnings-Slides-Web.pdf): Document is earnings slides, not policy.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not a conflicts of interest policy document
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q2/Q2FY25-Earnings-Slides.pdf): Not a conflicts of interest policy document
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No Conflicts of Interest Policy document found
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q3/Q3FY25-Earnings-Slides.pdf): No Conflicts of Interest Policy document found
+[browser][nav] https://investor.cisco.com/financials/annual-reports/default.aspx: 9 doc candidates (depth=3, pages=10)
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Annual Report, not Conflicts of Interest Policy
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/ar/2025-Cisco-Full-Annual-Report.pdf): Annual Report, not Conflicts of Interest Policy
+[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Annual report, not conflicts policy
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/ar/2025-Cisco-Summary-Report.pdf): Annual report, not conflicts policy
+[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Proxy does not contain Conflicts of Interest Policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/ar/2025-Cisco-Proxy.pdf): Proxy does not contain Conflicts of Interest Policy.
+[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Annual report, not conflicts of interest policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2024/ar/2024-Cisco-Full-Annual-Report.pdf): Annual report, not conflicts of interest policy.
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Annual report, not Conflicts of Interest Policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2023/ar/cisco-annual-report-2023.pdf): Annual report, not Conflicts of Interest Policy.
+[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Annual report, not Conflicts of Interest Policy
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2022/ar/cisco-annual-report-2022.pdf): Annual report, not Conflicts of Interest Policy
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Annual report, not conflicts policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2021/ar/cisco-annual-report-2021.pdf): Annual report, not conflicts policy.
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Annual report, not conflicts policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2020/ar/cisco-annual-report-2020.pdf): Annual report, not conflicts policy.
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Annual report, not Conflicts of Interest Policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2019/ar/cisco-annual-report-2019.pdf): Annual report, not Conflicts of Interest Policy.
+[browser][nav] https://investor.cisco.com/financials/sec-filings/default.aspx: 0 doc candidates (depth=3, pages=11)
+[browser][nav] https://investor.cisco.com/financials/Annual-Meeting/default.aspx: 0 doc candidates (depth=3, pages=12)
+[browser][nav] https://investor.cisco.com/default.aspx: 8 doc candidates (depth=3, pages=13)
+[browser][nav] https://investor.cisco.com/governance/Governance-Highlights/default.aspx: 0 doc candidates (depth=3, pages=14)
+[browser][nav] https://investor.cisco.com/governance/executive-management/default.aspx: 0 doc candidates (depth=3, pages=15)
+[browser][nav] https://investor.cisco.com/governance/board-of-directors/default.aspx: 0 doc candidates (depth=3, pages=16)
+[browser][nav] https://investor.cisco.com/governance/Governance-Documents/default.aspx: 7 doc candidates (depth=3, pages=17)
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Document is committee charter, not policy
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/committee/2026/Cisco-s-Public-Policy-Committee-Charter-effective-5-28-26.pdf): Document is committee charter, not policy
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Document is governance guidelines, not conflicts policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/1/Corporate-Governance-Guidelines-Aug-2025.pdf): Document is governance guidelines, not conflicts policy.
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Document is bylaws, not policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/1/Amended-and-Restated-Bylaws-August-2025.pdf): Document is bylaws, not policy.
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not a Conflicts of Interest Policy document.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/committee/Audit-Committee-Charter-Aug-2025.pdf): Not a Conflicts of Interest Policy document.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not a Conflicts of Interest Policy document
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/committee/Compensation-Committee-Charter-Dec-2025.pdf): Not a Conflicts of Interest Policy document
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not the exact Conflicts of Interest Policy document.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/committee/Nomination-and-Governance-Committee-Charter-Aug-2025.pdf): Not the exact Conflicts of Interest Policy document.
+[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Document is Certificate of Incorporation, not policy
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/1/Cisco-Certificate-of-Incorporation.pdf): Document is Certificate of Incorporation, not policy
+[browser][nav] https://investor.cisco.com/governance/committee-composition/default.aspx: 4 doc candidates (depth=3, pages=18)
+[browser][nav] https://investor.cisco.com/governance/Code-of-Business-Conduct/default.aspx: 16 doc candidates (depth=3, pages=19)
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Document is a Code of Conduct, not Conflicts policy
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/new-new-codeofconduct/FY26COBC_Arabic.pdf): Document is a Code of Conduct, not Conflicts policy
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Document is Code of Conduct, not Conflicts of Interest Policy
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/code-of-conduct-new/FY26COBC_Indonesian.pdf): Document is Code of Conduct, not Conflicts of Interest Policy
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not a conflicts of interest policy document
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/code-of-conduct-new/FY26COBC_Malay.pdf): Not a conflicts of interest policy document
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not the exact Conflicts of Interest Policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/new-new-codeofconduct/FY26COBC_Serbian.pdf): Not the exact Conflicts of Interest Policy.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No exact Conflicts of Interest Policy found.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/new-new-codeofconduct/FY26COBC_Thai.pdf): No exact Conflicts of Interest Policy found.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is a Code of Conduct, not Conflicts policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/new-new-codeofconduct/FY26COBC_Vietnamese.pdf): Document is a Code of Conduct, not Conflicts policy.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is Code of Conduct, not Conflicts of Interest Policy
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/code-of-conduct-v3/FY26COBC_Chinese-1.pdf): Document is Code of Conduct, not Conflicts of Interest Policy
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is not a Conflicts of Interest Policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/code-of-conduct-v3/FY26COBC_Dutch-1.pdf): Document is not a Conflicts of Interest Policy.
+[llm] select decision: selected=https://s21.q4cdn.com/812015656/files/doc_downloads/new-new-codeofconduct/FY26COBC_French.pdf topic=True company=True year=True conf=high reason=Exact Conflicts of Interest Policy document from Cisco.
+[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Document is a Code of Conduct, not Conflicts policy
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/new-new-codeofconduct/FY26COBC_German.pdf): Document is a Code of Conduct, not Conflicts policy
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is a code of conduct, not conflicts policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/code-of-conduct-v3/FY26COBC_Japanese-1.pdf): Document is a code of conduct, not conflicts policy.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is in Korean, not English policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/code-of-conduct-v3/FY26COBC_Korean-1.pdf): Document is in Korean, not English policy.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is not a Conflicts of Interest Policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/new-new-codeofconduct/FY26COBC_Polish.pdf): Document is not a Conflicts of Interest Policy.
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Document is a Code of Conduct, not Conflicts policy
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/code-of-conduct-new/FY26COBC_Portuguese.pdf): Document is a Code of Conduct, not Conflicts policy
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not the exact Conflicts of Interest Policy document.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/code-of-conduct-v3/FY26COBC_Spanish-Latam-1.pdf): Not the exact Conflicts of Interest Policy document.
+[browser][nav] resolved via deep nav: https://s21.q4cdn.com/812015656/files/doc_downloads/new-new-codeofconduct/FY26COBC_French.pdf
+[store] STORED (browser): 'Conflicts of Interest Policy site:cisco.com' -> cisco-systems-inc/uncategorized/d65f057426a1-FY26COBC_French.pdf
 {
-    "timestamp": "2026-07-19T16:47:27.480Z",
+    "timestamp": "2026-07-19T19:25:17.552Z",
     "level": "INFO",
-    "message": "Invocation completed successfully (151.063s)",
+    "message": "Invocation completed successfully (475.825s)",
     "logger": "bedrock_agentcore.app",
-    "requestId": "eae19ea9-c903-4417-9cb7-6e40a70fd41f",
-    "sessionId": "9684ad94-f769-4054-b1fc-b5e0dcc1786b"
-}
-
-
-[class-parity] OK — 11 document classes aligned across _DOC_CLASS_RULES and report_specs.REPORT_SPECS
-WARNING:  Invalid HTTP request received.
-[llm-querygen] generated 7 variants for 'site:www.edwards.com Tax Strategy and Policy Document'
-[llm-querygen] rejected 1 variant(s) that invented or dropped a year
-[search] vertex returned nothing (vertex-grounding); falling back to gateway
-[search] vertex returned nothing (vertex-grounding); falling back to gateway
-[find][query] 'site:www.edwards.com Tax Strategy and Policy Document' -> 5 hits via=vertex-grounding
-[find][query] 'site:www.edwards.com tax strategy and governance and Policy Document' -> 7 hits via=vertex-grounding
-[find][query] 'site:www.edwards.com tax policy and Policy Document' -> 9 hits via=vertex-grounding
-[find][query] 'site:www.edwards.com tax governance policy and Policy Document' -> 7 hits via=vertex-grounding
-[find][query] 'site:www.edwards.com transfer pricing policy and Policy Document' -> 6 hits via=vertex-grounding
-[find][query] 'site:www.edwards.com related party transaction policy and Policy Document' -> 5 hits via=vertex-grounding
-[find][query] 'site:www.edwards.com tax strategy OR tax policy OR tax governance policy OR transfer pricing policy OR related party transaction policy' -> 1 hits via=gateway(native-site)
-[find][query] 'site:investors.edwards.com tax strategy OR tax policy' -> 10 hits via=gateway(stripped-site)
-[find][query] 'site:sec.gov Edwards Lifesciences Corporation tax strategy' -> 3 hits via=vertex-grounding
-[find][query] 'site:www.edwards.com tax governance policy' -> 5 hits via=vertex-grounding
-[find][query] 'Edwards Lifesciences Corporation tax policy filetype:pdf' -> 5 hits via=vertex-grounding
-[find][query] 'site:sustainability.edwards.com tax strategy' -> 4 hits via=vertex-grounding
-[find][query] 'site:www.edwards.com transfer pricing policy' -> 4 hits via=vertex-grounding
-[find] dropped 1 junk-host candidate(s) (app store / media / social / aggregator subdomains — generic, not company-specific)
-[find] dropped 1 sample/template/specimen candidate(s) (not a real deliverable for any class)
-[find] dropped 1 wrong-class filename candidate(s) (e.g. DEFA14A/additional-proxy, near-neighbor documents) before LLM selection
-[find] domain_mode=soft(on_domain=4,off_domain_kept=50) | HEAD pre-filtering 10 candidates for: site:www.edwards.com Tax Strategy and Policy Document
-[find] 10/10 passed HEAD pre-filter
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=No exact Tax Strategy document found
-[sitemap] edwards.com: 2083 urls -> 744 candidates -> top 40
-[sitemap] inspected 11 landing page(s), discovered 0 linked document(s); 0 total document candidate(s)
-[deep-crawl] https://www.edwards.com/ (depth=0, page=1): 0 doc candidates
-[deep-crawl] https://www.edwards.com/legal/privacy-policy (depth=1, page=2): 0 doc candidates
-[deep-crawl] https://www.edwards.com/legal/consumer-health-data-privacy-policy (depth=1, page=3): 0 doc candidates
-[deep-crawl] https://www.edwards.com/legal/consumer-health-data-privacy-policy#changes (depth=2, page=4): 0 doc candidates
-[deep-crawl] https://www.edwards.com/legal/consumer-health-data-privacy-policy#nevada (depth=2, page=5): 0 doc candidates
-[browser] hover-reveal: harvested grew to 68 links after menu hover
-[browser] harvested 68 links: 0 doc-file candidates, 0 download-labeled controls (verify_budget=10, click_budget=10)
-[browser][nav] IR-prioritized frontier: 3/59 nav links (IR-nav first, query terms ['strategy', 'document'] secondary)
-[browser][nav] https://www.edwards.com/legal/privacy-policy: 1 doc candidates (depth=1, pages=1)
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Privacy Policy, not Tax Strategy document
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/1e1fabce-7dfe-4293-8ac0-4c44e1c65396/Privacy-Policy-jan-2026.pdf): Privacy Policy, not Tax Strategy document
-[browser][nav] https://www.edwards.com/compliance-toolkit-for-distributors: 0 doc candidates (depth=1, pages=2)
-[browser][nav] https://www.edwards.com/legal/consumer-health-data-privacy-policy: 0 doc candidates (depth=1, pages=3)
-[browser][nav] https://www.edwards.com/about-us/corporate-responsibility: 14 doc candidates (depth=2, pages=4)
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=No exact tax strategy policy found
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/dedfeb79-d21e-43e4-9d7f-f38d8686c0bd/edwards-lifesciences-unilateral-pro-innovation-policy-2026B.pdf): No exact tax strategy policy found
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is code of ethics, not tax strategy.
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/0f47de5e-2095-4d06-8c3d-dc082b4cffb7/Medical-Device-Code-of-Ethical-V6%20SAMED.pdf): Document is code of ethics, not tax strategy.
-[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not a tax strategy document
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/099b84b0-ba15-4ba0-97f6-9f0009288719/Third%20Party%20Code%20of%20Conduct%20-%20Feb%202025.pdf): Not a tax strategy document
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=PDF not a tax strategy document
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/d2644569-74ac-477c-abb3-064eb7526b04/English%20Titanium%20Book.pdf): PDF not a tax strategy document
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document unrelated, not Edwards Lifesciences
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/6d455498-4ad7-41ee-8123-0790031224c6/Vietnamese%20Titanium%20Book.pdf): Document unrelated, not Edwards Lifesciences
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No explicit tax strategy document found
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/419633b8-ed99-46e5-9f42-3e3f0e1c0c24/63177_2.pdf): No explicit tax strategy document found
-[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Document is a code of ethics, not tax strategy.
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/91ad64dd-5dc7-4e58-ae03-992a547a9dd3/codiceetico_eng.pdf): Document is a code of ethics, not tax strategy.
-[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Document unrelated to Edwards Lifesciences tax strategy.
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/a83d3c07-9e7d-4b85-82b4-ac741b35eeae/Chinese%20Titanium%20Book.pdf): Document unrelated to Edwards Lifesciences tax strategy.
-[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Document unrelated to tax strategy/policy
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/a07a1a24-e12a-4617-8220-d72645e7416d/French%20Titanium%20Book.pdf): Document unrelated to tax strategy/policy
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document unrelated to tax strategy/policy
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/7cbd85e9-2ecd-470b-8404-b06d27db0c89/Japanese%20Titanium%20Book.pdf): Document unrelated to tax strategy/policy
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document unrelated to tax strategy/policy
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/83fe6d0e-ac76-494e-814b-f0dae4cab62e/Portuguese%20Titanium%20Book.pdf): Document unrelated to tax strategy/policy
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document unrelated to tax strategy/policy
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/5b4591d7-0252-4d55-a686-821131710695/Spanish%20Titanium%20Book.pdf): Document unrelated to tax strategy/policy
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document unrelated to tax strategy, Korean titanium context
-[browser] candidate REJECTED by class check (https://assets-us-01.kc-usercontent.com/6239a81e-8f0f-0040-a1df-b4932a10f6ae/f3617432-efa7-4c2f-b1a1-4346d16a9393/Korean%20Titanium%20Book.pdf): Document unrelated to tax strategy, Korean titanium context
-[browser][nav] https://ir.edwards.com/overview/default.aspx: 3 doc candidates (depth=2, pages=5)
-[verify] STRICT reject (near-neighbor filename, no LLM): https://s27.q4cdn.com/788244549/files/doc_financials/2026/q1/EW-USQ_Transcript_2026-04-23.pdf
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No exact tax strategy document found
-[browser] candidate REJECTED by class check (https://s27.q4cdn.com/788244549/files/doc_financials/2026/q1/82aca192-08e6-4c1f-bd05-e2fe94e1fadd.pdf): No exact tax strategy document found
-[verify] STRICT reject (near-neighbor filename, no LLM): https://s27.q4cdn.com/788244549/files/doc_financials/2025/ar/2026-ASM-Transcript.pdf
-[browser][vision] model found no download control
-[browser] https://www.edwards.com/: no document resolved through any tier
-[result] NO DOCUMENT FOUND (failed closed): 'site:www.edwards.com Tax Strategy and Policy Document'
-{
-    "timestamp": "2026-07-19T16:53:34.763Z",
-    "level": "INFO",
-    "message": "Invocation completed successfully (152.762s)",
-    "logger": "bedrock_agentcore.app",
-    "requestId": "6c6183de-7261-4d24-a803-4a517bce30d3",
-    "sessionId": "0a5bcdee-5ccb-4077-ab5a-066f26016293"
+    "requestId": "72d36781-74c0-44f8-8004-152b57c473bc",
+    "sessionId": "5e4edea2-06a0-43e0-81b8-4b2117ba5630"
 }

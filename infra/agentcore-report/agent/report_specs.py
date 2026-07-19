@@ -27,7 +27,15 @@ Canonical class names MUST match the keys of _DOC_CLASS_RULES in agent.py.
 #    "EDGAR has no dedicated form for this class; only attempt full-text
 #    search when EDGAR_SUSTAINABILITY_FTS is enabled, otherwise fall through".
 _EDGAR_ANNUAL = ["10-K", "20-F", "10-K405", "10-KSB", "40-F"]
-_EDGAR_PROXY = ["DEF 14A", "DEFA14A", "DEFM14A"]
+# Proxy statement = the DEFINITIVE annual-meeting proxy only: DEF 14A.
+# DEFA14A ("additional definitive materials") is a short supplemental filing,
+# NOT the main proxy — including it caused the agent to grab the supplement
+# instead of the real proxy (observed on Intuit, DaVita, Cisco: "downloaded the
+# additional DEF, not the main proxy"). DEFM14A is a MERGER proxy, a different
+# document that could out-rank the annual proxy by recency. edgar_lookup matches
+# forms as a set and picks the most recent, so both are removed here rather than
+# merely deprioritized. Re-add DEFM14A only if merger proxies become in-scope.
+_EDGAR_PROXY = ["DEF 14A"]
 
 REPORT_SPECS: dict[str, dict] = {
     "annual report": {

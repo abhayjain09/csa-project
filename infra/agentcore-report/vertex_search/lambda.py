@@ -31,6 +31,7 @@ import concurrent.futures
 import json
 import os
 import threading
+import urllib.parse
 import urllib.request
 
 import boto3
@@ -91,10 +92,28 @@ def _vertex_grounded_search(query: str, project_id: str, token: str) -> dict:
 
 
 # ─── Redirect resolution (grounding chunks → real destination URLs) ──────────
+def _is_unresolved_redirect(url: str) -> bool:
+    """True while a URL is still a Vertex grounding redirect (not the real
+    destination). These 403 when the agent tries to fetch them, carry no real
+    domain for the agent's site-scoping, and only burn a candidate/sample slot
+    downstream — so a redirect that never resolved must be DROPPED, not returned."""
+    try:
+        host = urllib.parse.urlparse(url or "").netloc.lower()
+    except Exception:  # noqa: BLE001
+        return True
+    return host.endswith("vertexaisearch.cloud.google.com")
+
+
 def _resolve_one(item: tuple) -> dict | None:
     """item = (chunk_dict, snippet_text). Resolve the vertexaisearch redirect
-    to the real destination URL. Falls back to GET, then to the raw redirect
-    (the agent HEAD-checks everything downstream anyway)."""
+    to its REAL destination URL.
+
+    Previously this fell back to returning the raw redirect when both HEAD and
+    GET failed. That leaked unresolved vertexaisearch.cloud.google.com URLs to
+    the agent, which then 403 on fetch (confirmed in prod: a leaked redirect was
+    the only 'candidate' for an otherwise-findable document). We now DROP any
+    chunk we cannot resolve to a non-redirect destination — fail closed, exactly
+    like the agent does. Better to return one fewer candidate than a poisoned one."""
     chunk, snippet = item
     web = chunk.get("web", {}) if isinstance(chunk, dict) else {}
     redirect_uri = web.get("uri")
@@ -102,16 +121,25 @@ def _resolve_one(item: tuple) -> dict | None:
     if not redirect_uri:
         return None
 
-    real_url = redirect_uri
+    real_url = None
     for method in ("HEAD", "GET"):
         try:
             r = urllib.request.Request(
                 redirect_uri, method=method, headers={"User-Agent": UA})
             with urllib.request.urlopen(r, timeout=REDIRECT_TIMEOUT) as resp:  # noqa: S310
-                real_url = resp.geturl()
-            break
+                candidate = resp.geturl()
+            # geturl() can hand back the redirect unchanged (e.g. the endpoint
+            # answered without a Location, or bounced to itself). Only accept a
+            # URL that actually left the vertexaisearch redirect host.
+            if candidate and not _is_unresolved_redirect(candidate):
+                real_url = candidate
+                break
         except Exception:  # noqa: BLE001
             continue
+
+    if not real_url:
+        print(f"[vertex] dropping unresolved grounding redirect (title={title!r})")
+        return None
     return {"title": title, "url": real_url, "snippet": snippet or title}
 
 

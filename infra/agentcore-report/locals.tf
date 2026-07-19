@@ -51,6 +51,9 @@ locals {
     ENABLE_REGISTRY_TIER                    = "true"
     EDGAR_MAX_REQ_PER_SEC                   = "8"
     EDGAR_SUSTAINABILITY_FTS                = "false"
+    SEARCH_BACKEND                          = "vertex_lambda"
+    LAMBDA_SEARCH_FUNCTION                  = "edo-coanalyst-report-vertex-search"
+    VERTEX_FALLBACK_TO_GATEWAY              = "true" # optional safety net
     #SELECTION_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
   }
 }

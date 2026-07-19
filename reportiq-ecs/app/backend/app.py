@@ -1,6 +1,30 @@
 """
-Report IQ — Flask Backend
+Report IQ + PageIndex — Flask Backend
 Account: 610639371721  Region: us-east-1
+
+Report downloader endpoints:
+  POST   /api/queries                        Save and optionally trigger a download run
+  GET    /api/queries                        List all queries
+  POST   /api/queries/<query_id>/run         Trigger a specific query
+  GET    /api/runs                           List all download runs
+  GET    /api/runs/<run_id>                  Get a specific download run
+  POST   /api/runs/reconcile                 Manually reconcile stuck runs
+  GET    /api/sources                        List provenance records
+  GET    /api/sources/check-key             Check if S3 key exists
+  GET    /api/sources/download-url          Get presigned download URL
+  GET    /api/sources/list-s3               List S3 objects by prefix
+  POST   /api/sources/sync-from-s3          Sync provenance from S3
+  POST   /api/sources/upload                Manual file upload fallback
+  GET    /api/stats                         Table and S3 counts
+
+PageIndex endpoints:
+  POST   /api/pageindex                      Trigger a new indexing run
+  GET    /api/pageindex/runs                 List all indexing runs
+  GET    /api/pageindex/runs/<run_id>        Get status of a specific run
+
+Shared:
+  GET    /health                             Health check
+
 
 Patches in this revision (1–6, plus 7-8 below):
   1. company + run_id are now included in the AgentCore payload. Previously
@@ -68,6 +92,7 @@ Patches in this revision (1–6, plus 7-8 below):
 import os, json, uuid, re, threading, hashlib, logging, urllib.request, urllib.error
 import unicodedata
 from datetime import datetime, timezone, timedelta
+from pathlib import PurePosixPath
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
@@ -88,6 +113,13 @@ AGENT_RUNTIME_ARN = os.environ.get("AGENT_RUNTIME_ARN",
 AGENT_QUALIFIER   = os.environ.get("AGENT_QUALIFIER",    "DEFAULT")
 STATIC_DIR        = os.environ.get("STATIC_DIR",
     os.path.join(os.path.dirname(__file__), "..", "static"))
+
+# PageIndex runtime
+PAGEINDEX_RUNTIME_ARN = os.environ.get(
+    "PAGEINDEX_RUNTIME_ARN",
+    "arn:aws:bedrock-agentcore:us-east-1:610639371721:runtime/pageindex_runtime-rucFhA3V8V")
+PAGEINDEX_QUALIFIER   = os.environ.get("PAGEINDEX_QUALIFIER",   "DEFAULT")
+PAGEINDEX_RUNS_TABLE  = os.environ.get("PAGEINDEX_RUNS_TABLE",  "pageindex-runs")
 
 # Per-CHUNK read timeout. Each invoke carries only AGENT_CHUNK_SIZE web queries.
 # Raised 300s -> 600s after confirming via AWS docs that AgentCore's own
@@ -153,6 +185,73 @@ def get_s3():
         region_name=REGION,
         config=Config(signature_version="s3v4", s3={"addressing_style": "virtual"}),
     )
+
+def get_agentcore():
+    """AgentCore client with long read timeout — used by PageIndex invocations."""
+    return boto3.client(
+        "bedrock-agentcore",
+        region_name=REGION,
+        config=Config(read_timeout=900, connect_timeout=10, retries={"max_attempts": 0}),
+    )
+
+def _invoke_agentcore(runtime_arn: str, qualifier: str, payload_bytes: bytes) -> bytes:
+    """
+    Generic AgentCore invoke shared by report-downloader and PageIndex.
+    Uses native boto3 client; falls back to SigV4 HTTP only for a missing
+    service model (UnknownServiceError / AttributeError) — never on timeout,
+    to avoid the double-invoke bug.
+    """
+    try:
+        client = get_agentcore()
+        resp = client.invoke_agent_runtime(
+            agentRuntimeArn = runtime_arn,
+            qualifier       = qualifier,
+            payload         = payload_bytes,
+            contentType     = "application/json",
+            accept          = "application/json",
+        )
+        body = resp.get("response") or resp.get("body") or resp.get("payload")
+        if body is None:
+            return b""
+        if hasattr(body, "read"):
+            return body.read()
+        if isinstance(body, (bytes, bytearray)):
+            return bytes(body)
+        raw = b""
+        for chunk in body:
+            raw += chunk if isinstance(chunk, (bytes, bytearray)) else chunk.get("chunk", b"")
+        return raw
+    except (UnknownServiceError, AttributeError) as e:
+        log.warning("[agentcore] service model missing (%s) — using SigV4 HTTP fallback", e)
+        return _invoke_agentcore_sigv4_generic(runtime_arn, qualifier, payload_bytes)
+
+def _invoke_agentcore_sigv4_generic(runtime_arn: str, qualifier: str, payload_bytes: bytes) -> bytes:
+    """Raw SigV4 HTTP fallback for any runtime ARN."""
+    import urllib.parse
+    runtime_arn_encoded = urllib.parse.quote(runtime_arn, safe="")
+    url = (
+        f"https://bedrock-agentcore.{REGION}.amazonaws.com"
+        f"/runtimes/{runtime_arn_encoded}/invocations"
+        f"?qualifier={qualifier}"
+    )
+    session = boto3.session.Session()
+    creds   = session.get_credentials().get_frozen_credentials()
+    aws_request = botocore.awsrequest.AWSRequest(
+        method="POST", url=url, data=payload_bytes,
+        headers={"Content-Type": "application/json", "Accept": "application/json"},
+    )
+    botocore.auth.SigV4Auth(creds, "bedrock-agentcore", REGION).add_auth(aws_request)
+    prepped = aws_request.prepare()
+    req = urllib.request.Request(
+        url=prepped.url, data=payload_bytes,
+        headers=dict(prepped.headers), method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=900) as resp:
+            return resp.read()
+    except urllib.error.HTTPError as e:
+        body = e.read()
+        raise RuntimeError(f"AgentCore HTTP {e.code}: {body.decode('utf-8', errors='replace')}")
 
 # ─── Company slug (MUST match agent._slug so S3 keys / provenance line up) ─────
 def _agent_slug(name: str) -> str:
@@ -1790,6 +1889,368 @@ def _do_invoke_inner(run_id: str, query_record: dict):
 
     log.info("[run %s] Done. status=%s downloaded=%d failures=%d chunks=%d",
              run_id[:8], final_status, len(downloaded), len(all_failures), chunks_total)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PageIndex — S3 / index helpers
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _parse_s3_prefix(raw: str) -> tuple:
+    """Return (bucket, prefix) from a bare prefix or full s3:// URI."""
+    raw = raw.strip()
+    if raw.startswith("s3://"):
+        without_scheme = raw[5:]
+        bucket, _, prefix = without_scheme.partition("/")
+        prefix = prefix.lstrip("/")
+    else:
+        bucket = REPORTS_BUCKET
+        prefix = raw.lstrip("/")
+    if prefix and not prefix.endswith("/"):
+        prefix += "/"
+    return bucket, prefix
+
+
+def _list_pdfs_by_prefix(prefix: str, bucket: str, s3) -> list:
+    """List all PDFs under an exact S3 prefix."""
+    log.info("[pageindex][s3] listing PDFs — bucket=%r prefix=%r", bucket, prefix)
+    results = []
+    paginator = s3.get_paginator("list_objects_v2")
+    try:
+        for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+            for obj in page.get("Contents", []):
+                key: str = obj["Key"]
+                if not key.lower().endswith(".pdf"):
+                    continue
+                results.append({
+                    "s3_key":        key,
+                    "size":          obj["Size"],
+                    "last_modified": obj["LastModified"].isoformat(),
+                })
+    except ClientError as exc:
+        log.error("[pageindex][s3] list error for prefix %r: %s", prefix, exc)
+    log.info("[pageindex][s3] found %d PDF(s)", len(results))
+    return results
+
+
+def _list_pdfs_for_company_pi(company: str, s3) -> tuple:
+    """Try all prefix variants — returns (pdf_list, matched_prefix)."""
+    prefixes = _company_prefix_variants(company)
+    log.info("[pageindex][s3] company=%r trying prefixes: %s", company, prefixes)
+    seen: set = set()
+    results   = []
+    matched_prefix = prefixes[0]
+    paginator = s3.get_paginator("list_objects_v2")
+    for prefix in prefixes:
+        prefix_results = []
+        try:
+            for page in paginator.paginate(Bucket=REPORTS_BUCKET, Prefix=prefix):
+                for obj in page.get("Contents", []):
+                    key: str = obj["Key"]
+                    if key in seen or not key.lower().endswith(".pdf"):
+                        continue
+                    seen.add(key)
+                    prefix_results.append({
+                        "s3_key":        key,
+                        "size":          obj["Size"],
+                        "last_modified": obj["LastModified"].isoformat(),
+                    })
+        except ClientError as exc:
+            log.warning("[pageindex][s3] list error for prefix %r: %s", prefix, exc)
+        if prefix_results and not results:
+            matched_prefix = prefix
+        results.extend(prefix_results)
+    log.info("[pageindex][s3] found %d PDF(s) for company=%r under prefix=%r",
+             len(results), company, matched_prefix)
+    return results, matched_prefix
+
+
+def _pageindex_s3_key(prefix: str, slug: str) -> str:
+    return f"{prefix}{slug}_pageindex.json"
+
+
+def _load_existing_index(bucket: str, s3_key: str, s3) -> dict:
+    try:
+        obj = s3.get_object(Bucket=bucket, Key=s3_key)
+        return json.loads(obj["Body"].read().decode("utf-8"))
+    except ClientError as exc:
+        if exc.response["Error"]["Code"] in ("NoSuchKey", "404"):
+            return {}
+        raise
+
+
+def _save_pageindex(bucket: str, s3_key: str, data: dict, s3):
+    body = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
+    s3.put_object(Bucket=bucket, Key=s3_key, Body=body, ContentType="application/json")
+    log.info("[pageindex][s3] saved -> s3://%s/%s (%d doc(s))",
+             bucket, s3_key, len(data.get("documents", [])))
+
+
+def _invoke_pageindex_runtime(bucket: str, s3_key: str, label: str) -> dict:
+    """Invoke the PageIndex AgentCore runtime for a single PDF."""
+    payload_bytes = json.dumps({
+        "bucket": bucket,
+        "s3_key": s3_key,
+        "label":  label,
+    }).encode("utf-8")
+    log.info("[pageindex][agentcore] invoking runtime for %s ...", label)
+    raw = _invoke_agentcore(PAGEINDEX_RUNTIME_ARN, PAGEINDEX_QUALIFIER, payload_bytes)
+    if not raw:
+        raise RuntimeError("Empty response from PageIndex runtime")
+    result = json.loads(raw.decode("utf-8"))
+    if result.get("status") != "ok":
+        raise RuntimeError(f"Runtime returned error: {result.get('error')}")
+    log.info("[pageindex][agentcore] completed for %s", label)
+    return result["index"]
+
+
+def _write_run_status(run_id: str, update: dict, dynamo=None):
+    """Generic DynamoDB updater for pageindex-runs. Never raises."""
+    if dynamo is None:
+        dynamo = get_dynamo()
+    try:
+        expr_names  = {}
+        expr_values = {}
+        set_parts   = []
+        for k, v in update.items():
+            safe_key = f"#f_{k}"
+            val_key  = f":v_{k}"
+            expr_names[safe_key]  = k
+            expr_values[val_key]  = v
+            set_parts.append(f"{safe_key} = {val_key}")
+        dynamo.Table(PAGEINDEX_RUNS_TABLE).update_item(
+            Key={"run_id": run_id},
+            UpdateExpression="SET " + ", ".join(set_parts),
+            ExpressionAttributeNames=expr_names,
+            ExpressionAttributeValues=expr_values,
+        )
+    except Exception as ex:
+        log.error("[pageindex][run %s] DynamoDB write failed: %s", run_id[:8], ex)
+
+
+def _update_provenance_rag_status(company: str, s3_key: str, status: str, dynamo=None):
+    """
+    Update rag_status on a provenance record.
+    status: 'Indexed' | 'Failed' | 'Pending'
+    Silently skips if the record doesn't exist.
+    Never raises.
+    """
+    if dynamo is None:
+        dynamo = get_dynamo()
+    try:
+        dynamo.Table(PROVENANCE_TABLE).update_item(
+            Key={"company": company, "s3_key": s3_key},
+            UpdateExpression="SET rag_status = :s, indexed_at = :t",
+            ExpressionAttributeValues={
+                ":s": status,
+                ":t": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+        log.info("[provenance] rag_status=%s  %s / %s", status, company, s3_key)
+    except Exception as ex:
+        log.warning("[provenance] update skipped for %s / %s: %s", company, s3_key, ex)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PageIndex — async worker
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _async_pageindex(company: str, s3_prefix: str, force: bool) -> str:
+    run_id  = str(uuid.uuid4())
+    now_iso = datetime.now(timezone.utc).isoformat()
+    try:
+        get_dynamo().Table(PAGEINDEX_RUNS_TABLE).put_item(Item={
+            "run_id":    run_id,
+            "company":   company or s3_prefix or "unknown",
+            "s3_prefix": s3_prefix or "",
+            "status":    "pending",
+            "started_at": now_iso,
+            "force":     force,
+        })
+    except Exception as ex:
+        log.error("[pageindex][run %s] Initial DynamoDB write failed: %s", run_id[:8], ex)
+    t = threading.Thread(
+        target=_do_pageindex, args=(run_id, company, s3_prefix, force), daemon=True)
+    t.start()
+    return run_id
+
+
+def _do_pageindex(run_id: str, company: str, s3_prefix: str, force: bool):
+    try:
+        _do_pageindex_inner(run_id, company, s3_prefix, force)
+    except Exception as e:
+        log.error("[pageindex][run %s] FATAL: %s", run_id[:8], e)
+        try:
+            _write_run_status(run_id, {
+                "status":      "failed",
+                "finished_at": datetime.now(timezone.utc).isoformat(),
+                "error_msg":   str(e)[:1000],
+            })
+        except Exception as ex2:
+            log.error("[pageindex][run %s] Could not write fatal status: %s", run_id[:8], ex2)
+
+
+def _do_pageindex_inner(run_id: str, company: str, s3_prefix: str, force: bool):
+    s3      = get_s3()
+    dynamo  = get_dynamo()
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    if s3_prefix:
+        resolved_bucket, resolved_prefix = _parse_s3_prefix(s3_prefix)
+        slug            = resolved_prefix.strip("/").split("/")[0] or _agent_slug(company or "unknown")
+        display_company = company or slug
+        pdfs            = _list_pdfs_by_prefix(resolved_prefix, resolved_bucket, s3)
+    else:
+        display_company = company.strip()
+        slug            = _agent_slug(display_company)
+        resolved_bucket = REPORTS_BUCKET
+        pdfs, resolved_prefix = _list_pdfs_for_company_pi(display_company, s3)
+
+    pageindex_key    = _pageindex_s3_key(resolved_prefix, slug)
+    pageindex_s3_uri = f"s3://{resolved_bucket}/{pageindex_key}"
+
+    _write_run_status(run_id, {
+        "status":           "running",
+        "company":          display_company,
+        "slug":             slug,
+        "s3_prefix":        resolved_prefix,
+        "pageindex_s3_uri": pageindex_s3_uri,
+        "started_at":       now_iso,
+    }, dynamo)
+
+    if not pdfs:
+        log.warning("[pageindex][run %s] No PDFs found for company=%r", run_id[:8], display_company)
+        _write_run_status(run_id, {
+            "status":      "no_results",
+            "finished_at": datetime.now(timezone.utc).isoformat(),
+            "error_msg":   f"No PDFs found under prefix {resolved_prefix}",
+            "indexed":     json.dumps([]),
+            "skipped":     json.dumps([]),
+        }, dynamo)
+        return
+
+    existing        = {} if force else _load_existing_index(resolved_bucket, pageindex_key, s3)
+    already_indexed = {doc["_meta"]["s3_key"] for doc in existing.get("documents", [])}
+    documents       = list(existing.get("documents", []))
+    indexed         = []
+    skipped         = []
+    error_msg       = None
+
+    for pdf_meta in pdfs:
+        s3_key   = pdf_meta["s3_key"]
+        doc_name = PurePosixPath(s3_key).name
+
+        if s3_key in already_indexed:
+            log.info("[pageindex][run %s] skipping %s — already indexed", run_id[:8], s3_key)
+            skipped.append({"s3_key": s3_key, "reason": "already_indexed"})
+            continue
+
+        try:
+            index_data = _invoke_pageindex_runtime(resolved_bucket, s3_key, doc_name)
+        except RuntimeError as exc:
+            log.error("[pageindex][run %s] runtime failed for %s: %s", run_id[:8], s3_key, exc)
+            skipped.append({"s3_key": s3_key, "reason": str(exc)})
+            error_msg = str(exc)
+            _update_provenance_rag_status(display_company, s3_key, "Failed", dynamo)
+            continue
+
+        document = {
+            "doc_name":  index_data.get("doc_name", doc_name),
+            "structure": index_data.get("structure", []),
+            "_meta": {
+                "s3_key":     s3_key,
+                "s3_uri":     f"s3://{resolved_bucket}/{s3_key}",
+                "indexed_at": datetime.now(timezone.utc).isoformat(),
+            },
+        }
+        documents.append(document)
+        indexed.append({"s3_key": s3_key})
+
+        # Mark as Indexed in provenance so UI badge updates immediately
+        _update_provenance_rag_status(display_company, s3_key, "Indexed", dynamo)
+
+        # Save to S3 after every document — progress never lost on failure
+        _save_pageindex(resolved_bucket, pageindex_key, {
+            "company":      display_company,
+            "company_slug": slug,
+            "bucket":       resolved_bucket,
+            "updated_at":   datetime.now(timezone.utc).isoformat(),
+            "documents":    documents,
+        }, s3)
+
+        _write_run_status(run_id, {
+            "indexed": json.dumps(indexed),
+            "skipped": json.dumps(skipped),
+        }, dynamo)
+
+    if indexed:
+        final_status = "complete"
+    elif error_msg and not skipped:
+        final_status = "failed"
+    elif not indexed and not skipped:
+        final_status = "no_results"
+    else:
+        final_status = "complete"
+
+    _write_run_status(run_id, {
+        "status":           final_status,
+        "finished_at":      datetime.now(timezone.utc).isoformat(),
+        "indexed":          json.dumps(indexed),
+        "skipped":          json.dumps(skipped),
+        "pageindex_s3_uri": pageindex_s3_uri,
+        "error_msg":        error_msg or "",
+    }, dynamo)
+
+    log.info("[pageindex][run %s] Done. status=%s indexed=%d skipped=%d pageindex=%s",
+             run_id[:8], final_status, len(indexed), len(skipped), pageindex_s3_uri)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PageIndex — routes
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/api/pageindex", methods=["POST"])
+def trigger_pageindex():
+    body = request.get_json(force=True, silent=True)
+    if not body:
+        return jsonify({"error": "Invalid JSON body"}), 400
+    company   = (body.get("company")   or "").strip()
+    s3_prefix = (body.get("s3_prefix") or "").strip()
+    force     = bool(body.get("force", False))
+    if not company and not s3_prefix:
+        return jsonify({"error": "Either 'company' or 's3_prefix' is required"}), 400
+    run_id = _async_pageindex(company, s3_prefix, force)
+    log.info("[pageindex][api] triggered run=%s company=%r s3_prefix=%r force=%s",
+             run_id[:8], company, s3_prefix, force)
+    return jsonify({
+        "run_id":    run_id,
+        "status":    "triggered",
+        "company":   company or s3_prefix,
+        "s3_prefix": s3_prefix,
+        "force":     force,
+    }), 202
+
+
+@app.route("/api/pageindex/runs", methods=["GET"])
+def list_pageindex_runs():
+    dynamo = get_dynamo()
+    table  = dynamo.Table(PAGEINDEX_RUNS_TABLE)
+    result = table.scan()
+    items  = result.get("Items", [])
+    while "LastEvaluatedKey" in result:
+        result = table.scan(ExclusiveStartKey=result["LastEvaluatedKey"])
+        items += result.get("Items", [])
+    items = sorted(items, key=lambda x: x.get("started_at", ""), reverse=True)
+    return jsonify(items)
+
+
+@app.route("/api/pageindex/runs/<run_id>", methods=["GET"])
+def get_pageindex_run(run_id):
+    dynamo = get_dynamo()
+    resp   = dynamo.Table(PAGEINDEX_RUNS_TABLE).get_item(Key={"run_id": run_id})
+    item   = resp.get("Item")
+    if not item:
+        return jsonify({"error": "Run not found"}), 404
+    return jsonify(item)
 
 
 # ─── Health ───────────────────────────────────────────────────────────────────

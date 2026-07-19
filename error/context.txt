@@ -1,0 +1,63 @@
+# Context Summary — Report IQ / EDO Co-Analyst Download Agent
+
+## System overview
+An AWS Bedrock AgentCore agent (`edo_coanalyst_report`, account 610639371721, us-east-1) that discovers, verifies, and stores official company compliance documents (annual reports, sustainability/ESG, proxy statements, codes of conduct, policies, etc.) into S3, feeding a downstream RAG/Q&A layer. Fail-closed by design: "an honest miss beats a wrong store." Five-tier resolver — Vertex/Gateway search → EDGAR/Companies House registry → sitemap → deep static crawl → AgentCore browser. Files: `agent.py` (~3,830 lines), `report_specs.py`, `registry_tier.py`, `lambda.py` (isolated Vertex search).
+
+## What we diagnosed
+
+**Accuracy (from your test workbook, 7 companies, 160 cells):** overall accuracy 46%, precision 35%, recall 49%. Precision is the problem — when it stores, it's wrong ~2/3 of the time. Two systemic bugs drove ~56% of all false positives: (1) one document mapped to many question classes (Ball — 18 FP), and (2) whole-company mis-resolution (Edwards — 0 TP / 13 FP, all wrong company). Plus recency misses (older SR fetched), proxy picking DEFA14A, off-domain generic docs accepted (RBA code as Jabil's), and HTML-only policies uncaptured.
+
+**Vertex:** confirmed live and working (`via=vertex-grounding`, Lambda returning chunks), with correct gateway fallback. Earlier it was dormant until `SEARCH_BACKEND`/`LAMBDA_SEARCH_FUNCTION` env vars were added.
+
+**S&P Global specifically:** fails because **every fetch to spglobal.com returns 403 at the WAF** (`access denied`, `harvested 0 links`). Search finds the right PDFs (confirmed — the real TCFD report was found), but the agent can't fetch a byte, so it fails closed. **This is infrastructure, not code** — the only fix is a WAF allowlist from askdevopscloud (runtime egress IPs or the `EDO-CoAnalyst` UA). No code change addresses it.
+
+## Code changes made (delivered, compiled, logic-tested)
+
+Across several rounds I edited `agent.py`, `lambda.py`, `report_specs.py` (`registry_tier.py` unchanged but included for a matching set):
+
+1. **Vertex redirect leak** — `lambda.py` now drops grounding chunks it can't resolve to a real destination instead of returning the raw `vertexaisearch...` redirect (which 403'd); `agent.py` has a defensive guard for any that leak through.
+2. **Proxy = DEF 14A only** — removed DEFA14A/DEFM14A from EDGAR forms; added filename rejection for DEFA14A / additional / preliminary / soliciting variants in the search path; penalized them in ranking. Tested: variants rejected, DEF 14A kept.
+3. **Sample/template reject** — universal `_is_sample_or_template()` blocks specimens (fixed the "Sample Report" false store); wired into search + all verify tiers.
+4. **`.html` mislabeling** — `_safe_name` now names extension-less URLs by content-type (real PDF → `.pdf`, not `.html`).
+5. **Excel support** — added `.xlsx/.xls/.xlsm` to `_DOC_EXTS` (was a real bug: ESG workbooks weren't even recognized as candidates).
+6. **Search-path filename rejection** — the Tier-1 search path previously had no filename class-check; now applies the same strict reject as other tiers.
+
+## Open items (NOT fixed, and why)
+
+- **S&P WAF** — needs the allowlist ticket. Blocking action, not code. Unknown if submitted.
+- **Mapping (one doc → all questions)** — lives in the downstream retrieval layer `app.py`, which I don't have. This is your highest-value remaining accuracy fix. **Upload `app.py` and I'll patch the fan-out.**
+- **Wrong-company mapping (Edwards)** — company-gate hardening, needs more investigation.
+
+## Recommended next actions
+1. Submit the WAF allowlist request (unblocks S&P).
+2. Test Cisco or CBRE (non-WAF'd) to confirm the agent downloads end-to-end after this deploy — isolates "agent works" from "S&P blocked."
+3. Upload `app.py` for the mapping fix.
+4. After deploy, confirm the new log lines (`dropped … wrong-class filename`, sample drops, Excel recognition) before trusting the changes.
+
+One caveat throughout: I can't runtime-test against AWS or reach the web from here, so all changes are statically verified (compile + isolated logic tests) but need one live run to confirm.
+
+
+Here's how a single document request flows through the resolver tiers, start to finish, based on the orchestrator in `agent.py` (`_invoke_sync`).
+
+## Before the tiers: query preparation
+The payload arrives either as a structured `reports[]` list or legacy `web_query<N>` fields. For each report the agent builds a query, then `_prepare_query` runs: resolve relative years, clean markdown/brackets, and an LLM rewrite into one focused search string. `_apply_latest_completed_fiscal_year` injects the latest completed FY for recurring classes (annual report) when no year is given. A per-query budget (`_QueryBudget`) is created — a shared verify counter and wall-clock deadline threaded through every tier, so the whole chain stops when exhausted. The document class is matched (`_matched_doc_classes`), which drives aliases, validation contracts, and registry routing.
+
+## Tier 1 — Web search (Vertex grounded, Gateway fallback)
+The primary query is fanned out into variants: regional aliases (`_alias_queries`) plus LLM-generated variants (`_llm_generate_search_queries`) — site-scoped, unscoped, IR-subdomain, and registry-scoped forms. These run in parallel (`_parallel_web_search`). Each query hits the **Vertex Lambda** (`SEARCH_BACKEND=vertex_lambda`); if Vertex returns nothing and fallback is on, it drops to the **AgentCore Gateway** managed WebSearch. Results merge/dedupe by URL, then get filtered (junk hosts, sample/template, and — new — wrong-class filenames like DEFA14A), ranked, HEAD-pre-filtered, sampled, and passed to one grouped fail-closed LLM selection (`_llm_select_best` + `_confident`). If a confident doc-file is selected it's committed at `stage=search`; if the pick is an HTML landing page, `_resolve_from_html` digs the linked document out.
+
+## Tier 2 — Official registry (EDGAR + Companies House)
+If Tier 1 finds nothing, and the class has a registry mapping in `report_specs`, `registry_tier.registry_resolve` runs. EDGAR serves annual reports (10-K/20-F/40-F) and proxy statements (**DEF 14A only** now); Companies House serves UK annual accounts. Jurisdiction orders which registry is tried first. Deterministic hits (CIK + form-type match) skip the LLM verifier entirely; non-deterministic hits still pass the same fail-closed check. This tier is important because **it isn't WAF-blocked** — it's the off-site path for annual/proxy even when a company's own domain blocks fetches.
+
+## Tier 3a — Sitemap enumeration
+Still nothing → `_sitemap_resolve` pulls robots.txt/sitemaps for the domain, scores likely report/policy hub pages, fetches a bounded set of landing pages, extracts document links from them, and class-verifies each (most-recent-year preferred).
+
+## Tier 3b — Deep static crawl
+`_deep_static_crawl` recursively fetches same-domain HTML from the site root, regex-harvests document links per page, and verifies each. For filing classes (annual/proxy/remuneration) the **browser tier is tried before this** (browser-first), since JS-heavy IR pages resolve better and cheaper.
+
+## Tier 4 — AgentCore Browser (Playwright)
+Last resort for JS-heavy sites: navigates the root, dismisses cookie modals, harvests links (including hover-revealed menus), fetches candidates in-session, falls back to click-to-download, then IR-prioritized deep navigation, then optional vision-guided click. Detects WAF/bot-challenge pages (`block_marker=access denied`) and skips clicking when blocked — which is exactly where S&P dies.
+
+## Termination
+The first tier to produce a **class-verified** document commits it (`_store`: content-hash S3 key, `.metadata.json` sidecar with `doc_class`, provenance row). If every tier fails or the budget is exhausted, it returns `NO DOCUMENT FOUND (failed closed)` — no guessing.
+
+Every tier shares one verifier (`_llm_select_best`/`_confident`) and one budget, so the chain is fail-closed and bounded end to end. The one thing this flow can't survive is a fetch-layer block (the S&P WAF): search finds the doc, but every tier that must *fetch* it 403s, so it correctly ends in a closed miss.

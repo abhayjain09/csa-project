@@ -1,0 +1,60 @@
+Now I have the full structure. Let me pull complete metrics + notes across every sheet.This is a full re-analysis with every note captured. Here's the complete summary.
+
+# Excel Test Results — Full Summary
+
+**Structure:** 3 sheets of testing setup (`Testing companies` — 30 companies targeted; `Matrix` — TP/FP/FN/TN definitions) + 7 per-company grading sheets (CBRE, Edwards Lifesciences, Intuit, DaVita, Freeport-McMoRan, Ball, Cisco), each scoring ~23 document classes (Annual Report, Sustainability Report, Code of Conduct, proxy, and 15+ policy/report types) as TP / FP / FN / TN with human notes.
+
+## Overall scorecard (160 graded rows)
+
+| | TP | FP | FN | TN |
+|---|---|---|---|---|
+| **Count** | 30 | 55 | 31 | 44 |
+
+**Accuracy 46.2% · Precision 35.3% · Recall 49.2% · F1 41.1%**
+
+Precision is the real problem: when the agent stores something, it's wrong roughly 2 out of 3 times.
+
+## Per-company breakdown
+
+| Company | TP | FP | FN | TN | Acc | Prec | Recall |
+|---|---|---|---|---|---|---|---|
+| CBRE | 5 | 5 | 5 | 7 | 55% | 50% | 50% |
+| Edwards Lifesciences | 0 | 13 | 4 | 6 | 26% | 0% | 0% |
+| Intuit | 0 | 3 | 3 | 17 | 74% | – | – |
+| DaVita | 8 | 7 | 4 | 4 | 52% | 53% | 67% |
+| Freeport-McMoRan | 6 | 8 | 9 | 0 | 26% | 43% | 40% |
+| Ball | 5 | 18 | 0 | 0 | 22% | 22% | 100% |
+| Cisco | 6 | 1 | 6 | 10 | 70% | 86% | 50% |
+
+Cisco is your best performer (clean precision, few false stores). Ball and Freeport are the worst — both driven almost entirely by one root cause below. Edwards is a total failure — zero correct answers.
+
+## Root causes, ranked by note frequency
+
+**1. One document mapped to every question (biggest single driver — Ball).** Every Ball FP note is identical: *"Corporate Income Tax Report has been downloaded and mapped in S3 for all the questions."* Summary row: *"Facing the issue mainly mapping of the same document to multiple questions."* This is a downstream retrieval/mapping bug (`app.py`, not yet reviewed) — one stored doc is answering every question class because retrieval isn't filtering by `doc_class`. Accounts for essentially all 18 Ball FPs.
+
+**2. Wrong-company mapping (Edwards — total failure).** Every FP: *"Mapped to a wrong company."* 0/23 correct. "Edwards" is a common/collision name; the company-identity gate isn't catching cross-company contamination here.
+
+**3. Proxy statement grabs the wrong SEC form (Intuit, DaVita, Cisco — all confirmed by name).** Intuit: *"should be getting DEF... instead downloading the Additional DEF."* DaVita: *"downloading 3 pages additional one but not the main document."* Cisco: *"downloaded in additional Proxy not the original one."* This is the DEFA14A-vs-DEF14A bug — three independent companies confirm the exact same failure mode. (Already patched in `report_specs.py`/`agent.py` in this session; not yet re-tested against this sheet.)
+
+**4. Freeport-McMoRan — same one-doc-to-many-questions bug as Ball**, just phrased differently: *"wrong document has been mapped in the S3 document for all the document"* repeated across Code of Conduct, Anti-Corruption, Insider Trading, Discrimination, H&S, Human Rights. Same root cause as #1, different company.
+
+**5. Recency misses.** CBRE Sustainability Report: *"Latest document was not downloaded."* Freeport Sustainability: *"Available but downloaded the random documents."*
+
+**6. Ball's Sustainability/Annual Report is a merged document.** *"Company has both AR and SR in a single document but some document has been downloaded"* — a structural edge case (combined filing) the class-verifier isn't handling.
+
+**7. Intuit's high accuracy is largely TN, not real capture.** 10 of its 17 TNs share one note: *"policy information is on the website"* — i.e., the agent correctly stores nothing because there's no PDF, but the actual policy content exists as HTML and isn't being captured. Inflates the accuracy number without reflecting real coverage.
+
+## Doc-class error hotspots (worst across all companies)
+
+| Class | Errors | Pattern |
+|---|---|---|
+| Remuneration Report | 6 | 6 FP |
+| Proxy Statement | 6 | 5 FN (the DEFA14A bug, cross-company) |
+| Tax Strategy / Policy | 5 | mixed |
+| Sustainability Report | 5 | 4 FN (recency/random doc) |
+| Supplier Code of Conduct | 5 | mixed |
+| Human Rights Policy | 5 | 4 FN |
+| Conflicts of Interest Policy | 5 | 5 FP |
+
+## Bottom line
+Two bugs — **doc-class-unfiltered retrieval** (Ball, Freeport) and **wrong-company mapping** (Edwards) — account for the overwhelming majority of your 55 false positives and are the highest-leverage fixes. The **proxy DEFA14A issue is independently confirmed by three companies** in this exact sheet, which is good corroboration for the fix already applied. The mapping/retrieval bug is still open and lives in `app.py`, which I don't have — that's the single biggest lever left to pull. Recency (latest-year targeting) and the Intuit HTML-policy gap are secondary but real coverage gaps.

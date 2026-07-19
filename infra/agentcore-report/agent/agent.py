@@ -1146,7 +1146,11 @@ def _apply_latest_completed_fiscal_year(query: str,
 
 
 # ─── HEAD pre-filter ─────────────────────────────────────────────────────────
-_DOC_EXTS = (".pdf", ".doc", ".docx", ".rtf")
+# Excel (.xlsx/.xls/.xlsm) is a first-class report format here: many companies
+# publish ESG / emissions data as workbooks, not PDFs. _is_doc_url and every
+# downstream fetch/HEAD/safety check key off this tuple, so an omitted extension
+# means those documents are never even recognized as candidates.
+_DOC_EXTS = (".pdf", ".doc", ".docx", ".rtf", ".xlsx", ".xls", ".xlsm")
 
 
 def _head_check(url: str) -> dict:
@@ -1368,15 +1372,26 @@ def _vertex_lambda_search(query: str, limit: int) -> tuple[list[dict], str]:
 
     raw = body.get("results", []) if isinstance(body, dict) else []
     out, seen = [], set()
+    _dropped_redirects = 0
     for it in raw:
         if not isinstance(it, dict):
             continue
         u = it.get("url") or ""
         if not u or u in seen:
             continue
+        # Defensive guard (belt-and-suspenders; the Lambda should already drop
+        # these). An unresolved Vertex grounding redirect 403s on fetch, has no
+        # real domain for site-scoping, and only burns a HEAD/sample slot — so
+        # it must never enter the candidate pool.
+        if urlparse(u).netloc.lower().endswith("vertexaisearch.cloud.google.com"):
+            _dropped_redirects += 1
+            continue
         seen.add(u)
         out.append({"title": it.get("title", ""), "url": u,
                     "snippet": it.get("snippet", "")})
+    if _dropped_redirects:
+        print(f"[vertex-lambda] dropped {_dropped_redirects} unresolved "
+              f"grounding-redirect URL(s) that leaked from the Lambda")
     via = body.get("via", "vertex-lambda") if isinstance(body, dict) else "vertex-lambda"
     return out, via
 
@@ -1579,9 +1594,29 @@ def _doc_links(html: bytes, base_url: str, domain: str,
     return out
 
 
-def _safe_name(url: str) -> str:
-    p = urlparse(url).path.rsplit("/", 1)[-1] or "document"
-    return p if "." in p else p + ".html"
+_CTYPE_EXT = (
+    ("pdf", ".pdf"),
+    ("officedocument.wordprocessingml", ".docx"),
+    ("msword", ".doc"),
+    ("officedocument.spreadsheetml", ".xlsx"),
+    ("ms-excel", ".xls"),
+    ("rtf", ".rtf"),
+)
+
+
+def _safe_name(url: str, ctype: str = "") -> str:
+    p = unquote(urlparse(url).path).rsplit("/", 1)[-1] or "document"
+    if p.lower().endswith(_DOC_EXTS) or p.lower().endswith((".htm", ".html")):
+        return p
+    # No usable extension on the URL path (e.g. '...report2025pdf' with a
+    # missing dot, or an extensionless CDN key). Name by the CONTENT-TYPE of
+    # what was actually fetched instead of blindly appending .html — that
+    # mislabeled a real PDF served without an extension.
+    c = (ctype or "").lower()
+    for needle, ext in _CTYPE_EXT:
+        if needle in c:
+            return p + ext
+    return p + (".html" if ("html" in c or not c) else ".bin")
 
 
 def _site_root(query: str) -> str | None:
@@ -1719,7 +1754,42 @@ _STRICT_REJECT_CLASSES = {
     ).split(",") if c.strip()
 }
 
+# Universal rejects: a sample / template / specimen / example / mock document is
+# never the real deliverable for ANY class (observed in prod: an "Impact Report"
+# query stored 'Board Sustainability Engagement Report_Sample Report 2025' — a
+# specimen, accepted on filename alone). These are matched regardless of class,
+# unlike _WRONG_CLASS_FILENAME_MARKERS which only apply to _STRICT_REJECT_CLASSES.
+_SAMPLE_TEMPLATE_MARKERS = tuple(
+    m.strip().lower() for m in os.environ.get(
+        "SAMPLE_TEMPLATE_MARKERS",
+        "sample report,sample_report,sample-report,_sample_,-sample-,"
+        " sample ,specimen,template,-example-,_example_,dummy-,-dummy,"
+        "mock-report,placeholder,do-not-use,for-illustration",
+    ).split(",") if m.strip()
+)
+
+
+def _is_sample_or_template(url: str) -> bool:
+    """True if a candidate's filename marks it as a sample/template/specimen —
+    invalid for every document class. Runs before any LLM verify (no model call),
+    like the press-release filter."""
+    try:
+        name = unquote(urlparse(url or "").path).rsplit("/", 1)[-1].lower()
+    except Exception:  # noqa: BLE001
+        name = (url or "").lower()
+    return any(marker and marker in name for marker in _SAMPLE_TEMPLATE_MARKERS)
+
 _CLASS_SCOPED_WRONG_MARKERS: dict[str, tuple[str, ...]] = {
+    "proxy statement": (
+        # Only the DEFINITIVE annual-meeting proxy (DEF 14A) is wanted. These
+        # are the wrong SEC proxy variants the agent was grabbing instead:
+        "defa14a", "defa-14a", "defa 14a", "def-a-14a",
+        "additional-definitive", "additional definitive",
+        "additional-proxy", "additional proxy", "additional-soliciting",
+        "additional soliciting", "soliciting-material", "soliciting material",
+        "prer14a", "prem14a", "pre-14a", "preliminary-proxy",
+        "preliminary proxy",
+    ),
     "sustainability report": (
         "strategic-report", "esg-update", "esg-supplement", "esg-factbook",
         "green-bond", "sdg-bond", "cdp-carbon-disclosure",
@@ -1749,6 +1819,10 @@ def _is_wrong_class_filename(url: str, query: str) -> bool:
     name = unquote(urlparse(url).path).rsplit("/", 1)[-1].lower()
     low_query = (query or "").lower()
     matched = [c for c, _ in _matched_doc_classes(query)]
+
+    # Universal: sample/template/specimen is wrong for every class.
+    if _is_sample_or_template(url):
+        return True
 
     if any(c in _STRICT_REJECT_CLASSES for c in matched):
         for marker in _WRONG_CLASS_FILENAME_MARKERS:
@@ -1901,7 +1975,10 @@ _FILING_TYPE_HINTS: dict[str, dict[str, list[str]]] = {
     "proxy statement": {
         "boost": ["def 14a", "def14a", "proxy statement", "proxy-statement",
                   "definitive proxy"],
-        "penalize": ["10-q", "10-k", "8-k", "quarterly", "current report"],
+        "penalize": ["10-q", "10-k", "8-k", "quarterly", "current report",
+                     "defa14a", "defa-14a", "additional-definitive",
+                     "additional proxy", "soliciting", "prer14a", "prem14a",
+                     "preliminary"],
     },
     "remuneration report": {
         "boost": ["remuneration report", "directors' remuneration",
@@ -2808,13 +2885,13 @@ def _write_metadata_sidecar(s3_key, company, url, digest, ctype, query,
 def _store(company: str, run_id: str, url: str, body: bytes, ctype: str,
            title: str, query: str = "") -> dict:
     digest  = hashlib.sha256(body).hexdigest()
-    s3_key  = f"{_slug(company)}/{digest[:12]}-{_safe_name(url)}"
+    s3_key  = f"{_slug(company)}/{digest[:12]}-{_safe_name(url, ctype)}"
     _s3_put_if_missing(s3_key, body, ctype,
                        {"source_url": url, "sha256": digest, "run_id": run_id})
     _write_metadata_sidecar(s3_key, company, url, digest, ctype, query, run_id=run_id)
     wrote = _write_provenance_if_missing({
         "company": _slug(company), "s3_key": s3_key, "run_id": run_id,
-        "report": title or _safe_name(url), "source_url": url, "query": query,
+        "report": title or _safe_name(url, ctype), "source_url": url, "query": query,
         "hash": digest, "content_type": ctype,
         "downloaded": dt.datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
         "rag_status": "Pending",
@@ -2825,7 +2902,7 @@ def _store(company: str, run_id: str, url: str, body: bytes, ctype: str,
         "s3_uri": f"s3://{BUCKET}/{s3_key}" if BUCKET else "(no bucket configured)",
         "download_url": _presign(s3_key),
         "source_url": url, "content_type": ctype, "sha256": digest,
-        "report": title or _safe_name(url),
+        "report": title or _safe_name(url, ctype),
     }
 
 
@@ -2884,6 +2961,32 @@ def _find_best_document(search_queries: list[str], limit: int, company: str = ""
         print(f"[find] dropped {junk_dropped} junk-host candidate(s) "
               f"(app store / media / social / aggregator subdomains — generic, "
               f"not company-specific)")
+
+    # Drop sample/template/specimen candidates before they reach the LLM
+    # selector — the selector judges partly on filename and has accepted a
+    # "Sample Report" as a real match. Invalid for every class.
+    _pre_sample_count = len(merged)
+    merged = [h for h in merged if not _is_sample_or_template(h.get("url", ""))]
+    sample_dropped = _pre_sample_count - len(merged)
+    if sample_dropped:
+        print(f"[find] dropped {sample_dropped} sample/template/specimen "
+              f"candidate(s) (not a real deliverable for any class)")
+
+    # Apply the same STRICT filename class-rejection the browser/crawl tiers use,
+    # here in the search path too (previously the search path had no filename
+    # reject at all). This is what lets a wrong proxy variant — DEFA14A
+    # "additional definitive materials" instead of the DEF 14A main proxy —
+    # reach the LLM selector and get stored. Only fires when the query maps to a
+    # known class, so generic queries are unaffected.
+    if _matched_doc_classes(primary):
+        _pre_class_count = len(merged)
+        merged = [h for h in merged
+                  if not _is_wrong_class_filename(h.get("url", ""), primary)]
+        class_dropped = _pre_class_count - len(merged)
+        if class_dropped:
+            print(f"[find] dropped {class_dropped} wrong-class filename "
+                  f"candidate(s) (e.g. DEFA14A/additional-proxy, near-neighbor "
+                  f"documents) before LLM selection")
 
     raw_count = len(merged)
     domain_mode = "off"

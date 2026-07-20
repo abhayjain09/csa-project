@@ -155,6 +155,10 @@ LATEST_COMPLETED_FISCAL_YEAR_CLASSES = {
     ).split(",")
     if c.strip()
 }
+LATEST_DOCUMENT_SEARCH = os.environ.get(
+    "LATEST_DOCUMENT_SEARCH", "true").lower() != "false"
+LATEST_DOCUMENT_SEARCH_VARIANTS = max(1, int(os.environ.get(
+    "LATEST_DOCUMENT_SEARCH_VARIANTS", "4")))
 ENFORCE_SITE_DOMAIN = os.environ.get("ENFORCE_SITE_DOMAIN", "true").lower() != "false"
 DOMAIN_FILTER_MODE = os.environ.get("DOMAIN_FILTER_MODE", "soft").strip().lower()
 
@@ -857,6 +861,34 @@ def _strip_site(q: str) -> str:
     return re.sub(r"site:\s*\S+", "", q or "").strip()
 
 
+def _latest_search_query_variants(query: str) -> list[str]:
+    """Add generic soft-recency probes while retaining the plain query."""
+    if not LATEST_DOCUMENT_SEARCH or _extract_year_intent(query):
+        return []
+    base = _strip_site(query)
+    if not base:
+        return []
+    latest_completed = CURRENT_YEAR - max(
+        1, LATEST_COMPLETED_FISCAL_YEAR_LAG)
+    variants = []
+    if not re.search(r"\blatest\b", base, re.I):
+        variants.append(f"{base} latest")
+    variants.extend([
+        f"{base} {latest_completed}",
+        f"{base} FY{latest_completed}",
+    ])
+    if CURRENT_YEAR not in _extract_year_intent(base):
+        variants.append(f"{base} updated {CURRENT_YEAR}")
+    out: list[str] = []
+    seen = {base.lower()}
+    for variant in variants:
+        key = variant.lower()
+        if key not in seen:
+            seen.add(key)
+            out.append(variant)
+    return out[:LATEST_DOCUMENT_SEARCH_VARIANTS]
+
+
 def _scope_to_official_domain(query: str, domain: str | None) -> str:
     """Replace any user/model site operator with the validated official domain."""
     clean = re.sub(r"\bsite:\s*\S+", "", query or "", flags=re.I).strip()
@@ -878,7 +910,10 @@ def _official_search_queries(query: str, company_ctx: dict,
     if not domain and REQUIRE_OFFICIAL_DOMAIN_FOR_WEB:
         return []
 
+    recency_probes = _latest_search_query_variants(query)
+    recency_probe_keys = {item.lower() for item in recency_probes}
     candidates = [query]
+    candidates.extend(recency_probes)
     validation = (company_ctx or {}).get("_identity_validation") or {}
     if validation.get("status") == "validated":
         ticker = str((company_ctx or {}).get("ticker") or "").upper().strip()
@@ -895,7 +930,10 @@ def _official_search_queries(query: str, company_ctx: dict,
     seen: set[str] = set()
     for candidate in candidates:
         scoped = _scope_to_official_domain(str(candidate or ""), domain)
-        if not scoped or not _query_variant_preserves_years(query, scoped):
+        is_recency_probe = str(candidate or "").lower() in recency_probe_keys
+        if (not scoped
+                or (not is_recency_probe
+                    and not _query_variant_preserves_years(query, scoped))):
             continue
         key = scoped.lower()
         if key in seen:
@@ -1009,6 +1047,52 @@ def _extract_year_intent(text: str) -> set[int]:
         if abs(yb - ya) <= 1:
             out.update({ya, yb})
     return out
+
+
+def _candidate_document_year(candidate: dict | str | None) -> int | None:
+    """Best visible year for comparing already class-verified documents."""
+    if isinstance(candidate, dict):
+        text = " ".join(str(candidate.get(key) or "") for key in (
+            "url", "title", "report", "source_page",
+        ))
+    else:
+        text = str(candidate or "")
+    plausible = [
+        year for year in _extract_year_intent(text)
+        if 1990 <= year <= CURRENT_YEAR + 1
+    ]
+    return max(plausible) if plausible else None
+
+
+def _prefer_newer_document(current: dict | None,
+                           candidate: dict | None) -> dict | None:
+    """Keep the newest class-verified candidate without company-specific rules."""
+    if current is None:
+        return candidate
+    if candidate is None:
+        return current
+    current_year = _candidate_document_year(current)
+    candidate_year = _candidate_document_year(candidate)
+    if candidate_year is None:
+        return current
+    if current_year is None or candidate_year > current_year:
+        return candidate
+    return current
+
+
+def _needs_latest_document_upgrade(candidate: dict | None) -> bool:
+    """Continue official discovery when an undated query found an older file."""
+    if candidate is None:
+        return True
+    year = _candidate_document_year(candidate)
+    if year is None:
+        # An undated policy/code may genuinely be the current version. Recent
+        # search probes still try to find a dated replacement, but do not force
+        # an expensive browser crawl merely because the official file is undated.
+        return False
+    latest_completed = CURRENT_YEAR - max(
+        1, LATEST_COMPLETED_FISCAL_YEAR_LAG)
+    return year < latest_completed
 
 
 def _year_alignment_score(query: str, candidate_text: str) -> int:
@@ -3897,15 +3981,13 @@ def _sitemap_landing_score(url: str, query: str) -> int:
     return score
 
 
-_RECURRING_DOCUMENT_CLASSES = {
-    "annual report", "proxy statement", "remuneration report",
-    "sustainability report",
-}
-
-
 def _query_needs_recency_scan(query: str) -> bool:
-    return any(canonical in _RECURRING_DOCUMENT_CLASSES
-               for canonical, _ in _matched_doc_classes(query))
+    """Every undated document request should prefer the newest verified file."""
+    return bool(
+        LATEST_DOCUMENT_SEARCH
+        and query
+        and not _extract_year_intent(query)
+    )
 
 
 def _strong_sitemap_doc_match(url: str, query: str) -> bool:
@@ -3920,6 +4002,8 @@ def _sitemap_resolve(domain, query, verify_fn, known_bad=None, budget=None,
     cands = _harvest_sitemap(domain, query)
     if not cands:
         return None
+    target_years = _extract_year_intent(query)
+    scan_for_recency = not target_years and _query_needs_recency_scan(query)
 
     # Sitemaps commonly list an HTML policy/report hub but omit the documents
     # linked from it. Fetch a bounded set of the most relevant landing pages,
@@ -3949,8 +4033,9 @@ def _sitemap_resolve(domain, query, verify_fn, known_bad=None, budget=None,
             if (_is_safe_remote_document_url(doc_url)
                     and not _is_junk_host(doc_url)):
                 discovered_sources.setdefault(doc_url, page_url)
-        if any(_strong_sitemap_doc_match(doc_url, query)
-               for doc_url in discovered_sources):
+        if (not scan_for_recency
+                and any(_strong_sitemap_doc_match(doc_url, query)
+                        for doc_url in discovered_sources)):
             # The highest-ranked landing page exposed an exact-looking file.
             # Let the class verifier decide it now instead of fetching every
             # remaining broad sitemap hub first.
@@ -3972,8 +4057,6 @@ def _sitemap_resolve(domain, query, verify_fn, known_bad=None, budget=None,
     verified_hits = []
     tried = 0
     tbudget = BROWSER_MAX_VERIFY_CANDIDATES if verify_fn else 1
-    target_years = _extract_year_intent(query)
-    scan_for_recency = not target_years and _query_needs_recency_scan(query)
     for cand in candidate_urls:
         if budget is not None and not budget.can_verify(reserve_verifies):
             print("[sitemap] stopped: " + budget.why_stopped(reserve_verifies))
@@ -4105,7 +4188,13 @@ def _deep_static_crawl(seed_url: str, domain: str | None, query: str,
             target_years = _extract_year_intent(query)
             if target_years.intersection(_extract_year_intent(cand)):
                 break
-        if verified_hits:
+        if (verified_hits
+                and (not _query_needs_recency_scan(query)
+                     or not _needs_latest_document_upgrade(max(
+                         verified_hits,
+                         key=lambda item: (
+                             _candidate_document_year(item) or -1),
+                     )))):
             break
         if depth < DEEP_STATIC_MAX_DEPTH:
             for sub in _subpage_links(body, url, query, domain or _domain(query) or ""):
@@ -4360,6 +4449,10 @@ def _invoke_sync(payload: dict) -> dict:
             continue
         done_queries.add(prepared)
         _budget = _QueryBudget()
+        latest_discovery_mode = bool(
+            LATEST_DOCUMENT_SEARCH
+            and not _extract_year_intent(prepared)
+        )
 
         matched_classes = [c for c, _ in _matched_doc_classes(prepared)]
         domain = _domain(prepared) or company_ctx.get("domain") or None
@@ -4485,18 +4578,30 @@ def _invoke_sync(payload: dict) -> dict:
             print(f"[search] skipped {prepared!r}: no attested official domain")
 
         # ── Official website crawl: sitemap + bounded landing pages ──
-        if resolved is None and "official_crawl" in route and domain:
+        if ((resolved is None
+             or (latest_discovery_mode
+                 and _needs_latest_document_upgrade(resolved)))
+                and "official_crawl" in route and domain):
             attempted_stages.append("official_crawl")
             sm = _sitemap_resolve(
                 domain, prepared, prebrowser_verify_fn,
                 known_bad=_known_bad, budget=_budget,
                 reserve_verifies=browser_reserve)
             if sm:
-                resolved = sm
-                stage = "sitemap"
+                previous = resolved
+                preferred = _prefer_newer_document(resolved, sm)
+                if preferred is sm:
+                    resolved = sm
+                    stage = "sitemap"
+                    if previous is not None:
+                        print(f"[latest] upgraded search candidate "
+                              f"{previous.get('url')} -> {sm.get('url')}")
 
         # ── In-depth same-domain static crawl from the official root ──
-        if resolved is None and "deep_crawl" in route and domain:
+        if ((resolved is None
+             or (latest_discovery_mode
+                 and _needs_latest_document_upgrade(resolved)))
+                and "deep_crawl" in route and domain):
             root = _site_root(prepared) or (f"https://{domain}/" if domain else None)
             if root:
                 attempted_stages.append("deep_crawl")
@@ -4505,11 +4610,20 @@ def _invoke_sync(payload: dict) -> dict:
                     known_bad=_known_bad, budget=_budget,
                     reserve_verifies=browser_reserve)
                 if dc:
-                    resolved = dc
-                    stage = "deep_crawl"
+                    previous = resolved
+                    preferred = _prefer_newer_document(resolved, dc)
+                    if preferred is dc:
+                        resolved = dc
+                        stage = "deep_crawl"
+                        if previous is not None:
+                            print(f"[latest] upgraded candidate "
+                                  f"{previous.get('url')} -> {dc.get('url')}")
 
         # ── JavaScript/deep-navigation browser fallback ──
-        if (resolved is None and "browser" in route and _use_browser
+        if ((resolved is None
+             or (latest_discovery_mode
+                 and _needs_latest_document_upgrade(resolved)))
+                and "browser" in route and _use_browser
                 and domain):
             root = _site_root(prepared) or (f"https://{domain}/" if domain else None)
             if root:
@@ -4519,8 +4633,14 @@ def _invoke_sync(payload: dict) -> dict:
                     verify_fn=browser_verify_fn, known_bad=_known_bad,
                     budget=_budget, candidate_urls=browser_candidates)
                 if br and br.get("body"):
-                    resolved = br
-                    stage = "browser"
+                    previous = resolved
+                    preferred = _prefer_newer_document(resolved, br)
+                    if preferred is br:
+                        resolved = br
+                        stage = "browser"
+                        if previous is not None:
+                            print(f"[latest] upgraded candidate "
+                                  f"{previous.get('url')} -> {br.get('url')}")
                 elif br and br.get("_blocked_by_source_waf"):
                     browser_blocked = br
 

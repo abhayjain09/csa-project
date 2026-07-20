@@ -222,6 +222,7 @@ def _load_routing_helpers():
     path = REPO_ROOT / "infra/agentcore-report/agent/agent.py"
     tree = ast.parse(path.read_text(encoding="utf-8"))
     wanted = {
+        "_latest_search_query_variants",
         "_scope_to_official_domain",
         "_official_search_queries",
         "_discovery_route",
@@ -236,10 +237,45 @@ def _load_routing_helpers():
         "re": re,
         "REQUIRE_OFFICIAL_DOMAIN_FOR_WEB": True,
         "REGISTRY_FIRST_CLASSES": set(),
+        "LATEST_DOCUMENT_SEARCH": True,
+        "LATEST_DOCUMENT_SEARCH_VARIANTS": 4,
+        "LATEST_COMPLETED_FISCAL_YEAR_LAG": 1,
+        "CURRENT_YEAR": 2026,
         "_clean_domain": lambda value: str(value or "").lower().strip(),
+        "_extract_year_intent": lambda value: {
+            int(year) for year in re.findall(r"\b20\d{2}\b", value or "")
+        },
         "_strip_site": lambda value: re.sub(
             r"site:\s*\S+", "", value or "", flags=re.I).strip(),
         "_query_variant_preserves_years": lambda original, variant: True,
+    }
+    exec(compile(module, str(path), "exec"), namespace)
+    return namespace
+
+
+def _load_recency_helpers():
+    path = REPO_ROOT / "infra/agentcore-report/agent/agent.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    wanted = {
+        "_extract_year_intent",
+        "_candidate_document_year",
+        "_prefer_newer_document",
+        "_needs_latest_document_upgrade",
+        "_query_needs_recency_scan",
+    }
+    nodes = [
+        item for item in tree.body
+        if isinstance(item, ast.FunctionDef) and item.name in wanted
+    ]
+    module = ast.Module(body=nodes, type_ignores=[])
+    ast.fix_missing_locations(module)
+    namespace = {
+        "re": re,
+        "CURRENT_YEAR": 2026,
+        "LATEST_COMPLETED_FISCAL_YEAR_LAG": 1,
+        "LATEST_DOCUMENT_SEARCH": True,
+        "_YEAR_RE": r"(?<!\d)(20\d{2})(?!\d)",
+        "_YY_OR_YYYY_RE": r"(?<!\d)(\d{2}|\d{4})(?!\d)",
     }
     exec(compile(module, str(path), "exec"), namespace)
     return namespace
@@ -657,6 +693,42 @@ class DiscoveryRoutingTests(unittest.TestCase):
         self.assertTrue(all("wrong.example" not in q for q in queries))
         self.assertTrue(all("0000123456" not in q for q in queries))
 
+    def test_undated_query_adds_generic_latest_year_probes(self):
+        helpers = _load_routing_helpers()
+        queries = helpers["_official_search_queries"](
+            "Acme sustainability report site:acme.com",
+            {
+                "domain": "acme.com",
+                "_identity_validation": {"status": "unresolved"},
+            },
+            [],
+            [],
+        )
+        self.assertIn(
+            "Acme sustainability report latest site:acme.com", queries)
+        self.assertIn(
+            "Acme sustainability report 2025 site:acme.com", queries)
+        self.assertIn(
+            "Acme sustainability report FY2025 site:acme.com", queries)
+        self.assertIn(
+            "Acme sustainability report updated 2026 site:acme.com", queries)
+
+    def test_explicit_historical_year_does_not_add_latest_probes(self):
+        helpers = _load_routing_helpers()
+        queries = helpers["_official_search_queries"](
+            "Acme sustainability report 2024 site:acme.com",
+            {
+                "domain": "acme.com",
+                "_identity_validation": {"status": "unresolved"},
+            },
+            [],
+            [],
+        )
+        self.assertEqual(
+            queries,
+            ["Acme sustainability report 2024 site:acme.com"],
+        )
+
     def test_web_discovery_fails_closed_without_official_domain(self):
         helpers = _load_routing_helpers()
         queries = helpers["_official_search_queries"](
@@ -665,6 +737,37 @@ class DiscoveryRoutingTests(unittest.TestCase):
             [], [],
         )
         self.assertEqual(queries, [])
+
+
+class LatestDocumentSelectionTests(unittest.TestCase):
+    def test_newer_verified_candidate_replaces_older_search_result(self):
+        helpers = _load_recency_helpers()
+        older = {"url": "https://acme.com/2024-sustainability-report.pdf"}
+        newer = {"url": "https://acme.com/FY25-sustainability-report.pdf"}
+        self.assertIs(
+            helpers["_prefer_newer_document"](older, newer), newer)
+
+    def test_older_candidate_requires_more_official_discovery(self):
+        helpers = _load_recency_helpers()
+        self.assertTrue(helpers["_needs_latest_document_upgrade"]({
+            "url": "https://acme.com/2024-code-of-conduct.pdf",
+        }))
+        self.assertFalse(helpers["_needs_latest_document_upgrade"]({
+            "url": "https://acme.com/2025-code-of-conduct.pdf",
+        }))
+
+    def test_undated_policy_remains_eligible(self):
+        helpers = _load_recency_helpers()
+        self.assertFalse(helpers["_needs_latest_document_upgrade"]({
+            "url": "https://acme.com/code-of-conduct.pdf",
+        }))
+
+    def test_all_undated_document_queries_use_recency_scan(self):
+        helpers = _load_recency_helpers()
+        self.assertTrue(helpers["_query_needs_recency_scan"](
+            "Acme environmental policy site:acme.com"))
+        self.assertFalse(helpers["_query_needs_recency_scan"](
+            "Acme environmental policy 2024 site:acme.com"))
 
 
 if __name__ == "__main__":

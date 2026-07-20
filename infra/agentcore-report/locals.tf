@@ -44,6 +44,7 @@ locals {
     BROWSER_VISION_MODEL_ID                 = "us.amazon.nova-2-lite-v1:0"
     BROWSER_ALLOW_OFFDOMAIN_DOCS            = "false"
     BROWSER_MAX_VERIFY_CANDIDATES           = "10"
+    BROWSER_SEARCH_CANDIDATE_LIMIT          = "8"
     BROWSER_RESERVED_VERIFIES               = "20"
     BROWSER_CLICK_TIMEOUT_MS                = "10000"
     QUERY_MAX_VERIFIES                      = "100"

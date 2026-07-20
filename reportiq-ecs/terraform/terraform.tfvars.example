@@ -18,3 +18,11 @@ manage_dynamo_tables = false
 # Your EC2 had no outbound internet → subnets are private with only an S3 endpoint.
 # Fargate needs ECR + logs endpoints to pull the image. Keep true unless you add NAT.
 create_vpc_endpoints = true
+
+# One-off WAF browser fallback. Enable when the worker subnets have approved
+# HTTPS egress through NAT, a Transit Gateway, public routing, or a reachable
+# approved proxy (see ../README.md).
+enable_browser_worker = false
+# browser_worker_subnet_ids       = ["subnet-public-a", "subnet-public-b"]
+# browser_worker_assign_public_ip = true
+# browser_worker_proxy_secret_arn = "arn:aws:secretsmanager:us-east-1:ACCOUNT:secret:reportiq-browser-proxy"

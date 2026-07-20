@@ -5,16 +5,50 @@ locals {
   region = var.region
   acct   = var.account_id
 
+  browser_worker_subnet_ids = (
+    length(var.browser_worker_subnet_ids) > 0
+    ? var.browser_worker_subnet_ids
+    : var.subnet_ids
+  )
+  browser_worker_security_group_ids = (
+    length(var.browser_worker_security_group_ids) > 0
+    ? var.browser_worker_security_group_ids
+    : [aws_security_group.browser_worker.id]
+  )
+
   container_env = {
-    AWS_REGION        = var.region
-    QUERIES_TABLE     = var.queries_table
-    PROVENANCE_TABLE  = var.provenance_table
-    RUNS_TABLE        = var.runs_table
-    REPORTS_BUCKET    = var.reports_bucket
-    AGENT_RUNTIME_ARN = var.agent_runtime_arn
-    AGENT_QUALIFIER   = var.agent_qualifier
-    STATIC_DIR        = "/app/static"
-    PORT              = "8080"
+    AWS_REGION                     = var.region
+    QUERIES_TABLE                  = var.queries_table
+    PROVENANCE_TABLE               = var.provenance_table
+    RUNS_TABLE                     = var.runs_table
+    REPORTS_BUCKET                 = var.reports_bucket
+    AGENT_RUNTIME_ARN              = var.agent_runtime_arn
+    AGENT_QUALIFIER                = var.agent_qualifier
+    BROWSER_WORKER_ENABLED         = tostring(var.enable_browser_worker)
+    BROWSER_JOBS_TABLE             = aws_dynamodb_table.browser_jobs.name
+    BROWSER_ECS_CLUSTER            = aws_ecs_cluster.main.arn
+    BROWSER_ECS_TASK_DEFINITION    = aws_ecs_task_definition.browser_worker.arn
+    BROWSER_ECS_CONTAINER_NAME     = "browser-worker"
+    BROWSER_ECS_SUBNET_IDS         = join(",", local.browser_worker_subnet_ids)
+    BROWSER_ECS_SECURITY_GROUP_IDS = join(",", local.browser_worker_security_group_ids)
+    BROWSER_ECS_ASSIGN_PUBLIC_IP   = tostring(var.browser_worker_assign_public_ip)
+    STATIC_DIR                     = "/app/static"
+    PORT                           = "8080"
+  }
+
+  browser_worker_env = {
+    AWS_REGION                            = var.region
+    QUERIES_TABLE                         = var.queries_table
+    PROVENANCE_TABLE                      = var.provenance_table
+    RUNS_TABLE                            = var.runs_table
+    REPORTS_BUCKET                        = var.reports_bucket
+    BROWSER_JOBS_TABLE                    = aws_dynamodb_table.browser_jobs.name
+    CHROMIUM_PATH                         = "/usr/bin/chromium"
+    BROWSER_WORKER_MAX_ATTEMPTS           = tostring(var.browser_worker_max_attempts)
+    BROWSER_WORKER_RETRY_DELAY_SECONDS    = tostring(var.browser_worker_retry_delay_seconds)
+    BROWSER_WORKER_NAV_TIMEOUT_MS         = tostring(var.browser_worker_nav_timeout_ms)
+    BROWSER_WORKER_MAX_DOCUMENT_BYTES     = tostring(var.browser_worker_max_document_bytes)
+    BROWSER_WORKER_RUN_PATCH_WAIT_SECONDS = tostring(var.browser_worker_run_patch_wait_seconds)
   }
 }
 
@@ -74,11 +108,38 @@ resource "aws_dynamodb_table" "runs" {
   }
 }
 
+resource "aws_dynamodb_table" "browser_jobs" {
+  name         = var.browser_jobs_table
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "job_id"
+
+  attribute {
+    name = "job_id"
+    type = "S"
+  }
+
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  ttl {
+    attribute_name = "expires_at"
+    enabled        = true
+  }
+
+  tags = { Name = var.browser_jobs_table }
+}
+
 # ════════════════════════════════════════════════════════════════════════════
 #  CloudWatch log group
 # ════════════════════════════════════════════════════════════════════════════
 resource "aws_cloudwatch_log_group" "app" {
   name              = "/ecs/${local.name}"
+  retention_in_days = 30
+}
+
+resource "aws_cloudwatch_log_group" "browser_worker" {
+  name              = "/ecs/${local.name}-browser-worker"
   retention_in_days = 30
 }
 
@@ -103,6 +164,24 @@ resource "aws_iam_role" "execution" {
 resource "aws_iam_role_policy_attachment" "execution" {
   role       = aws_iam_role.execution.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+}
+
+data "aws_iam_policy_document" "execution_proxy_secret" {
+  count = var.browser_worker_proxy_secret_arn != "" ? 1 : 0
+
+  statement {
+    sid       = "ReadBrowserProxySecret"
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = [var.browser_worker_proxy_secret_arn]
+  }
+}
+
+resource "aws_iam_role_policy" "execution_proxy_secret" {
+  count  = var.browser_worker_proxy_secret_arn != "" ? 1 : 0
+  name   = "${local.name}-browser-proxy-secret"
+  role   = aws_iam_role.execution.id
+  policy = data.aws_iam_policy_document.execution_proxy_secret[0].json
 }
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -131,6 +210,7 @@ data "aws_iam_policy_document" "task_perms" {
       "arn:aws:dynamodb:${local.region}:${local.acct}:table/${var.queries_table}",
       "arn:aws:dynamodb:${local.region}:${local.acct}:table/${var.runs_table}",
       "arn:aws:dynamodb:${local.region}:${local.acct}:table/${var.provenance_table}",
+      aws_dynamodb_table.browser_jobs.arn,
       aws_dynamodb_table.pageindex_runs.arn,
       aws_dynamodb_table.answering_runs.arn,
       aws_dynamodb_table.answering_results.arn,
@@ -165,6 +245,42 @@ data "aws_iam_policy_document" "task_perms" {
     effect    = "Allow"
     actions   = ["bedrock-agentcore:InvokeAgentRuntime"]
     resources = ["arn:aws:bedrock-agentcore:${local.region}:${local.acct}:runtime/*"]
+  }
+
+  statement {
+    sid     = "LaunchBrowserWorker"
+    effect  = "Allow"
+    actions = ["ecs:RunTask"]
+    resources = [
+      "arn:aws:ecs:${local.region}:${local.acct}:task-definition/${local.name}-browser-worker:*"
+    ]
+  }
+
+  statement {
+    sid       = "TagBrowserWorker"
+    effect    = "Allow"
+    actions   = ["ecs:TagResource"]
+    resources = ["arn:aws:ecs:${local.region}:${local.acct}:task/*"]
+    condition {
+      test     = "StringEquals"
+      variable = "ecs:CreateAction"
+      values   = ["RunTask"]
+    }
+  }
+
+  statement {
+    sid     = "PassBrowserWorkerRoles"
+    effect  = "Allow"
+    actions = ["iam:PassRole"]
+    resources = [
+      aws_iam_role.execution.arn,
+      aws_iam_role.task.arn,
+    ]
+    condition {
+      test     = "StringEquals"
+      variable = "iam:PassedToService"
+      values   = ["ecs-tasks.amazonaws.com"]
+    }
   }
 }
 
@@ -235,6 +351,22 @@ resource "aws_security_group" "tasks" {
   tags = { Name = "${local.name}-tasks-sg" }
 }
 
+resource "aws_security_group" "browser_worker" {
+  name        = "${local.name}-browser-worker-sg"
+  description = "Report IQ one-off browser worker; no inbound traffic"
+  vpc_id      = var.vpc_id
+
+  egress {
+    description = "HTTPS to official report sources, AWS APIs, or approved proxy"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = { Name = "${local.name}-browser-worker-sg" }
+}
+
 # ════════════════════════════════════════════════════════════════════════════
 #  Application Load Balancer (internal)
 # ════════════════════════════════════════════════════════════════════════════
@@ -280,6 +412,60 @@ resource "aws_ecs_cluster" "main" {
     name  = "containerInsights"
     value = "enabled"
   }
+}
+
+resource "aws_ecs_task_definition" "browser_worker" {
+  family                   = "${local.name}-browser-worker"
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = var.browser_worker_cpu
+  memory                   = var.browser_worker_memory
+  execution_role_arn       = aws_iam_role.execution.arn
+  task_role_arn            = aws_iam_role.task.arn
+
+  runtime_platform {
+    operating_system_family = "LINUX"
+    cpu_architecture        = var.cpu_architecture
+  }
+
+  container_definitions = jsonencode([
+    {
+      name      = "browser-worker"
+      image     = "${aws_ecr_repository.app.repository_url}:${var.image_tag}"
+      essential = true
+      command   = ["python", "/app/backend/browser_worker.py"]
+
+      environment = [
+        for k, v in local.browser_worker_env :
+        { name = k, value = tostring(v) }
+      ]
+
+      secrets = (
+        var.browser_worker_proxy_secret_arn != ""
+        ? [{
+          name      = "BROWSER_OUTBOUND_PROXY"
+          valueFrom = var.browser_worker_proxy_secret_arn
+        }]
+        : []
+      )
+
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.browser_worker.name
+          "awslogs-region"        = var.region
+          "awslogs-stream-prefix" = "ecs"
+        }
+      }
+    }
+  ])
+
+  tags = { Name = "${local.name}-browser-worker" }
+
+  depends_on = [
+    aws_iam_role_policy.task,
+    aws_iam_role_policy.execution_proxy_secret,
+  ]
 }
 
 resource "aws_ecs_task_definition" "app" {

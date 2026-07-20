@@ -6,7 +6,9 @@ import re
 import sys
 import types
 import unittest
+import unicodedata
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 
 AGENT_DIR = Path(__file__).resolve().parents[1]
@@ -46,6 +48,30 @@ def _load_pairing_function():
     namespace = {}
     exec(compile(module, str(path), "exec"), namespace)
     return namespace["_pair_queries_with_results"]
+
+
+def _load_worker_validation_helpers():
+    path = REPO_ROOT / "reportiq-ecs/app/backend/browser_worker.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    wanted = {"_normalize_text", "_company_matches", "_class_matches"}
+    nodes = [
+        item for item in tree.body
+        if isinstance(item, ast.FunctionDef) and item.name in wanted
+    ]
+    module = ast.Module(body=nodes, type_ignores=[])
+    ast.fix_missing_locations(module)
+    namespace = {
+        "re": re,
+        "unicodedata": unicodedata,
+        "unquote": unquote,
+        "urlparse": urlparse,
+        "_LEGAL_SUFFIXES": {
+            "inc", "incorporated", "corp", "corporation", "company", "co",
+            "limited", "ltd", "plc", "llc", "holdings", "group",
+        },
+    }
+    exec(compile(module, str(path), "exec"), namespace)
+    return namespace
 
 
 def _load_vertex_helpers():
@@ -171,6 +197,51 @@ class ResultMappingTests(unittest.TestCase):
         )
         self.assertEqual(results[0]["status"], "failed")
         self.assertEqual(results[1]["status"], "downloaded")
+
+    def test_waf_result_preserves_exact_candidates_and_browser_job(self):
+        pair = _load_pairing_function()
+        candidate = (
+            "https://www.spglobal.com/content/dam/spglobal/vendor-code.pdf")
+        results = pair(
+            ["S&P Global Supplier Code of Conduct"],
+            [],
+            [],
+            [{
+                "request_id": "2:1",
+                "status": "blocked_by_source_waf",
+                "reason": "source blocked",
+                "candidate_urls": [candidate],
+                "browser_job_id": "job-123",
+            }],
+            chunk_index=2,
+        )
+        self.assertEqual(results[0]["status"], "browser_retry_queued")
+        self.assertEqual(results[0]["browser_job_id"], "job-123")
+        self.assertEqual(results[0]["candidate_urls"], [candidate])
+
+
+class BrowserWorkerValidationTests(unittest.TestCase):
+    def test_sp_global_vendor_code_matches_company_and_specific_class(self):
+        helpers = _load_worker_validation_helpers()
+        text = (
+            "S&P Global Vendor Code of Conduct. This code establishes "
+            "requirements for every supplier and business partner.")
+        url = "https://www.spglobal.com/docs/vendor-code-of-conduct.pdf"
+        self.assertTrue(helpers["_company_matches"](
+            "S&P Global", text, url))
+        ok, _ = helpers["_class_matches"](
+            "supplier code of conduct", text, url, "")
+        self.assertTrue(ok)
+
+    def test_general_employee_code_is_not_supplier_code(self):
+        helpers = _load_worker_validation_helpers()
+        ok, _ = helpers["_class_matches"](
+            "supplier code of conduct",
+            "Cisco Systems Code of Business Conduct for all employees.",
+            "https://cisco.com/code-of-conduct.pdf",
+            "",
+        )
+        self.assertFalse(ok)
 
 
 class VertexIdentityContractTests(unittest.TestCase):

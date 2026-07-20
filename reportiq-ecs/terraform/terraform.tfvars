@@ -11,6 +11,10 @@ desired_count    = 1
 cpu_architecture = "ARM64"
 assign_public_ip = false
 
+# These private subnets have approved public HTTPS egress through the attached
+# Transit Gateway, so one-off browser tasks do not need NAT or public IPs.
+enable_browser_worker = true
+
 manage_dynamo_tables = false
 
 # Keep true — creates ecr.api, ecr.dkr, logs endpoints.

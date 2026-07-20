@@ -32,12 +32,13 @@ reportiq-ecs/
 | ECR repo | `reportiq` |
 | ECS cluster | `reportiq-cluster` (Fargate, Container Insights on) |
 | ECS service + task | `reportiq` (1 task, 0.5 vCPU / 1 GB) |
+| Browser fallback task | `reportiq-browser-worker` (one-off; same cluster and image) |
 | Internal ALB | `reportiq-internal-alb` |
 | Target group | `reportiq-tg` (IP target, /health check) |
 | Security groups | `reportiq-alb-sg`, `reportiq-tasks-sg` |
 | IAM roles | `reportiq-ecs-execution`, `reportiq-ecs-task` |
-| CloudWatch log group | `/ecs/reportiq` |
-| DynamoDB tables | `reportiq-web-queries`, `reportiq-runs` (only if `manage_dynamo_tables=true`) |
+| CloudWatch log groups | `/ecs/reportiq`, `/ecs/reportiq-browser-worker` |
+| DynamoDB tables | `reportiq-web-queries`, `reportiq-runs`, `reportiq-browser-jobs` |
 
 Existing S3 bucket, provenance table, and AgentCore runtime are **referenced, not modified**.
 
@@ -105,7 +106,50 @@ If your workstation can't route to that subnet, ECS does not change that; you'd 
 - a network-team route from your workstation subnet to the VPC, or
 - VDI / jump-host browser access on the internal network, or
 - (last resort) flip the ALB to `internal = false` in a **public** subnet with tight
-  `alb_ingress_cidrs` — only if your security policy allows it.
+`alb_ingress_cidrs` — only if your security policy allows it.
+
+### WAF browser fallback
+
+The portal only launches the one-off browser task when AgentCore returns the
+typed `blocked_by_source_waf` status with exact official PDF candidates. The
+worker keeps a Chromium session alive across bounded retries, then verifies the
+company and report class before writing to S3.
+
+It is disabled by default because the worker requires an approved outbound
+route. Enable it after configuring public HTTPS egress through NAT, a Transit
+Gateway, public worker subnets, or a reachable approved proxy.
+
+For private subnets whose Transit Gateway provides controlled public egress:
+
+```hcl
+enable_browser_worker           = true
+browser_worker_assign_public_ip = false
+```
+
+For public worker subnets:
+
+```hcl
+enable_browser_worker           = true
+browser_worker_subnet_ids       = ["subnet-public-a", "subnet-public-b"]
+browser_worker_assign_public_ip = true
+```
+
+or an approved reachable proxy stored in Secrets Manager:
+
+```hcl
+enable_browser_worker             = true
+browser_worker_proxy_secret_arn   = "arn:aws:secretsmanager:us-east-1:ACCOUNT:secret:reportiq-browser-proxy"
+```
+
+The secret value may be a URL or JSON:
+
+```json
+{"server":"https://proxy.example:443","username":"user","password":"secret"}
+```
+
+This fallback does not solve CAPTCHAs or bypass access controls. If the official
+source blocks both the normal and approved proxy egress, the job remains a
+typed source-blocked failure and the existing manual upload remains available.
 
 ---
 
@@ -124,3 +168,10 @@ If subnets are private with no NAT, add those VPC endpoints.
 
 **Target unhealthy but task running:** check the security group — `reportiq-tasks-sg`
 must allow 8080 from `reportiq-alb-sg` (Terraform sets this automatically).
+
+**Browser fallback status:**
+```bash
+aws logs tail /ecs/reportiq-browser-worker --follow --region us-east-1
+aws dynamodb get-item --table-name reportiq-browser-jobs \
+  --key '{"job_id":{"S":"JOB_ID"}}' --region us-east-1
+```

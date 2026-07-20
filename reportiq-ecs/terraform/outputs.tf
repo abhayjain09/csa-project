@@ -21,6 +21,15 @@ output "ecs_service" {
   value = aws_ecs_service.app.name
 }
 
+output "browser_worker_task_definition" {
+  description = "One-off WAF fallback task definition on the existing ECS cluster"
+  value       = aws_ecs_task_definition.browser_worker.arn
+}
+
+output "browser_jobs_table" {
+  value = aws_dynamodb_table.browser_jobs.name
+}
+
 output "target_group_arn" {
   value = aws_lb_target_group.app.arn
 }

@@ -18,11 +18,17 @@ The per-document route is:
 1. Direct Google URL search restricted to the established official domain.
 2. Official sitemap and relevant landing-page crawl.
 3. In-depth same-domain static crawl.
-4. AgentCore Browser for JavaScript, archive navigation, and download controls.
+4. AgentCore Browser first retries exact ranked official PDF URLs in its live
+   session, then handles JavaScript, archive navigation, and download controls.
 5. For annual reports and proxy statements, validated SEC EDGAR lookup only
    when the official-company path found nothing; Companies House is the
    equivalent fallback for applicable UK annual reports.
 6. Other configured registry integrations also run only as a final fallback.
+
+When an exact official candidate is still denied with a WAF response, the agent
+returns `blocked_by_source_waf` plus bounded candidate URLs. The Report IQ portal
+can then launch its separate, longer-running one-off ECS browser task; see
+`reportiq-ecs/README.md` for its egress/proxy and fail-closed validation rules.
 
 If no official domain can be established, normal web discovery fails closed.
 Deterministic registry lookup may still succeed when an authoritative CIK or

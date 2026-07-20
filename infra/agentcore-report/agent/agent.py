@@ -1,4 +1,8 @@
-"""Report download agent (single AgentCore Runtime) — v45.
+"""Report download agent (single AgentCore Runtime) — v46.
+
+v46 retries ranked official search candidates inside the live browser session
+before crawling the homepage and returns a typed blocked_by_source_waf result
+with bounded candidate URLs when both static and browser access are denied.
 
 v45 keeps annual reports and proxy statements on the official-company path
 first: direct Google URL search -> official sitemap/landing-page crawl -> deep
@@ -69,7 +73,7 @@ import registry_tier
 
 app = BedrockAgentCoreApp()
 
-CODE_VERSION = os.environ.get("CODE_VERSION", "v45")
+CODE_VERSION = os.environ.get("CODE_VERSION", "v46")
 
 # Tier 2 (official registry fallback) master switch. registry_tier.py reads its
 # own EDGAR_* / CH_* configuration from the environment.
@@ -129,6 +133,8 @@ BROWSER_MAX_DOC_CANDIDATES   = int(os.environ.get("BROWSER_MAX_DOC_CANDIDATES", 
 BROWSER_MAX_VERIFY_CANDIDATES = int(os.environ.get("BROWSER_MAX_VERIFY_CANDIDATES", "30"))
 BROWSER_RESERVED_VERIFIES = int(os.environ.get("BROWSER_RESERVED_VERIFIES", "20"))
 BROWSER_MAX_CLICK_ATTEMPTS = int(os.environ.get("BROWSER_MAX_CLICK_ATTEMPTS", "12"))
+BROWSER_SEARCH_CANDIDATE_LIMIT = int(os.environ.get(
+    "BROWSER_SEARCH_CANDIDATE_LIMIT", "8"))
 BROWSER_RESOLVE_MAX_SECONDS = float(os.environ.get("BROWSER_RESOLVE_MAX_SECONDS", "1800"))
 BROWSER_VERIFY_CLASS = os.environ.get("BROWSER_VERIFY_CLASS", "true").lower() != "false"
 BROWSER_VISION_MODEL_ID = os.environ.get("BROWSER_VISION_MODEL_ID", "").strip()
@@ -2276,10 +2282,20 @@ def _browser_resolve_document(page_url: str, domain: str | None, query: str,
                               cache: dict | None = None,
                               verify_fn=None,
                               known_bad: dict[str, str] | None = None,
-                              budget: "_QueryBudget | None" = None) -> dict | None:
+                              budget: "_QueryBudget | None" = None,
+                              candidate_urls: list[str] | None = None
+                              ) -> dict | None:
     """Thin caching wrapper around _browser_resolve_document_uncached."""
-    if cache is not None and page_url in cache:
-        cached = cache[page_url]
+    bounded_candidates = list(dict.fromkeys(
+        str(url) for url in (candidate_urls or []) if url
+    ))[:BROWSER_SEARCH_CANDIDATE_LIMIT]
+    cache_key = page_url
+    if bounded_candidates:
+        cache_key += "||" + hashlib.sha256(
+            "\n".join(bounded_candidates).encode("utf-8")
+        ).hexdigest()[:16]
+    if cache is not None and cache_key in cache:
+        cached = cache[cache_key]
         if cached and cached.get("body"):
             if verify_fn is None or cached.get("_verified_for") == query:
                 print(f"[browser] cache hit for {page_url} — reusing previous "
@@ -2295,25 +2311,29 @@ def _browser_resolve_document(page_url: str, domain: str | None, query: str,
             print(f"[browser] cache hit for {page_url} but cached document is "
                   f"the WRONG class for this query; resolving fresh instead of "
                   f"reusing it")
-            result = _browser_resolve_document_uncached(page_url, domain, query,
-                                                         verify_fn, known_bad, budget)
-            cache[page_url] = result
+            result = _browser_resolve_document_uncached(
+                page_url, domain, query, verify_fn, known_bad, budget,
+                candidate_urls=bounded_candidates)
+            cache[cache_key] = result
             return result
         if cached and cached.get("_had_candidates"):
             print(f"[browser] cache: {page_url} had candidates on a prior query "
                   f"but none matched that class; resolving fresh for this "
                   f"query's class rather than assuming the same miss")
-            result = _browser_resolve_document_uncached(page_url, domain, query,
-                                                         verify_fn, known_bad, budget)
-            cache[page_url] = result
+            result = _browser_resolve_document_uncached(
+                page_url, domain, query, verify_fn, known_bad, budget,
+                candidate_urls=bounded_candidates)
+            cache[cache_key] = result
             return result
         print(f"[browser] cache hit for {page_url} — no resolvable document on "
               f"this page (no candidates at all), reusing miss, no new browser session")
         return cached
 
-    result = _browser_resolve_document_uncached(page_url, domain, query, verify_fn, known_bad, budget)
+    result = _browser_resolve_document_uncached(
+        page_url, domain, query, verify_fn, known_bad, budget,
+        candidate_urls=bounded_candidates)
     if cache is not None:
-        cache[page_url] = result
+        cache[cache_key] = result
     return result
 
 
@@ -2469,9 +2489,15 @@ def _make_browser_verify_fn(query: str, budget: "_QueryBudget | None" = None,
 def _browser_resolve_document_uncached(page_url: str, domain: str | None,
                               query: str, verify_fn=None,
                               known_bad: dict[str, str] | None = None,
-                              budget: "_QueryBudget | None" = None) -> dict:
+                              budget: "_QueryBudget | None" = None,
+                              candidate_urls: list[str] | None = None) -> dict:
     """Layered, GENERIC in-browser document resolver (see module docstring)."""
-    _MISS = {"_no_doc": True, "_had_candidates": False}
+    _MISS = {
+        "_no_doc": True,
+        "_had_candidates": False,
+        "_blocked_by_source_waf": False,
+        "_blocked_urls": [],
+    }
     if not USE_BROWSER:
         return _MISS
     try:
@@ -2500,6 +2526,8 @@ def _browser_resolve_document_uncached(page_url: str, domain: str | None,
 
     resolved: dict | None = None
     had_candidates = False
+    blocked_urls: list[str] = []
+    observed_block_markers: list[str] = []
     verify_budget = BROWSER_MAX_VERIFY_CANDIDATES if verify_fn else 1
     click_budget = min(BROWSER_MAX_CLICK_ATTEMPTS, verify_budget) if verify_fn else 1
     pool_cap = max(BROWSER_MAX_DOC_CANDIDATES, verify_budget)
@@ -2560,8 +2588,115 @@ def _browser_resolve_document_uncached(page_url: str, domain: str | None,
                         rendered_html = None
                     block_marker = _looks_like_block_page(rendered_html)
                     if block_marker:
+                        observed_block_markers.append(block_marker)
+                        blocked_urls.append(final_url or page_url)
                         print(f"[browser] possible WAF/bot-challenge page "
                               f"(matched {block_marker!r}) at {final_url or page_url}")
+
+                    # Search already identified likely official document URLs.
+                    # Retry those exact URLs through Chromium while this context
+                    # still has navigation cookies/storage. Previously the
+                    # browser only opened the company root, so a WAF-blocked
+                    # homepage prevented trying a directly downloadable PDF
+                    # that succeeds in a normal interactive browser.
+                    for direct_url in list(dict.fromkeys(
+                            candidate_urls or []))[:BROWSER_SEARCH_CANDIDATE_LIMIT]:
+                        if resolved is not None or not _time_left():
+                            break
+                        if (not _is_doc_url(direct_url)
+                                or not _is_safe_remote_document_url(direct_url)
+                                or not _domain_ok(direct_url)
+                                or _is_junk_host(direct_url)
+                                or _is_press_release_url(direct_url)):
+                            continue
+                        had_candidates = True
+                        probe = None
+                        status = 0
+                        ctype = ""
+                        body = None
+                        marker = None
+                        try:
+                            probe = context.new_page()
+                            response = probe.goto(
+                                direct_url,
+                                wait_until="commit",
+                                timeout=BROWSER_SESSION_TIMEOUT * 1000,
+                                referer=final_url or referer or page_url,
+                            )
+                            if response is not None:
+                                status = response.status
+                                ctype = (response.headers or {}).get(
+                                    "content-type", "").split(";")[0].lower()
+                                if status < 400 and _acceptable(direct_url, ctype):
+                                    body = response.body()
+                            if not body and status < 400:
+                                try:
+                                    probe.wait_for_timeout(min(
+                                        BROWSER_SETTLE_MS, 1500))
+                                    marker = _looks_like_block_page(
+                                        probe.content())
+                                except Exception:  # noqa: BLE001
+                                    marker = None
+                        except Exception as exc:  # noqa: BLE001
+                            print(f"[browser][direct] navigation failed "
+                                  f"({direct_url}): {exc}")
+                        finally:
+                            if probe is not None:
+                                try:
+                                    probe.close()
+                                except Exception:  # noqa: BLE001
+                                    pass
+
+                        # APIRequestContext shares this BrowserContext's cookies.
+                        # It is a useful second attempt when Chromium hands a PDF
+                        # to its viewer instead of exposing response.body().
+                        if (not body and status not in (401, 403, 406, 429)
+                                and not marker):
+                            try:
+                                req_response = context.request.get(
+                                    direct_url,
+                                    headers={
+                                        "referer": final_url or referer or page_url,
+                                        "accept": "application/pdf,*/*;q=0.8",
+                                    },
+                                    timeout=BROWSER_SESSION_TIMEOUT * 1000,
+                                )
+                                status = req_response.status
+                                ctype = (req_response.headers or {}).get(
+                                    "content-type", "").split(";")[0].lower()
+                                if status < 400 and _acceptable(
+                                        direct_url, ctype):
+                                    body = req_response.body()
+                                elif status < 400 and "html" in ctype:
+                                    marker = _looks_like_block_page(
+                                        req_response.text())
+                            except Exception as exc:  # noqa: BLE001
+                                print(f"[browser][direct] context GET failed "
+                                      f"({direct_url}): {exc}")
+
+                        if status in (401, 403, 406, 429) or marker:
+                            blocked_urls.append(direct_url)
+                            observed_block_markers.append(
+                                marker or f"http-{status}")
+                            print(f"[browser][direct] source blocked "
+                                  f"({direct_url}): {marker or status}")
+                            continue
+                        if not body or len(body) > BROWSER_MAX_DOC_BYTES:
+                            continue
+                        direct_doc = {
+                            "url": direct_url,
+                            "body": body,
+                            "ctype": ctype or "application/pdf",
+                            "via": "browser_direct_search_candidate",
+                        }
+                        if verify_fn is not None:
+                            if not verify_fn(direct_doc):
+                                continue
+                            direct_doc["verified"] = True
+                            direct_doc["_verified_for"] = query
+                        resolved = direct_doc
+                        print(f"[browser][direct] resolved ranked search "
+                              f"candidate: {direct_url} ({len(body)} bytes)")
 
                     try:
                         harvested = page.evaluate(_JS_HARVEST_LINKS) or []
@@ -2618,7 +2753,8 @@ def _browser_resolve_document_uncached(page_url: str, domain: str | None,
                                                             query, domain)),
                         reverse=True,
                     )[:pool_cap]
-                    had_candidates = bool(ranked_docs or labeled)
+                    had_candidates = had_candidates or bool(
+                        ranked_docs or labeled)
                     print(f"[browser] harvested {len(harvested)} links: "
                           f"{len(doc_links)} doc-file candidates, "
                           f"{len(labeled)} download-labeled controls "
@@ -2627,7 +2763,7 @@ def _browser_resolve_document_uncached(page_url: str, domain: str | None,
                           + (f" | block_marker={block_marker}" if block_marker else ""))
 
                     # ── Tier 2: in-session fetch, WITH in-loop class verify ──
-                    if BROWSER_DOWNLOAD_IN_SESSION:
+                    if resolved is None and BROWSER_DOWNLOAD_IN_SESSION:
                         req = context.request
                         tried = 0
                         verified_hits: list[dict] = []
@@ -2936,11 +3072,23 @@ def _browser_resolve_document_uncached(page_url: str, domain: str | None,
                         pass
     except Exception as exc:  # noqa: BLE001
         print(f"[browser] resolve failed ({page_url}): {exc}")
-        return {"_no_doc": True, "_had_candidates": had_candidates}
+        return {
+            "_no_doc": True,
+            "_had_candidates": had_candidates,
+            "_blocked_by_source_waf": bool(blocked_urls),
+            "_blocked_urls": list(dict.fromkeys(blocked_urls)),
+            "_block_markers": list(dict.fromkeys(observed_block_markers)),
+        }
 
     if resolved is None:
         print(f"[browser] {page_url}: no document resolved through any tier")
-        return {"_no_doc": True, "_had_candidates": had_candidates}
+        return {
+            "_no_doc": True,
+            "_had_candidates": had_candidates,
+            "_blocked_by_source_waf": bool(blocked_urls),
+            "_blocked_urls": list(dict.fromkeys(blocked_urls)),
+            "_block_markers": list(dict.fromkeys(observed_block_markers)),
+        }
     return resolved
 
 
@@ -3406,6 +3554,8 @@ def _find_best_document(search_queries: list[str], limit: int, company: str = ""
     candidate_infos: list[dict] = []
     for h in filtered[:TOP_N_FOR_LLM]:
         sample, body_bytes = "", None
+        fetch_error = ""
+        waf_blocked = False
         try:
             body_bytes, ctype_head = _fetch(h["url"])
             if "html" in ctype_head:
@@ -3416,8 +3566,19 @@ def _find_best_document(search_queries: list[str], limit: int, company: str = ""
                 sample = body_bytes[:1500].decode("utf-8", "ignore").replace("\x00", " ")
             h = {**h, "head_ctype": ctype_head or h.get("head_ctype", "")}
         except Exception as exc:  # noqa: BLE001
+            fetch_error = f"{type(exc).__name__}: {exc}"
+            waf_blocked = (
+                isinstance(exc, HTTPError)
+                and exc.code in (401, 403, 406, 429)
+            )
             print(f"[find] sample fetch failed ({h['url']}): {exc}")
-        candidate_infos.append({**h, "content_sample": sample, "_body": body_bytes})
+        candidate_infos.append({
+            **h,
+            "content_sample": sample,
+            "_body": body_bytes,
+            "_fetch_error": fetch_error,
+            "_waf_blocked": waf_blocked,
+        })
 
     decision = (_llm_select_best(primary, candidate_infos, company=company) if candidate_infos
                 else {"selected_url": None, "topic_match": False, "year_match": False,
@@ -3425,6 +3586,16 @@ def _find_best_document(search_queries: list[str], limit: int, company: str = ""
 
     return {
         "decision": decision, "candidate_infos": candidate_infos, "ranked": ranked,
+        "browser_candidates": [
+            url for url in ranked_urls
+            if _is_safe_remote_document_url(url)
+            and not _is_junk_host(url)
+            and not _is_press_release_url(url)
+        ][:BROWSER_SEARCH_CANDIDATE_LIMIT],
+        "waf_blocked_candidates": [
+            item["url"] for item in candidate_infos
+            if item.get("_waf_blocked") and item.get("url")
+        ][:BROWSER_SEARCH_CANDIDATE_LIMIT],
         "via": via, "on_domain": len(merged),
         "off_domain_dropped": raw_count - len(merged), "query_logs": query_logs,
         "probe_only": probe_only, "domain_mode": domain_mode,
@@ -4171,6 +4342,8 @@ def _invoke_sync(payload: dict) -> dict:
             "reason": "search-not-run",
         }
         found: dict = {"candidate_infos": []}
+        browser_candidates: list[str] = []
+        browser_blocked: dict | None = None
 
         _reg_class = known_class or (
             matched_classes[0] if matched_classes else None)
@@ -4229,6 +4402,7 @@ def _invoke_sync(payload: dict) -> dict:
                 prepared, company_ctx, aliases, generated)
             found = _find_best_document(
                 search_queries, MAX_RESULTS, company=company_raw)
+            browser_candidates = list(found.get("browser_candidates") or [])
             decision = found["decision"]
             base_log["via"] = found.get("via")
             base_log["domain_mode"] = found.get("domain_mode")
@@ -4291,10 +4465,12 @@ def _invoke_sync(payload: dict) -> dict:
                 br = _browser_resolve_document(
                     root, domain, prepared, cache=_root_crawl_cache,
                     verify_fn=browser_verify_fn, known_bad=_known_bad,
-                    budget=_budget)
+                    budget=_budget, candidate_urls=browser_candidates)
                 if br and br.get("body"):
                     resolved = br
                     stage = "browser"
+                elif br and br.get("_blocked_by_source_waf"):
+                    browser_blocked = br
 
         # Registry lookup is the final fallback in the deployed route. Annual
         # reports and proxy statements reach EDGAR here only after official
@@ -4327,23 +4503,62 @@ def _invoke_sync(payload: dict) -> dict:
                 "stage": stage or "unknown",
             })
         else:
-            base_log["status"] = "no_document_found"
+            blocked_urls = [
+                url for url in (browser_blocked or {}).get("_blocked_urls", [])
+                if _is_doc_url(url)
+            ]
+            if not blocked_urls and browser_blocked:
+                blocked_urls = [
+                    url for url in browser_candidates if _is_doc_url(url)
+                ]
+            blocked_urls = list(dict.fromkeys(blocked_urls))[
+                :BROWSER_SEARCH_CANDIDATE_LIMIT]
+            blocked_by_waf = bool(browser_blocked and blocked_urls)
+            failure_status = (
+                "blocked_by_source_waf" if blocked_by_waf else "failed")
+            failure_reason = (
+                "The official source blocked the synchronous browser. "
+                "A longer-running browser may retry these exact official "
+                "document candidates using approved egress."
+                if blocked_by_waf else
+                (decision.get("reason") or
+                 "no class-verified document found through any tier "
+                 "(failed closed)")
+            )
+            base_log["status"] = (
+                "blocked_by_source_waf" if blocked_by_waf
+                else "no_document_found")
+            if blocked_by_waf:
+                base_log["blocked_urls"] = blocked_urls
+                base_log["block_markers"] = (
+                    browser_blocked or {}).get("_block_markers", [])
             failures.append({
                 "request_id": request_id,
                 "query": original_query,
                 "prepared_query": prepared,
-                "reason": (decision.get("reason") or "no class-verified document "
-                           "found through any tier (failed closed)"),
+                "status": failure_status,
+                "reason": failure_reason,
+                "candidate_urls": blocked_urls,
+                "report_class": _reg_class,
+                "year": _reg_year,
+                "official_domain": domain,
             })
             query_results.append({
                 "request_id": request_id,
                 "query": original_query,
                 "prepared_query": prepared,
-                "status": "failed",
-                "reason": (decision.get("reason") or
-                           "no class-verified document found"),
+                "status": failure_status,
+                "reason": failure_reason,
+                "candidate_urls": blocked_urls,
+                "report_class": _reg_class,
+                "year": _reg_year,
+                "official_domain": domain,
             })
-            print(f"[result] NO DOCUMENT FOUND (failed closed): {prepared!r}")
+            if blocked_by_waf:
+                print(f"[result] BLOCKED BY SOURCE WAF: {prepared!r} "
+                      f"({len(blocked_urls)} exact candidates)")
+            else:
+                print(f"[result] NO DOCUMENT FOUND (failed closed): {prepared!r}")
 
         diag["per_query"].append(base_log)
 

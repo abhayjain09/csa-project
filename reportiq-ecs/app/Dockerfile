@@ -7,6 +7,15 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+# The API and one-off browser worker intentionally share one image so the
+# existing ECR/deploy pipeline publishes an atomic backend+worker version.
+# Playwright uses Debian's Chromium package; no browser binary is downloaded
+# from the public internet during application startup.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+       ca-certificates chromium fonts-liberation \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install dependencies first (layer caching)
 COPY backend/requirements.txt /app/backend/requirements.txt
 RUN pip install --no-cache-dir -r /app/backend/requirements.txt

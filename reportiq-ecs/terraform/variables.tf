@@ -64,6 +64,84 @@ variable "assign_public_ip" {
   default     = false
 }
 
+variable "enable_browser_worker" {
+  description = "Launch one-off Fargate browser tasks for typed blocked_by_source_waf results"
+  type        = bool
+  default     = false
+}
+
+variable "browser_jobs_table" {
+  description = "DynamoDB table used for durable browser fallback job state"
+  type        = string
+  default     = "reportiq-browser-jobs"
+}
+
+variable "browser_worker_cpu" {
+  description = "CPU units for each one-off Chromium Fargate task"
+  type        = number
+  default     = 1024
+}
+
+variable "browser_worker_memory" {
+  description = "Memory in MiB for each one-off Chromium Fargate task"
+  type        = number
+  default     = 2048
+}
+
+variable "browser_worker_subnet_ids" {
+  description = "Subnets for browser tasks; defaults to subnet_ids. They must have approved HTTPS egress through NAT, a Transit Gateway, public routing, or a reachable proxy."
+  type        = list(string)
+  default     = []
+}
+
+variable "browser_worker_security_group_ids" {
+  description = "Optional existing security groups for browser tasks; defaults to the Terraform-managed HTTPS-egress group"
+  type        = list(string)
+  default     = []
+}
+
+variable "browser_worker_assign_public_ip" {
+  description = "Assign public IPs to browser tasks. Keep false when private subnets have NAT, Transit Gateway egress, or a reachable approved proxy."
+  type        = bool
+  default     = false
+}
+
+variable "browser_worker_proxy_secret_arn" {
+  description = "Optional Secrets Manager ARN containing an approved proxy URL or JSON {server/url,username,password}"
+  type        = string
+  default     = ""
+}
+
+variable "browser_worker_max_attempts" {
+  description = "Persistent-browser attempts per WAF fallback job"
+  type        = number
+  default     = 3
+}
+
+variable "browser_worker_retry_delay_seconds" {
+  description = "Delay between long-running browser attempts"
+  type        = number
+  default     = 20
+}
+
+variable "browser_worker_nav_timeout_ms" {
+  description = "Chromium navigation timeout for each official URL"
+  type        = number
+  default     = 90000
+}
+
+variable "browser_worker_max_document_bytes" {
+  description = "Maximum downloaded document size accepted by the worker"
+  type        = number
+  default     = 52428800
+}
+
+variable "browser_worker_run_patch_wait_seconds" {
+  description = "Maximum time a browser task waits for the normal AgentCore chunk run to finish before patching its result"
+  type        = number
+  default     = 7200
+}
+
 variable "alb_ingress_cidrs" {
   description = "CIDR ranges allowed to reach the ALB on port 80"
   type        = list(string)

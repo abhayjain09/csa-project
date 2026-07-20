@@ -128,6 +128,7 @@ tr.detail-row td{padding:0}
 .badge{display:inline-flex;align-items:center;border-radius:14px;padding:3px 14px;font-size:12px;font-weight:700;white-space:nowrap}
 .badge.ok,.badge.complete,.badge.downloaded{background:#e7f8e9;color:#147327;border:1px solid #2bde3f}
 .badge.running{background:#e6efff;color:#0d4ea6;border:1px solid var(--info);animation:blink 1.5s ease-in-out infinite}
+.badge.browser_retry_pending,.badge.browser_retry_queued,.badge.blocked_by_source_waf{background:#fff4d6;color:#805800;border:1px solid #d6a900}
 .badge.pending{background:var(--light);color:var(--muted);border:1px solid var(--border)}
 .badge.failed,.badge.no_results{background:#fdebe6;color:#a33012;border:1px solid var(--err)}
 .badge.indexed{background:#e7f8e9;color:#147327;border:1px solid #2bde3f}
@@ -377,6 +378,7 @@ tr.detail-row td{padding:0}
           <option value="complete">Complete</option>
           <option value="failed">Failed</option>
           <option value="no_results">No results</option>
+          <option value="browser_retry_pending">Browser retry</option>
         </select>
       </div>
       <div class="toolbar-right">
@@ -621,6 +623,9 @@ function toast(type, title, msg) {
 function escH(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+function isActiveRunStatus(s) {
+  return s === 'running' || s === 'browser_retry_pending';
+}
 
 // ─── API ──────────────────────────────────────────────────────────────────────
 async function apiFetch(url, opts) {
@@ -662,7 +667,7 @@ function getChunkProgress(run) {
   // the reconciler doesn't know per-chunk detail, only that files exist). Rather
   // than show a confusing "0/6" on a finished run, clamp to total so the badge
   // reads as complete. Genuinely still-"running" rows are never clamped.
-  const terminal = run.status && run.status !== 'running';
+  const terminal = run.status && !isActiveRunStatus(run.status);
   if (terminal && done < total) done = total;
   // heartbeat_at mirrors the backend's own liveness signal (see app.py's
   // _reconcile_run) — surfacing it lets you tell "still working" apart from
@@ -733,7 +738,7 @@ async function loadDashRuns() {
   try {
     const runs = await apiFetch('/api/runs');
     const tb = document.getElementById('dashRunTable');
-    const hasRunning = runs.some(r => r.status === 'running');
+    const hasRunning = runs.some(r => isActiveRunStatus(r.status));
     const el = document.getElementById('dashAutoSync');
     el.textContent = hasRunning ? '⟳ Live sync active' : '';
     setSyncStatus(hasRunning, hasRunning ? 'Live' : fmtDt(new Date().toISOString()));
@@ -745,7 +750,7 @@ async function loadDashRuns() {
     const sorted = [...runs].sort((a,b)=>(b.started_at||'').localeCompare(a.started_at||''));
     tb.innerHTML = sorted.slice(0,10).map(r => {
       const progress = getChunkProgress(r);
-      const isRunning = r.status === 'running';
+      const isRunning = isActiveRunStatus(r.status);
       return `
       <tr>
         <td class="mono" style="font-size:12px" title="${escH(r.run_id)}">${escH(r.run_id.substring(0,8))}…</td>
@@ -1053,11 +1058,11 @@ async function loadRuns(){
   const tb=document.getElementById('runsTable');
   try{
     const fresh=await apiFetch('/api/runs');
-    const hadRunning=allRuns.some(r=>r.status==='running');
+    const hadRunning=allRuns.some(r=>isActiveRunStatus(r.status));
     allRuns=fresh;
     buildCompanyOptions(allRuns,'runCompanyFilter','company');
     applyRunsFilter();
-    const hasRunning=allRuns.some(r=>r.status==='running');
+    const hasRunning=allRuns.some(r=>isActiveRunStatus(r.status));
     document.getElementById('runsAutoSync').textContent=hasRunning?'⟳ Auto-syncing every 60s…':'';
     setSyncStatus(hasRunning, hasRunning?'Live':fmtDt(new Date().toISOString()));
   }catch(e){
@@ -1082,7 +1087,7 @@ function renderRunsTable(items){
   let html='';
   sorted.forEach(r=>{
     const rid=r.run_id;
-    const isRunning=r.status==='running';
+    const isRunning=isActiveRunStatus(r.status);
     const progress=getChunkProgress(r);
     html+=`<tr class="expandable" onclick="toggleRunDetail('${rid}')" style="${isRunning?'background:#f0f6ff':''}">
       <td class="mono" style="font-size:12px" title="${escH(rid)}">${escH(rid.substring(0,8))}…</td>
@@ -1152,11 +1157,19 @@ function toggleRunDetail(rid){
         if(results && results.length){
           return results.map((r,idx)=>{
             const isDl = r.status==='downloaded' && r.s3_key;
+            const isBrowserPending = r.status==='browser_retry_queued';
+            const isWafBlocked = r.status==='blocked_by_source_waf';
             const action = isDl
               ? `<button class="dl-btn" onclick="downloadFileVerified('${escH(r.s3_key)}',this)">⬇ Download</button>`
+              : isBrowserPending
+              ? `<button class="btn btn-sm" onclick="loadRuns()">↻ Check browser</button>`
               : `<button class="dl-btn upload" onclick="pickUploadForQuery(this,'${escH(rid)}','${escB64(run.company||'')}','${escH(run.query_id||'')}','${escH(String(pc.chunk))}','${escB64(r.query||'')}')">⬆ Upload</button>`;
             const badge = isDl
               ? `<span class="badge downloaded">downloaded</span>${r.duplicate?' <span class="form-hint">(already in S3)</span>':''}${r.manual_upload?' <span class="form-hint">(manual)</span>':''}`
+              : isBrowserPending
+              ? `<span class="badge browser_retry_queued">browser retry</span>`
+              : isWafBlocked
+              ? `<span class="badge blocked_by_source_waf">source blocked</span>`
               : `<span class="badge failed">failed</span>`;
             return `<tr>
               <td class="mono">${idx===0?('#'+escH(String(pc.chunk))):''}</td>
@@ -1186,7 +1199,7 @@ function toggleRunDetail(rid){
   row.cells[0].innerHTML=`<div class="detail-panel">
     <div style="display:flex;gap:16px;align-items:center;margin-bottom:12px">
       <span class="mono" style="font-size:12px;color:var(--muted)">Run: ${escH(rid)}</span>
-      ${run.status==='running'?`<span class="badge running">Running…</span><button class="btn btn-sm" onclick="loadRuns()">↻ Refresh now</button>`:''}
+      ${isActiveRunStatus(run.status)?`<span class="badge ${escH(run.status)}">${run.status==='browser_retry_pending'?'Browser retry…':'Running…'}</span><button class="btn btn-sm" onclick="loadRuns()">↻ Refresh now</button>`:''}
     </div>
     ${chunkHtml}
     ${(!progress || !progress.perChunk || !progress.perChunk.length) ? (dlHtml||'<span class="muted">No files downloaded.</span>') : ''}
@@ -2003,4 +2016,4 @@ loadDashRuns();
 schedulSync();
 </script>
 </body>
-</html>  
+</html>

@@ -51,13 +51,22 @@ locals {
   interface_endpoints = var.create_vpc_endpoints ? {
     ecr_api = "com.amazonaws.${var.region}.ecr.api"
     ecr_dkr = "com.amazonaws.${var.region}.ecr.dkr"
+    ecs     = "com.amazonaws.${var.region}.ecs"
     logs    = "com.amazonaws.${var.region}.logs"
   } : {}
+
+  browser_secret_endpoints = (
+    var.create_vpc_endpoints && var.browser_worker_proxy_secret_arn != ""
+    ? {
+      secretsmanager = "com.amazonaws.${var.region}.secretsmanager"
+    }
+    : {}
+  )
 }
 
 # ── Interface endpoints (ecr.api, ecr.dkr, logs) ─────────────────────────────
 resource "aws_vpc_endpoint" "interface" {
-  for_each = local.interface_endpoints
+  for_each = merge(local.interface_endpoints, local.browser_secret_endpoints)
 
   vpc_id              = var.vpc_id
   service_name        = each.value

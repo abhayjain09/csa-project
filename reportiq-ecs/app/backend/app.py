@@ -98,6 +98,10 @@ Patches in this revision (1-6, plus 7-8 below):
      "duplicate") is preserved through to the per-query UI rows as a
      `duplicate` flag so the portal can show "(already in S3)" without
      treating it as anything other than success.
+  9. WAF BROWSER FALLBACK. A typed blocked_by_source_waf result creates an
+     idempotent DynamoDB job and launches a one-off Chromium task on the
+     existing ECS cluster. Worker and read-path reconciliation update the
+     original per-query row without racing the normal chunk flush.
 """
 import os, json, uuid, re, threading, hashlib, logging, urllib.request, urllib.error
 import unicodedata
@@ -123,6 +127,27 @@ AGENT_RUNTIME_ARN = os.environ.get("AGENT_RUNTIME_ARN",
 AGENT_QUALIFIER   = os.environ.get("AGENT_QUALIFIER",    "DEFAULT")
 STATIC_DIR        = os.environ.get("STATIC_DIR",
     os.path.join(os.path.dirname(__file__), "..", "static"))
+
+# Durable browser fallback. AgentCore remains the synchronous discovery tier;
+# only a typed blocked_by_source_waf result can launch this longer ECS task.
+BROWSER_WORKER_ENABLED = os.environ.get(
+    "BROWSER_WORKER_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
+BROWSER_JOBS_TABLE = os.environ.get(
+    "BROWSER_JOBS_TABLE", "reportiq-browser-jobs")
+BROWSER_ECS_CLUSTER = os.environ.get("BROWSER_ECS_CLUSTER", "")
+BROWSER_ECS_TASK_DEFINITION = os.environ.get(
+    "BROWSER_ECS_TASK_DEFINITION", "")
+BROWSER_ECS_CONTAINER_NAME = os.environ.get(
+    "BROWSER_ECS_CONTAINER_NAME", "browser-worker")
+BROWSER_ECS_SUBNET_IDS = [
+    item.strip() for item in os.environ.get(
+        "BROWSER_ECS_SUBNET_IDS", "").split(",") if item.strip()]
+BROWSER_ECS_SECURITY_GROUP_IDS = [
+    item.strip() for item in os.environ.get(
+        "BROWSER_ECS_SECURITY_GROUP_IDS", "").split(",") if item.strip()]
+BROWSER_ECS_ASSIGN_PUBLIC_IP = os.environ.get(
+    "BROWSER_ECS_ASSIGN_PUBLIC_IP", "false").strip().lower() in {
+        "1", "true", "yes", "on"}
 
 # PageIndex runtime
 PAGEINDEX_RUNTIME_ARN = os.environ.get(
@@ -205,6 +230,9 @@ def get_s3():
         region_name=REGION,
         config=Config(signature_version="s3v4", s3={"addressing_style": "virtual"}),
     )
+
+def get_ecs():
+    return boto3.client("ecs", region_name=REGION)
 
 def get_agentcore():
     """AgentCore client with long read timeout — used by PageIndex invocations."""
@@ -833,6 +861,26 @@ def _pair_queries_with_results(chunk_queries: list, downloaded: list,
     for position, q in enumerate(chunk_queries, start=1):
         request_id = f"{chunk_index}:{position}"
         match = by_request_id.get(request_id) or by_exact_query.get(str(q))
+        if match and match.get("status") == "blocked_by_source_waf":
+            browser_job_status = match.get("browser_job_status")
+            queued = bool(
+                match.get("browser_job_id")
+                and browser_job_status in {
+                    None, "queued", "launched", "running"})
+            results.append({
+                "request_id": request_id,
+                "query": q,
+                "status": (
+                    "browser_retry_queued" if queued
+                    else "blocked_by_source_waf"),
+                "reason": match.get("reason") or (
+                    "The official source blocked automated access."),
+                "browser_job_id": match.get("browser_job_id", ""),
+                "candidate_urls": match.get("candidate_urls") or [],
+                "report_class": match.get("report_class"),
+                "official_domain": match.get("official_domain"),
+            })
+            continue
         if match and match.get("status") not in {"failed", "no_document_found"}:
             key = match.get("s3_key") or match.get("key") or ""
             if not key:
@@ -871,6 +919,356 @@ def _pair_queries_with_results(chunk_queries: list, downloaded: list,
                 "reason": reason,
             })
     return results
+
+
+def _enqueue_browser_retries(agent_results: list, company: str, run_id: str,
+                             query_id: str) -> list:
+    """Create idempotent browser jobs and launch one-off tasks on this cluster.
+
+    The agent controls admission by returning the typed WAF status. Candidate
+    URLs are bounded, exact URLs discovered for the requested report, and the
+    worker independently revalidates scheme/domain/content before storing.
+    """
+    results = [
+        dict(item) if isinstance(item, dict) else item
+        for item in (agent_results or [])
+    ]
+    if not BROWSER_WORKER_ENABLED:
+        return results
+    required = (
+        BROWSER_ECS_CLUSTER,
+        BROWSER_ECS_TASK_DEFINITION,
+        BROWSER_ECS_SUBNET_IDS,
+        BROWSER_ECS_SECURITY_GROUP_IDS,
+    )
+    if not all(required):
+        log.error("[browser-fallback] enabled but ECS network/task settings "
+                  "are incomplete; refusing to launch")
+        return results
+
+    jobs = get_dynamo().Table(BROWSER_JOBS_TABLE)
+    ecs = get_ecs()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    for item in results:
+        if not isinstance(item, dict):
+            continue
+        if item.get("status") != "blocked_by_source_waf":
+            continue
+        candidates = [
+            str(url).strip() for url in (item.get("candidate_urls") or [])
+            if str(url).strip().lower().startswith("https://")
+        ][:8]
+        if not candidates:
+            continue
+        request_id = str(item.get("request_id") or "")
+        identity = "\n".join([run_id, request_id, *candidates])
+        job_id = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:32]
+        record = {
+            "job_id": job_id,
+            "run_id": run_id,
+            "query_id": query_id,
+            "request_id": request_id,
+            "company": company,
+            "query": str(item.get("query") or ""),
+            "prepared_query": str(item.get("prepared_query") or ""),
+            "report_class": str(item.get("report_class") or ""),
+            "year": str(item.get("year") or ""),
+            "official_domain": str(item.get("official_domain") or ""),
+            "candidate_urls": json.dumps(candidates),
+            "status": "queued",
+            "created_at": now_iso,
+            "updated_at": now_iso,
+            "expires_at": int(
+                (datetime.now(timezone.utc) + timedelta(days=30)).timestamp()),
+        }
+        try:
+            jobs.put_item(
+                Item=record,
+                ConditionExpression="attribute_not_exists(job_id)",
+            )
+        except ClientError as exc:
+            code = exc.response.get("Error", {}).get("Code", "")
+            if code == "ConditionalCheckFailedException":
+                existing = jobs.get_item(
+                    Key={"job_id": job_id}).get("Item", {})
+                existing_status = existing.get("status", "queued")
+                if existing_status in {"queued", "launched", "running"}:
+                    item["browser_job_id"] = job_id
+                elif existing_status == "downloaded" and existing.get("s3_key"):
+                    item.update({
+                        "status": "downloaded",
+                        "s3_key": existing["s3_key"],
+                        "source_url": existing.get("source_url", ""),
+                        "duplicate": bool(existing.get("duplicate")),
+                        "browser_job_id": job_id,
+                    })
+                item["browser_job_status"] = existing_status
+                continue
+            log.error("[browser-fallback] job create failed %s: %s",
+                      job_id, exc)
+            continue
+
+        try:
+            response = ecs.run_task(
+                cluster=BROWSER_ECS_CLUSTER,
+                taskDefinition=BROWSER_ECS_TASK_DEFINITION,
+                launchType="FARGATE",
+                count=1,
+                platformVersion="LATEST",
+                networkConfiguration={
+                    "awsvpcConfiguration": {
+                        "subnets": BROWSER_ECS_SUBNET_IDS,
+                        "securityGroups": BROWSER_ECS_SECURITY_GROUP_IDS,
+                        "assignPublicIp": (
+                            "ENABLED" if BROWSER_ECS_ASSIGN_PUBLIC_IP
+                            else "DISABLED"),
+                    },
+                },
+                overrides={
+                    "containerOverrides": [{
+                        "name": BROWSER_ECS_CONTAINER_NAME,
+                        "environment": [
+                            {"name": "BROWSER_JOB_ID", "value": job_id},
+                        ],
+                    }],
+                },
+                startedBy="reportiq-waf-fallback",
+                tags=[
+                    {"key": "ReportIqRunId", "value": run_id},
+                    {"key": "ReportIqBrowserJobId", "value": job_id},
+                ],
+                enableECSManagedTags=True,
+                propagateTags="TASK_DEFINITION",
+            )
+            failures = response.get("failures") or []
+            tasks = response.get("tasks") or []
+            if failures or not tasks:
+                raise RuntimeError(
+                    f"ECS RunTask returned no task: {failures}")
+            task_arn = tasks[0].get("taskArn", "")
+            jobs.update_item(
+                Key={"job_id": job_id},
+                UpdateExpression=(
+                    "SET #st = :s, task_arn = :t, updated_at = :u"),
+                ExpressionAttributeNames={"#st": "status"},
+                ExpressionAttributeValues={
+                    ":s": "launched", ":t": task_arn, ":u": now_iso},
+            )
+            item["browser_job_id"] = job_id
+            item["browser_job_status"] = "launched"
+            log.info("[browser-fallback] launched job=%s task=%s run=%s",
+                     job_id, task_arn.rsplit("/", 1)[-1], run_id[:8])
+        except Exception as exc:
+            jobs.update_item(
+                Key={"job_id": job_id},
+                UpdateExpression=(
+                    "SET #st = :s, error_msg = :e, updated_at = :u"),
+                ExpressionAttributeNames={"#st": "status"},
+                ExpressionAttributeValues={
+                    ":s": "launch_failed",
+                    ":e": str(exc)[:1000],
+                    ":u": datetime.now(timezone.utc).isoformat(),
+                },
+            )
+            log.error("[browser-fallback] launch failed job=%s: %s",
+                      job_id, exc)
+    return results
+
+
+def _refresh_browser_retry_run(run: dict, dynamo=None) -> dict:
+    """Reconcile terminal browser jobs into a run.
+
+    The worker normally performs this patch itself. This read-path safety net
+    also handles a task that downloaded the file but exited before patching, or
+    a Fargate task that stopped before Python started (for example image-pull or
+    network initialization failure).
+    """
+    if run.get("status") != "browser_retry_pending":
+        return run
+    dynamo = dynamo or get_dynamo()
+    jobs_table = dynamo.Table(BROWSER_JOBS_TABLE)
+    response = jobs_table.scan(
+        FilterExpression="#run = :run",
+        ExpressionAttributeNames={"#run": "run_id"},
+        ExpressionAttributeValues={":run": run.get("run_id", "")},
+    )
+    jobs = response.get("Items", [])
+    while response.get("LastEvaluatedKey"):
+        response = jobs_table.scan(
+            ExclusiveStartKey=response["LastEvaluatedKey"],
+            FilterExpression="#run = :run",
+            ExpressionAttributeNames={"#run": "run_id"},
+            ExpressionAttributeValues={":run": run.get("run_id", "")},
+        )
+        jobs.extend(response.get("Items", []))
+    if not jobs:
+        return run
+
+    active_statuses = {"queued", "launched", "running"}
+    task_arns = [
+        job.get("task_arn") for job in jobs
+        if job.get("status") in active_statuses and job.get("task_arn")
+    ]
+    if task_arns and BROWSER_ECS_CLUSTER:
+        try:
+            descriptions = get_ecs().describe_tasks(
+                cluster=BROWSER_ECS_CLUSTER, tasks=task_arns)
+            tasks_by_arn = {
+                task.get("taskArn"): task
+                for task in descriptions.get("tasks", [])
+            }
+            for job in jobs:
+                if job.get("status") not in active_statuses:
+                    continue
+                task = tasks_by_arn.get(job.get("task_arn"))
+                if not task or task.get("lastStatus") != "STOPPED":
+                    continue
+                reason = (
+                    task.get("stoppedReason")
+                    or "ECS task stopped before worker reported a result")
+                try:
+                    jobs_table.update_item(
+                        Key={"job_id": job["job_id"]},
+                        UpdateExpression=(
+                            "SET #st = :st, error_msg = :e, "
+                            "updated_at = :u"),
+                        ConditionExpression="#st IN (:q, :l, :r)",
+                        ExpressionAttributeNames={"#st": "status"},
+                        ExpressionAttributeValues={
+                            ":st": "failed",
+                            ":q": "queued",
+                            ":l": "launched",
+                            ":r": "running",
+                            ":e": reason[:1000],
+                            ":u": datetime.now(timezone.utc).isoformat(),
+                        },
+                    )
+                    job["status"] = "failed"
+                    job["error_msg"] = reason[:1000]
+                except ClientError as exc:
+                    if exc.response.get("Error", {}).get(
+                            "Code") != "ConditionalCheckFailedException":
+                        raise
+                    refreshed = jobs_table.get_item(
+                        Key={"job_id": job["job_id"]}).get("Item", {})
+                    job.update(refreshed)
+        except Exception as exc:
+            log.warning("[browser-fallback] task reconciliation failed for "
+                        "run=%s: %s", run.get("run_id", "")[:8], exc)
+
+    terminal = {
+        "downloaded", "blocked_by_source_waf", "failed", "launch_failed",
+    }
+    if not all(job.get("status") in terminal for job in jobs):
+        return run
+
+    try:
+        downloaded = json.loads(run.get("downloaded") or "[]")
+    except Exception:
+        downloaded = []
+    try:
+        failures = json.loads(run.get("failures") or "[]")
+    except Exception:
+        failures = []
+    try:
+        diagnostics = json.loads(run.get("diagnostics") or "{}")
+    except Exception:
+        diagnostics = {}
+
+    successful_ids = set()
+    jobs_by_request = {}
+    for job in jobs:
+        request_id = job.get("request_id", "")
+        jobs_by_request[request_id] = job
+        if job.get("status") != "downloaded" or not job.get("s3_key"):
+            continue
+        successful_ids.add(request_id)
+        result = {
+            "s3_key": job["s3_key"],
+            "file_name": job["s3_key"].rsplit("/", 1)[-1],
+            "source_url": job.get("source_url", ""),
+            "duplicate": bool(job.get("duplicate")),
+            "browser_job_id": job.get("job_id", ""),
+        }
+        if not any(
+                isinstance(item, dict)
+                and item.get("s3_key") == result["s3_key"]
+                for item in downloaded):
+            downloaded.append(result)
+    failures = [
+        item for item in failures
+        if not (isinstance(item, dict)
+                and item.get("request_id") in successful_ids)
+    ]
+    for chunk in diagnostics.get("per_chunk", []):
+        for row in chunk.get("results", []):
+            job = jobs_by_request.get(row.get("request_id", ""))
+            if not job:
+                continue
+            if job.get("status") == "downloaded" and job.get("s3_key"):
+                row.update({
+                    "status": "downloaded",
+                    "s3_key": job["s3_key"],
+                    "file_name": job["s3_key"].rsplit("/", 1)[-1],
+                    "source_url": job.get("source_url", ""),
+                    "duplicate": bool(job.get("duplicate")),
+                    "browser_job_id": job.get("job_id", ""),
+                })
+                row.pop("reason", None)
+            else:
+                row["status"] = job.get("status", "failed")
+                row["reason"] = job.get(
+                    "error_msg", "long-running browser did not download")
+
+    final_status = "complete" if downloaded else "no_results"
+    old_version = int(run.get("browser_patch_version", 0))
+    now_iso = datetime.now(timezone.utc).isoformat()
+    try:
+        dynamo.Table(RUNS_TABLE).update_item(
+            Key={"run_id": run["run_id"]},
+            UpdateExpression=(
+                "SET #st = :st, #dl = :dl, #fl = :fl, #dg = :dg, "
+                "#ver = :new, #fin = :fin"),
+            ConditionExpression=(
+                "(attribute_not_exists(#ver) OR #ver = :old)"),
+            ExpressionAttributeNames={
+                "#st": "status", "#dl": "downloaded", "#fl": "failures",
+                "#dg": "diagnostics", "#ver": "browser_patch_version",
+                "#fin": "finished_at",
+            },
+            ExpressionAttributeValues={
+                ":st": final_status,
+                ":dl": json.dumps(downloaded),
+                ":fl": json.dumps(failures),
+                ":dg": json.dumps(diagnostics),
+                ":old": old_version,
+                ":new": old_version + 1,
+                ":fin": now_iso,
+            },
+        )
+    except ClientError as exc:
+        if exc.response.get("Error", {}).get(
+                "Code") == "ConditionalCheckFailedException":
+            return dynamo.Table(RUNS_TABLE).get_item(
+                Key={"run_id": run["run_id"]}).get("Item", run)
+        raise
+    query_id = run.get("query_id", "")
+    if query_id:
+        dynamo.Table(QUERIES_TABLE).update_item(
+            Key={"query_id": query_id},
+            UpdateExpression="SET #st = :st, updated_at = :u",
+            ExpressionAttributeNames={"#st": "status"},
+            ExpressionAttributeValues={":st": final_status, ":u": now_iso},
+        )
+    run.update({
+        "status": final_status,
+        "downloaded": json.dumps(downloaded),
+        "failures": json.dumps(failures),
+        "diagnostics": json.dumps(diagnostics),
+        "browser_patch_version": old_version + 1,
+        "finished_at": now_iso,
+    })
+    return run
 
 
 def _patch_run_with_upload(run_id: str, s3_key: str, file_name: str, query: str,
@@ -1160,7 +1558,7 @@ def list_runs():
     # Auto-reconcile any stuck runs inline (non-blocking — fire threads).
     # Guarded by _RECONCILE_INFLIGHT so overlapping /api/runs polls (every 8s)
     # don't spawn duplicate reconcile threads for the same run.
-    for item in items:
+    for index, item in enumerate(items):
         if item.get("status") == "running":
             started = item.get("started_at", "")
             try:
@@ -1170,6 +1568,12 @@ def list_runs():
                     _spawn_reconcile(item)
             except Exception:
                 pass
+        elif item.get("status") == "browser_retry_pending":
+            try:
+                items[index] = _refresh_browser_retry_run(item, dynamo)
+            except Exception as exc:
+                log.warning("[browser-fallback] run reconciliation failed "
+                            "for %s: %s", item.get("run_id", "")[:8], exc)
 
     items = sorted(items, key=lambda x: x.get("started_at", ""), reverse=True)
     return jsonify(items)
@@ -1185,6 +1589,24 @@ def get_run(run_id):
     # Reconcile on individual fetch too
     if item.get("status") == "running":
         _spawn_reconcile(item)
+    elif item.get("status") == "browser_retry_pending":
+        item = _refresh_browser_retry_run(item, dynamo)
+    return jsonify(item)
+
+
+@app.route("/api/browser-jobs/<job_id>", methods=["GET"])
+def get_browser_job(job_id):
+    """Return durable status for a WAF browser retry."""
+    item = get_dynamo().Table(BROWSER_JOBS_TABLE).get_item(
+        Key={"job_id": job_id}).get("Item")
+    if not item:
+        return jsonify({"error": "Browser job not found"}), 404
+    raw_candidates = item.get("candidate_urls")
+    if isinstance(raw_candidates, str):
+        try:
+            item["candidate_urls"] = json.loads(raw_candidates)
+        except Exception:
+            item["candidate_urls"] = []
     return jsonify(item)
 
 
@@ -1559,7 +1981,7 @@ def _build_chunk_payload(company: str, run_id: str, search_query: str,
 
 
 def _invoke_one_chunk(chunk_index: int, chunk_queries: list, company: str,
-                      run_id: str, search_query: str) -> dict:
+                      run_id: str, query_id: str, search_query: str) -> dict:
     """Invoke a single chunk and normalise its response into a result dict."""
     payload = _build_chunk_payload(company, run_id, search_query, chunk_queries, chunk_index)
     log.info("[run %s] chunk %d — invoking %d queries", run_id[:8], chunk_index, len(chunk_queries))
@@ -1599,8 +2021,31 @@ def _invoke_one_chunk(chunk_index: int, chunk_queries: list, company: str,
         duplicates = body.get("duplicates", [])        if isinstance(body, dict) else []
         not_found  = body.get("no_document_found", []) if isinstance(body, dict) else []
         agent_results = body.get("results", [])        if isinstance(body, dict) else []
+        agent_results = _enqueue_browser_retries(
+            agent_results, company, run_id, query_id)
         downloaded = list(stored) + list(duplicates)
+        for item in agent_results:
+            if (isinstance(item, dict)
+                    and item.get("status") == "downloaded"
+                    and item.get("s3_key")
+                    and not any(
+                        isinstance(existing, dict)
+                        and existing.get("s3_key") == item["s3_key"]
+                        for existing in downloaded)):
+                downloaded.append(item)
         failures   = list(not_found)
+        recovered_request_ids = {
+            item.get("request_id") for item in agent_results
+            if isinstance(item, dict)
+            and item.get("status") == "downloaded"
+            and item.get("request_id")
+        }
+        if recovered_request_ids:
+            failures = [
+                item for item in failures
+                if not (isinstance(item, dict)
+                        and item.get("request_id") in recovered_request_ids)
+            ]
         diag       = body.get("diagnostics", {}) if isinstance(body, dict) else {}
         log.info("[run %s] chunk %d done — downloaded=%d failures=%d",
                  run_id[:8], chunk_index, len(downloaded), len(failures))
@@ -1879,7 +2324,9 @@ def _do_invoke_inner(run_id: str, query_record: dict):
     workers = max(1, min(AGENT_CHUNK_CONCURRENCY, chunks_total))
     with ThreadPoolExecutor(max_workers=workers) as ex:
         futures = [
-            ex.submit(_invoke_one_chunk, i + 1, ch, company, run_id, search_q)
+            ex.submit(
+                _invoke_one_chunk, i + 1, ch, company, run_id, query_id,
+                search_q)
             for i, ch in enumerate(chunks)
         ]
         for fut in as_completed(futures):
@@ -1914,7 +2361,17 @@ def _do_invoke_inner(run_id: str, query_record: dict):
     downloaded = list(downloaded_by_key.values())
     any_error  = any(pc.get("error") for pc in per_chunk_diag)
 
-    if downloaded:
+    browser_jobs_pending = any(
+        result.get("status") == "browser_retry_queued"
+        for pc in per_chunk_diag
+        for result in (pc.get("results") or [])
+        if isinstance(result, dict)
+    )
+
+    if browser_jobs_pending:
+        final_status = "browser_retry_pending"
+        error_msg = None
+    elif downloaded:
         final_status = "complete"          # any docs → complete (per decision)
         error_msg    = None
     elif any_error:

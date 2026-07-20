@@ -1,0 +1,490 @@
+Metadata : The report which are being fetched aren’t of latest of the report especially in the policies and Sustainability report as well.
+ 
+Annual report Fetching Issue.
+----------
+Language : The company' website has certain number of Languages in en - English es- Spanish etc.
+the agent should be prioritizing the English documents first.- agent fetching the other document website.
+Multiple domain within the website : The document couldn’t able to fetch the document which have multiple domain within the site.
+
+
+[class-parity] OK — 11 document classes aligned across _DOC_CLASS_RULES and report_specs.REPORT_SPECS
+WARNING:  Invalid HTTP request received.
+[identity] Vertex hint for 'NVIDIA Corporation': ticker='NVDA' cik='0001045810' domain='nvidia.com' sources=0 (untrusted until SEC validation)
+[identity] validated 'NVIDIA Corporation' -> CIK 0001045810, ticker='NVDA' via vertex_ticker+vertex_cik
+[year] latest completed fiscal year: 'NVIDIA Corporation annual report site:nvidia.com' -> 'NVIDIA Corporation annual report 2025 site:nvidia.com'
+[llm-querygen] generated 8 variants for 'NVIDIA Corporation annual report 2025 site:nvidia.com'
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[find][query] 'NVIDIA Corporation annual report 2025 site:nvidia.com' -> 4 hits via=vertex-grounding
+[find][query] 'NVIDIA Corporation annual report 2025 ticker "NVDA" site:nvidia.com' -> 1 hits via=vertex-grounding
+[find][query] 'NVIDIA Corporation integrated annual report 2025 site:nvidia.com' -> 4 hits via=vertex-grounding
+[find][query] 'NVIDIA Corporation annual report 2025 filetype:pdf site:nvidia.com' -> 3 hits via=vertex-grounding
+[find][query] 'investors.nvidia.com annual report 2025 site:nvidia.com' -> 5 hits via=vertex-grounding
+[find][query] 'sustainability.nvidia.com annual report 2025 site:nvidia.com' -> 0 hits via=gateway-empty-all-forms
+[find][query] 'NVIDIA Corporation annual report and accounts 2025 site:nvidia.com' -> 3 hits via=vertex-grounding
+[find][query] 'static.nvidia.com annual report 2025 site:nvidia.com' -> 4 hits via=vertex-grounding
+[find][query] 'NVIDIA Corporation 10-K 2025 site:nvidia.com' -> 4 hits via=vertex-grounding
+[find][query] 'NVIDIA Corporation governance policy 2025 site:nvidia.com' -> 4 hits via=vertex-grounding
+[find] domain_mode=hard(on_domain_hits_found) | HEAD pre-filtering 6 candidates for: NVIDIA Corporation annual report 2025 site:nvidia.com
+[find] 6/6 passed HEAD pre-filter
+[llm] select decision: selected=https://investor.nvidia.com/financial-info/annual-reports-and-proxies/default.aspx topic=True company=True year=False conf=low reason=Page lists annual reports, but no 2025 file shown
+[sitemap] nvidia.com: 5576 urls -> 136 candidates -> top 40
+[sitemap] inspected 12 landing page(s), discovered 30 linked document(s); 30 total document candidate(s)
+[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Not an annual report, it's a statement.
+[browser] candidate REJECTED by class check (https://www.nvidia.com/content/dam/en-zz/Solutions/about-us/documents/2025-Forced-Labor-Human-Trafficking-and-Child-Labor-Statement.pdf): Not an annual report, it's a statement.
+[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Is a sustainability report, not an annual report.
+[browser] candidate REJECTED by class check (https://images.nvidia.com/aem-dam/Solutions/documents/NVIDIA-Sustainability-Report-Fiscal-Year-2025.pdf): Is a sustainability report, not an annual report.
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Not the annual report, wrong year
+[browser] candidate REJECTED by class check (https://images.nvidia.com/aem-dam/Solutions/homepage/pdf/NVIDIA-Story.pdf): Not the annual report, wrong year
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Not an Annual Report; it's an Anti-Corruption Policy.
+[browser] candidate REJECTED by class check (https://www.nvidia.com/content/dam/en-zz/Solutions/about-us/documents/NVIDIA-Anti-Corruption-Policy.pdf): Not an Annual Report; it's an Anti-Corruption Policy.
+[verify] STRICT reject (near-neighbor filename, no LLM): https://www.nvidia.com/content/dam/en-zz/Solutions/about-us/documents/NVIDIA-Trademark-and-Logo-Usage-Guidelines.pdf
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Not an annual report, wrong document type.
+[browser] candidate REJECTED by class check (https://www.nvidia.com/content/dam/en-zz/Solutions/about-us/documents/nvidia-gender-identity-and-expression-in-the-workplace.pdf): Not an annual report, wrong document type.
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Not an annual report; policy document only.
+[browser] candidate REJECTED by class check (https://images.nvidia.com/content/includes/gcr/pdf/nvidia-responsible-minerals-policy.pdf): Not an annual report; policy document only.
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Not an annual report, wrong document class.
+[browser] candidate REJECTED by class check (https://www.nvidia.com/content/dam/en-zz/Solutions/about-us/documents/NVIDIA-Environmental-Health-Safety-Energy-Policy.pdf): Not an annual report, wrong document class.
+[verify] STRICT reject (invalid document bytes): https://images.nvidia.com/aem-dam/en-zz/Solutions/about-us/NVIDIA-Code-of-Conduct-External.pdf: encrypted PDFs are not supported
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Not an Annual Report, wrong document type
+[browser] candidate REJECTED by class check (https://images.nvidia.com/aem-dam/en-zz/Solutions/about-us/NVIDIA-Code-of-Conduct-External-es.pdf): Not an Annual Report, wrong document type
+[deep-crawl] https://nvidia.com/ (depth=0, page=1): 2 doc candidates
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=No 2025 annual report available in candidates.
+[browser] candidate REJECTED by class check (https://www.nvidia.com/content/dam/en-zz/Solutions/about-nvidia/corporate-nvidia-in-brief.pdf): No 2025 annual report available in candidates.
+[verify] already rejected earlier this query, skipping: https://images.nvidia.com/aem-dam/Solutions/homepage/pdf/NVIDIA-Story.pdf
+[deep-crawl] https://www.nvidia.com (depth=1, page=2): 2 doc candidates
+[verify] already rejected earlier this query, skipping: https://www.nvidia.com/content/dam/en-zz/Solutions/about-nvidia/corporate-nvidia-in-brief.pdf
+[verify] already rejected earlier this query, skipping: https://images.nvidia.com/aem-dam/Solutions/homepage/pdf/NVIDIA-Story.pdf
+[deep-crawl] https://www.nvidia.com/en-us/ (depth=1, page=3): 2 doc candidates
+[verify] already rejected earlier this query, skipping: https://www.nvidia.com/content/dam/en-zz/Solutions/about-nvidia/corporate-nvidia-in-brief.pdf
+[verify] already rejected earlier this query, skipping: https://images.nvidia.com/aem-dam/Solutions/homepage/pdf/NVIDIA-Story.pdf
+[deep-crawl] https://www.nvidia.com/en-us/data-center/dgx-cloud/ (depth=1, page=4): 1 doc candidates
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Not an annual report, wrong document type
+[browser] candidate REJECTED by class check (https://docs.nvidia.com/data-center-gpu/line-card.pdf): Not an annual report, wrong document type
+[deep-crawl] https://build.nvidia.com/ (depth=2, page=5): 1 doc candidates
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 annual report found.
+[browser] candidate REJECTED by class check (https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA_Technology_Access_TOU.pdf): No 2025 annual report found.
+[deep-crawl] https://www.nvidia.com/en-us/data-center/ (depth=2, page=6): 1 doc candidates
+[verify] already rejected earlier this query, skipping: https://docs.nvidia.com/data-center-gpu/line-card.pdf
+[deep-crawl] https://brev.nvidia.com/environment/new/public (depth=3, page=7): 0 doc candidates
+[deep-crawl] https://docs.api.nvidia.com/ (depth=3, page=8): 0 doc candidates
+[deep-crawl] https://www.nvidia.com/en-us/about-nvidia/privacy-policy/ (depth=3, page=9): 0 doc candidates
+[deep-crawl] https://www.nvidia.com/en-us/data-center/solutions/accelerated-computing/ (depth=3, page=10): 5 doc candidates
+[verify] already rejected earlier this query, skipping: https://docs.nvidia.com/data-center-gpu/line-card.pdf
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Not an annual report, wrong content type
+[browser] candidate REJECTED by class check (https://www.nvidia.com/content/dam/en-zz/Solutions/Data-Center/accelerated-computing/egx-accelerate-ai-training-and-Inference.pdf): Not an annual report, wrong content type
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Not an annual report, wrong document type
+[browser] candidate REJECTED by class check (https://images.nvidia.com/data-center/accelerated-computing/egx-edge-computing-solution-brief.pdf): Not an annual report, wrong document type
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Not an Annual Report, wrong content type
+[browser] candidate REJECTED by class check (https://www.nvidia.com/content/dam/en-zz/Solutions/Data-Center/accelerated-computing/egx-sales-enablement-us-1578091-r10-web.pdf): Not an Annual Report, wrong content type
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Not an annual report; wrong document class.
+[browser] candidate REJECTED by class check (https://www.nvidia.com/content/dam/en-zz/Solutions/Data-Center/accelerated-computing/egx-proviz-solution-brief.pdf): Not an annual report; wrong document class.
+[browser] redirected: requested=https://nvidia.com/ final=https://www.nvidia.com/en-us/ referer_sent='https://nvidia.com/'
+[browser][direct] navigation failed (https://images.nvidia.com/pdf/Annual-NVIDIA-CEO-Letter-2025.pdf): BrowserContext.new_page: Cannot read properties of undefined (reading '_page')
+[llm] select decision: selected=https://images.nvidia.com/pdf/Annual-NVIDIA-CEO-Letter-2025.pdf topic=False company=True year=True conf=high reason=CEO letter, not annual report
+[browser] candidate REJECTED by class check (https://images.nvidia.com/pdf/Annual-NVIDIA-CEO-Letter-2025.pdf): CEO letter, not annual report
+[verify] already rejected earlier this query, skipping: https://images.nvidia.com/aem-dam/Solutions/documents/NVIDIA-Sustainability-Report-Fiscal-Year-2025.pdf
+[browser] hover-reveal: harvested grew to 304 links after menu hover
+[browser] harvested 304 links: 2 doc-file candidates, 0 download-labeled controls (verify_budget=10, click_budget=10)
+[browser] skipping candidate already class-rejected earlier this query: https://www.nvidia.com/content/dam/en-zz/Solutions/about-nvidia/corporate-nvidia-in-brief.pdf
+[browser] skipping candidate already class-rejected earlier this query: https://images.nvidia.com/aem-dam/Solutions/homepage/pdf/NVIDIA-Story.pdf
+[browser][nav] IR-prioritized frontier: 39/274 nav links (IR-nav first, query terms ['nvidia', 'corporation', 'annual', 'report', '2025'] secondary)
+[browser][nav] https://www.nvidia.com/en-us/sustainability/: 1 doc candidates (depth=1, pages=1)
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not an annual report
+[browser] candidate REJECTED by class check (https://images.nvidia.com/aem-dam/Solutions/documents/NVIDIA-Sustainability-Report-Fiscal-Year-2026.pdf): Wrong year, not an annual report
+[browser][nav] https://www.nvidia.com/en-us/about-nvidia/privacy-policy/: 0 doc candidates (depth=1, pages=2)
+[browser][nav] https://www.nvidia.com/en-us/about-nvidia/cookie-policy/: 0 doc candidates (depth=1, pages=3)
+[browser][nav] https://www.nvidia.com/en-us/about-nvidia/company-policies/: 20 doc candidates (depth=1, pages=4)
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Not an Annual Report, just a Code of Conduct
+[browser] candidate REJECTED by class check (https://images.nvidia.com/aem-dam/en-zz/Solutions/about-us/NVIDIA-Code-of-Conduct-External-hy.pdf): Not an Annual Report, just a Code of Conduct
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Not an annual report, wrong document class
+[browser] candidate REJECTED by class check (https://images.nvidia.com/aem-dam/en-zz/Solutions/about-us/NVIDIA-Code-of-Conduct-External-uk.pdf): Not an annual report, wrong document class
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Not an Annual Report; it's a Code of Conduct.
+[browser] candidate REJECTED by class check (https://images.nvidia.com/aem-dam/en-zz/Solutions/about-us/NVIDIA-Code-of-Conduct-External-pl.pdf): Not an Annual Report; it's a Code of Conduct.
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Not an Annual Report, just a Code of Conduct
+[browser] candidate REJECTED by class check (https://images.nvidia.com/aem-dam/en-zz/Solutions/about-us/NVIDIA-Code-of-Conduct-External-fr.pdf): Not an Annual Report, just a Code of Conduct
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Not an annual report, wrong document type.
+[browser] candidate REJECTED by class check (https://images.nvidia.com/aem-dam/en-zz/Solutions/about-us/NVIDIA-Code-of-Conduct-External-jp.pdf): Not an annual report, wrong document type.
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Not an annual report; it's a code of conduct.
+[browser] candidate REJECTED by class check (https://images.nvidia.com/aem-dam/en-zz/Solutions/about-us/NVIDIA-Code-of-Conduct-External-kr.pdf): Not an annual report; it's a code of conduct.
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Not an Annual Report; it's a Code of Conduct.
+[browser] candidate REJECTED by class check (https://images.nvidia.com/aem-dam/en-zz/Solutions/about-us/NVIDIA-Code-of-Conduct-External-nl.pdf): Not an Annual Report; it's a Code of Conduct.
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Not an annual report, just a code of conduct.
+[browser] candidate REJECTED by class check (https://images.nvidia.com/aem-dam/en-zz/Solutions/about-us/NVIDIA-Code-of-Conduct-External-scn.pdf): Not an annual report, just a code of conduct.
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Not an annual report, just a code of conduct.
+[browser] candidate REJECTED by class check (https://images.nvidia.com/aem-dam/en-zz/Solutions/about-us/NVIDIA-Code-of-Conduct-External-tcn.pdf): Not an annual report, just a code of conduct.
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Not an Annual Report, just a Code of Conduct.
+[browser] candidate REJECTED by class check (https://images.nvidia.com/aem-dam/en-zz/Solutions/about-us/NVIDIA-Code-of-Conduct-External-pt.pdf): Not an Annual Report, just a Code of Conduct.
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Not an annual report, wrong document type.
+[browser] candidate REJECTED by class check (https://images.nvidia.com/aem-dam/en-zz/Solutions/about-us/NVIDIA-Code-of-Conduct-External-de.pdf): Not an annual report, wrong document type.
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Not an annual report, wrong document type
+[browser] candidate REJECTED by class check (https://images.nvidia.com/aem-dam/en-zz/Solutions/about-us/global-tax-principles.pdf): Not an annual report, wrong document type
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong document type, not an annual report
+[browser] candidate REJECTED by class check (https://www.nvidia.com/content/dam/en-zz/Solutions/about-us/documents/Trademark-License-Agreement.pdf): Wrong document type, not an annual report
+[verify] STRICT reject (invalid document bytes): https://www.nvidia.com/content/dam/en-zz/Solutions/about-us/documents/NVDIA-Finance-Team-Code-of-Conduct-External.pdf: encrypted PDFs are not supported
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Not an annual report, wrong document type.
+[browser] candidate REJECTED by class check (https://www.nvidia.com/content/dam/en-zz/Solutions/about-us/documents/ontario-multi-year-accessibility-plan.pdf): Not an annual report, wrong document type.
+[browser][nav] https://www.nvidia.com/en-us/software/nvidia-app/: 0 doc candidates (depth=1, pages=5)
+[browser][nav] https://www.nvidia.com/en-us/software/nvidia-app/g-assist/: 0 doc candidates (depth=1, pages=6)
+[browser][nav] https://www.nvidia.com/en-us/software/nvidia-app-enterprise/: 0 doc candidates (depth=1, pages=7)
+[browser][nav] https://nvidianews.nvidia.com/news/japan-government-industrial-leaders-and-nvidia-launch-the-worlds-first-national-ai-infrastructure: 0 doc candidates (depth=1, pages=8)
+[browser][nav] https://nvidianews.nvidia.com/news/japans-robotics-and-manufacturing-leaders-build-on-nvidia-cosmos-to-advance-physical-ai-frontier: 0 doc candidates (depth=1, pages=9)
+[browser][nav] https://nvidianews.nvidia.com/news/japans-enterprises-and-startups-build-industry-specialized-ai-with-nvidia-nemotron-open-models?nvid=nv-cwmfg-427377: 0 doc candidates (depth=1, pages=10)
+[browser][nav] https://blogs.nvidia.com/blog/nvidia-and-partners-build-in-america-for-america: 0 doc candidates (depth=1, pages=11)
+[browser][nav] https://register.nvidia.com/flow/nvidia/gtceu26/reg: 0 doc candidates (depth=1, pages=12)
+[browser][nav] https://blogs.nvidia.com/blog/nvidia-vera-rubin-post-training-intelligence-per-dollar?nvid=nv-cwmfg-435535: 0 doc candidates (depth=1, pages=13)
+[browser][nav] https://blogs.nvidia.com/blog/nvidia-vera-max-single-threaded-cpu-at-scale/: 0 doc candidates (depth=1, pages=14)
+[browser][nav] https://nvidianews.nvidia.com/news/nvidia-and-tsmc-bring-ai-into-fabs-to-advance-semiconductor-design-and-manufacturing: 0 doc candidates (depth=1, pages=15)
+[browser][nav] https://nvidianews.nvidia.com/news/nvidia-releases-vera-rubin-dsx-ai-factory-reference-design-and-omniverse-dsx-digital-twin-blueprint-with-broad-industry-support: 0 doc candidates (depth=1, pages=16)
+[browser][nav] https://blogs.nvidia.com/blog/nvidia-cloudxr-apple-vision-pro/: 0 doc candidates (depth=1, pages=17)
+[browser][nav] https://nvidianews.nvidia.com/news/adobe-and-nvidia-partnership-creative-marketing-agentic-workflows?nvid=nv-int-csfg-164160-vt20: 0 doc candidates (depth=1, pages=18)
+[browser][nav] https://nvidianews.nvidia.com/news/nvidia-and-global-industrial-software-giants-bring-design-engineering-and-manufacturing-into-the-ai-era: 0 doc candidates (depth=1, pages=19)
+[browser][nav] https://blogs.nvidia.com/blog/nvidia-vera-cpu-los-alamos-national-laboratory: 0 doc candidates (depth=1, pages=20)
+[browser][nav] https://nvidianews.nvidia.com/news/europe-unveils-a-record-35-new-nvidia-ai-supercomputers: 0 doc candidates (depth=1, pages=21)
+[browser][nav] https://blogs.nvidia.com/blog/nvidia-earth-2-open-models/: 0 doc candidates (depth=1, pages=22)
+[browser][nav] https://nvidianews.nvidia.com/news/nvidia-microsoft-windows-pcs-agents-rtx-spark: 0 doc candidates (depth=1, pages=23)
+[browser][nav] https://nvidianews.nvidia.com/news/nvidia-drive-hyperion-becomes-the-global-platform-for-a-robotaxi-ready-world: 0 doc candidates (depth=1, pages=24)
+[browser][nav] https://nvidianews.nvidia.com/news/nvidia-alpamayo-2-super-robotaxis: 0 doc candidates (depth=1, pages=25)
+[browser][nav] https://blogs.nvidia.com/blog/firefly-aerospace-nvidia-jetson-lunar-orbit/: 0 doc candidates (depth=1, pages=26)
+[browser][nav] https://nvidianews.nvidia.com/news/nvidia-announces-halos-for-robotics-the-industrys-first-full-stack-safety-system-for-physical-ai: 0 doc candidates (depth=1, pages=27)
+[browser][nav] https://blogs.nvidia.com/blog/nvidia-and-lg-group-ai-factory/: 0 doc candidates (depth=1, pages=28)
+[browser][nav] https://blogs.nvidia.com/blog/nvidia-and-doosan-group-physical-ai: 0 doc candidates (depth=1, pages=29)
+[browser][nav] https://nvidianews.nvidia.com/news/nvidia-and-global-robotics-leaders-take-physical-ai-to-the-real-world: 0 doc candidates (depth=1, pages=30)
+[browser][nav] https://blogs.nvidia.com/blog/anthropic-nvidia-gb300-blackwell-ultra-microsoft-azure: 0 doc candidates (depth=1, pages=31)
+[browser][nav] https://nvidianews.nvidia.com/news/nvidia-vera-rubin-delivers-world-class-supercomputers-for-science?nvid=nv-int-cwmfg-597709: 0 doc candidates (depth=1, pages=32)
+[browser][nav] https://www.nvidia.com/en-us/about-nvidia/: 0 doc candidates (depth=1, pages=33)
+[browser][nav] https://www.nvidia.com/en-us/about-nvidia/careers/: 0 doc candidates (depth=1, pages=34)
+[browser][nav] https://www.nvidia.com/en-us/about-nvidia/webinar-portal/: 0 doc candidates (depth=1, pages=35)
+[browser][nav] https://www.nvidia.com/en-us/about-nvidia/partners/: 0 doc candidates (depth=1, pages=36)
+[browser][nav] https://www.nvidia.com/en-us/about-nvidia/privacy-center/: 0 doc candidates (depth=1, pages=37)
+[browser][nav] https://www.nvidia.com/en-us/about-nvidia/terms-of-service/: 0 doc candidates (depth=1, pages=38)
+[browser][nav] https://www.nvidia.com/en-us/about-nvidia/accessibility/: 0 doc candidates (depth=1, pages=39)
+[browser][nav] https://www.nvidia.com/en-us/industries/finance/: 0 doc candidates (depth=2, pages=40)
+[browser][nav] goto failed (https://buy.nvidia.com/store/nvidia/en_US/help/ThemeID.326200): Page.goto: net::ERR_NAME_NOT_RESOLVED at https://buy.nvidia.com/store/nvidia/en_US/help/ThemeID.326200
+Call log:
+  - navigating to "https://buy.nvidia.com/store/nvidia/en_US/help/ThemeID.326200", waiting until "domcontentloaded"
+[browser][nav] goto failed (https://www.nvidia.com/en-us/about-nvidia/corporate-timeline/): Page.goto: Timeout 120000ms exceeded.
+Call log:
+  - navigating to "https://www.nvidia.com/en-us/about-nvidia/corporate-timeline/", waiting until "domcontentloaded"
+[browser][nav] https://www.nvidia.com/en-us/about-nvidia/our-story/: 0 doc candidates (depth=2, pages=43)
+[browser][nav] https://www.nvidia.com/en-us/about-nvidia/nvidia-awards/: 0 doc candidates (depth=2, pages=44)
+[browser][nav] http://investor.nvidia.com/home/default.aspx: 6 doc candidates (depth=2, pages=45)
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=No 2025 annual report found
+[browser] candidate REJECTED by class check (https://s201.q4cdn.com/141608511/files/doc_financials/2027/q1/NVDA-Q1-2027-Earnings-Call-20-May-2026-5_00-PM-ET.pdf): No 2025 annual report found
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 annual report found in candidates.
+[browser] candidate REJECTED by class check (https://s201.q4cdn.com/141608511/files/doc_financials/2027/Q127/Q1FY27-CFO-Commentary.pdf): No 2025 annual report found in candidates.
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=No 2025 annual report available in candidates.
+[browser] candidate REJECTED by class check (https://s201.q4cdn.com/141608511/files/doc_presentations/2026/07/NDR_July2026_.pdf): No 2025 annual report available in candidates.
+[llm] select decision: selected=None topic=False company=False year=False conf=high reason=Year 2025 not present in filename or content.
+[browser] candidate REJECTED by class check (https://s201.q4cdn.com/141608511/files/doc_financials/2027/Q127/Rev_by_Mkt_Qtrly_Trend_Q127-NEW-v3.pdf): Year 2025 not present in filename or content.
+[verify] STRICT reject (invalid document bytes): https://s201.q4cdn.com/141608511/files/doc_financials/2027/q1/927dc2d6-a76c-4006-9f34-8769b2c665fb.pdf: encrypted PDFs are not supported
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Wrong year, not an annual report
+[browser] candidate REJECTED by class check (https://s201.q4cdn.com/141608511/files/doc_financials/2027/Q127/NVDA-F1Q27-Quarterly-Presentation-FINAL.pdf): Wrong year, not an annual report
+[browser][nav] https://www.nvidia.com/en-us/about-nvidia/legal-info/logo-brand-usage/: 0 doc candidates (depth=2, pages=46)
+[browser][nav] https://www.nvidia.com/en-us/about-nvidia/careers/diversity-and-inclusion/: 1 doc candidates (depth=2, pages=47)
+[browser][nav] https://www.nvidia.com/en-us/about-nvidia/i-am-ai/: 0 doc candidates (depth=2, pages=48)
+[browser][nav] https://www.nvidia.com/en-us/about-nvidia/careers/life-at-nvidia/: 0 doc candidates (depth=2, pages=49)
+[browser][nav] https://www.nvidia.com/en-us/about-nvidia/careers/how-we-hire/: 0 doc candidates (depth=2, pages=50)
+[browser][nav] https://www.nvidia.com/en-us/about-nvidia/careers/university-recruiting/: 1 doc candidates (depth=2, pages=51)
+[llm] select decision: selected=None topic=False company=True year=False conf=high reason=Not an annual report; it's a job description.
+[browser] candidate REJECTED by class check (https://www.nvidia.com/content/dam/en-zz/Solutions/careers/university-recruiting/corporate-web-hr-ur-digital-flyer-job-description.pdf): Not an annual report; it's a job description.
+[browser][nav] https://investor.nvidia.com/home/default.aspx: 6 doc candidates (depth=2, pages=52)
+[browser][nav] https://www.nvidia.com/es-la/sustainability/: 1 doc candidates (depth=2, pages=53)
+[browser][nav] https://www.nvidia.com/pt-br/sustainability/: 1 doc candidates (depth=2, pages=54)
+[browser][nav] https://www.nvidia.com/en-gb/sustainability/: 1 doc candidates (depth=2, pages=55)
+[browser][nav] https://www.nvidia.com/en-eu/sustainability/: 1 doc candidates (depth=2, pages=56)
+No more records within selected time range 
+Auto retry paused.
+ 
+Resume
+ 
+[class-parity] OK — 11 document classes aligned across _DOC_CLASS_RULES and report_specs.REPORT_SPECS
+WARNING:  Invalid HTTP request received.
+[identity] Vertex hint for 'Asian Paints': ticker=None cik=None domain='asianpaints.com' sources=0 (untrusted until SEC validation)
+[llm-querygen] generated 8 variants for 'Asian Paints anti-bribery and corruption policy site:asianpaints.com'
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[find][query] 'Asian Paints anti-bribery and corruption policy site:asianpaints.com' -> 3 hits via=vertex-grounding
+[find][query] 'Asian Paints anti-bribery and corruption policy latest site:asianpaints.com' -> 3 hits via=vertex-grounding
+[find][query] 'Asian Paints anti-bribery and corruption policy 2025 site:asianpaints.com' -> 4 hits via=vertex-grounding
+[find][query] 'Asian Paints anti-bribery and corruption policy FY2025 site:asianpaints.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Asian Paints anti-bribery and corruption policy updated 2026 site:asianpaints.com' -> 3 hits via=vertex-grounding
+[find][query] 'Asian Paints anti-bribery policy site:asianpaints.com' -> 4 hits via=vertex-grounding
+[find][query] 'Asian Paints anti-corruption policy site:asianpaints.com' -> 4 hits via=vertex-grounding
+[find][query] 'Asian Paints anti-bribery and anti-corruption policy site:asianpaints.com' -> 2 hits via=vertex-grounding
+[find][query] 'Asian Paints abc policy site:asianpaints.com' -> 0 hits via=gateway-empty-all-forms
+[find][query] 'Asian Paints policy on prevention of bribery and corruption site:asianpaints.com' -> 3 hits via=vertex-grounding
+[find][query] 'Asian Paints foreign corrupt practices act policy site:asianpaints.com' -> 3 hits via=vertex-grounding
+[find][query] 'Asian Paints anti-bribery and corruption policy filetype:pdf site:asianpaints.com' -> 0 hits via=gateway-empty-all-forms
+[find][query] 'Asian Paints anti-bribery and anti-corruption policy filetype:pdf site:asianpaints.com' -> 9 hits via=gateway(native-site)
+[find] dropped 1 junk-host candidate(s) (app store / media / social / aggregator subdomains — generic, not company-specific)
+[find] domain_mode=hard(on_domain_hits_found) | HEAD pre-filtering 9 candidates for: Asian Paints anti-bribery and corruption policy site:asianpaints.com
+[find] 9/9 passed HEAD pre-filter
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=No standalone anti-bribery policy found
+[sitemap] asianpaints.com: 7770 urls -> 25 candidates -> top 25
+[sitemap] inspected 12 landing page(s), discovered 2 linked document(s); 2 total document candidate(s)
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=PDF is caution notice, not ABC policy
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asianpaints/footer-icons/Caution-Notice.pdf): PDF is caution notice, not ABC policy
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an anti-bribery policy document
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asian_paints/resources/publicnotices/caution_notice.pdf): Not an anti-bribery policy document
+[deep-crawl] fetch failed (https://asianpaints.com/): <urlopen error [SSL: UNSAFE_LEGACY_RENEGOTIATION_DISABLED] unsafe legacy renegotiation disabled (_ssl.c:1016)>
+[browser] redirected: requested=https://asianpaints.com/ final=https://www.asianpaints.com/ referer_sent='https://asianpaints.com/'
+[browser] possible WAF/bot-challenge page (matched 'cloudflare') at https://www.asianpaints.com/
+[browser] hover-reveal: harvested grew to 127 links after menu hover
+[browser] harvested 127 links: 6 doc-file candidates, 0 download-labeled controls (verify_budget=10, click_budget=10) | block_marker=cloudflare
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=PDF is a colour book, not policy
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asian_paints/restricted/the-colour-book-asian-paints.pdf): PDF is a colour book, not policy
+[browser] in-session candidate 1/10 not accepted (https://static.asianpaints.com/content/dam/asian_paints/restricted/the-colour-book-asian-paints.pdf): PDF is a colour book, not policy; trying next candidate
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=PDF is a color palette, not policy document
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asian_paints/home/pdf/Royale-Designer-Palette.pdf): PDF is a color palette, not policy document
+[browser] in-session candidate 2/10 not accepted (https://static.asianpaints.com/content/dam/asian_paints/home/pdf/Royale-Designer-Palette.pdf): PDF is a color palette, not policy document; trying next candidate
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=PDF is a shade booklet, not policy
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asian_paints/home/pdf/luxindica-shade-booklet.pdf): PDF is a shade booklet, not policy
+[browser] in-session candidate 3/10 not accepted (https://static.asianpaints.com/content/dam/asian_paints/home/pdf/luxindica-shade-booklet.pdf): PDF is a shade booklet, not policy; trying next candidate
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=PDF is a brochure, not an ABC policy
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asian_paints/home/pdf/Shvet-Brochure.pdf): PDF is a brochure, not an ABC policy
+[browser] in-session candidate 4/10 not accepted (https://static.asianpaints.com/content/dam/asian_paints/home/pdf/Shvet-Brochure.pdf): PDF is a brochure, not an ABC policy; trying next candidate
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No exact policy document found
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asian_paints/home/pdf/Insignia-Booklet_30.10.pdf): No exact policy document found
+[browser] in-session candidate 5/10 not accepted (https://static.asianpaints.com/content/dam/asian_paints/home/pdf/Insignia-Booklet_30.10.pdf): No exact policy document found; trying next candidate
+[browser] skipping candidate already class-rejected earlier this query: https://static.asianpaints.com/content/dam/asian_paints/resources/publicnotices/caution_notice.pdf
+[browser][nav] IR-prioritized frontier: 15/104 nav links (IR-nav first, query terms ['asian', 'paints', 'anti', 'bribery', 'corruption'] secondary)
+[browser][nav] https://www.asianpaints.com/more/investors.html: 2 doc candidates (depth=1, pages=1)
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Annual report, not anti-bribery policy
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asianpaints/website/secondary-navigation/investors/annual-reports/2025-2026/Integrated-Annual-Report-2025-26.pdf): Annual report, not anti-bribery policy
+[browser][nav] https://sustainability.asianpaints.com/sustainability/: 1 doc candidates (depth=1, pages=2)
+[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Not a policy document, it's a sustainability report
+[browser] candidate REJECTED by class check (https://sustainability.asianpaints.com/sustainability/images/home/reports/asian_paints_sr_2024_25.pdf): Not a policy document, it's a sustainability report
+[browser][nav] https://www.asianpaints.com/CustomerPolicy: 1 doc candidates (depth=1, pages=3)
+[browser][nav] https://www.asianpaints.com/footer-links/cookie-policy.html: 1 doc candidates (depth=1, pages=4)
+[browser][nav] https://www.asianpaints.com/EHSPolicy: 1 doc candidates (depth=1, pages=5)
+[browser][nav] https://www.asianpaints.com/footer-links/quality-policy.html: 1 doc candidates (depth=1, pages=6)
+[browser][nav] https://www.asianpaints.com/paint-products/interior-wall-paints.html: 2 doc candidates (depth=1, pages=7)
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=PDF is unrelated brochure, not policy
+[browser] candidate REJECTED by class check (https://www.asianpaints.com/content/dam/asian_paints/home/royale-inspiration/shvet-brochure.pdf): PDF is unrelated brochure, not policy
+[browser][nav] https://www.asianpaints.com/paint-products/interior-wall-paints/royale-play.html: 3 doc candidates (depth=1, pages=8)
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=PDF is product catalogue, not policy document
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asian_paints/royale-play/luxe-collection.pdf): PDF is product catalogue, not policy document
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=PDF is a color swatch, not policy document
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asian_paints/royale-play/luxe-italian-collection-swatch.pdf): PDF is a color swatch, not policy document
+[browser][nav] https://www.asianpaints.com/paint-products/exterior-wall-paints.html: 3 doc candidates (depth=1, pages=9)
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=PDF is a shade booklet, not policy
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asian_paints/products/exterior/ultima-heritage-luxury-luxindica-shade-booklet.pdf): PDF is a shade booklet, not policy
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=PDF is colour catalogue, not policy document
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/apcolourcatalogue/asset/ap-revamp/exterior-wall-paints/landing-page/digital-book-of-colours.pdf): PDF is colour catalogue, not policy document
+[browser][nav] https://www.asianpaints.com/texture-paints/exterior-textures.html: 1 doc candidates (depth=1, pages=10)
+[browser][nav] https://www.asianpaints.com/enamel-paints.html: 1 doc candidates (depth=1, pages=11)
+[browser][nav] https://www.asianpaints.com/services/asian-paints-safe-painting-service.html: 2 doc candidates (depth=1, pages=12)
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No exact anti-bribery policy found.
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asian_paints/dam-link/tncs-for-quotation-and-on-the-web-link.pdf): No exact anti-bribery policy found.
+[browser][nav] https://www.asianpaints.com/paint-products/exterior-wall-paints/apex-ultima-protek.html: 7 doc candidates (depth=1, pages=13)
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Document is a shade card, not policy
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asian_paints/products/shade-card/Apex-Ultima-Protek-Shade-Card.pdf): Document is a shade card, not policy
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Product info sheet, not policy document
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asian_paints/products/product-information-sheets/AP_Apex_Ultima_Protek_PIS.pdf): Product info sheet, not policy document
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=PDF is unrelated to anti-bribery policy
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asian_paints/products/booklets/UBC_Interactive.pdf): PDF is unrelated to anti-bribery policy
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Document is a warranty, not policy
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asian_paints/products/warranty-documents/Apex_Ultima_Protek_Warranty_Document.pdf): Document is a warranty, not policy
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=PDF is a brochure, not policy document
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asian_paints/products/brochures/Apex_Ultima_Protek_Brochure.pdf): PDF is a brochure, not policy document
+[browser][nav] https://www.asianpaints.com/paint-products/interior-wall-paints/plain-finishes/royale-glitz.html: 5 doc candidates (depth=1, pages=14)
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=PDF is a colour book, not policy
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asian_paints/shade-tool/Royale-Book-of-colours-2024.pdf): PDF is a colour book, not policy
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=PDF is a shade card, not policy document
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asian_paints/restricted/royale-designer-shade-card.pdf): PDF is a shade card, not policy document
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=PDF is product info, not policy document
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asian_paints/products/product-information-sheets/Royale-Glitz-US.pdf): PDF is product info, not policy document
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Document is a warranty, not an ABC policy
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asian_paints/products/warranty-documents/Royale-Warranty-Document.pdf): Document is a warranty, not an ABC policy
+[browser][nav] https://www.asianpaints.com/paint-products/interior-wall-paints/plain-finishes/apcolite-all-protek-shyne.html: 4 doc candidates (depth=1, pages=15)
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=PDF is a shade card, not policy document
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asian_paints/shade-tool/our-shade-palettes/Apcolite-Shade-card-Digital.pdf): PDF is a shade card, not policy document
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Product sheet, not policy document
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asian_paints/products/product-information-sheets/Apcolite-All-Protek-Shyne.pdf): Product sheet, not policy document
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=No ABC policy document found among candidates.
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asian_paints/products/warranty-documents/Apcolite-warranty.pdf): No ABC policy document found among candidates.
+[browser][nav] https://www.asianpaints.com/more/investors/investors-landing-page.html?q=disclosures-under-regulation-of-sebi-lodr-regulations: 20 doc candidates (depth=2, pages=16)
+[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Document is Health & Safety Policy, not ABC policy
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asianpaints/website/secondary-navigation/investors/policies-programs/AsianPaintsLimited-Health_&_Safety_Policy-Jan2022.pdf): Document is Health & Safety Policy, not ABC policy
+[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Whistleblower policy, not anti-bribery policy
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asianpaints/website/secondary-navigation/investors/policies-programs/AsianPaintsLimited-WhistleBlowerPolicyfinalforwebsite.pdf): Whistleblower policy, not anti-bribery policy
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Document is Dividend Distribution Policy, not ABC policy
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asianpaints/website/secondary-navigation/investors/policies-programs/AsianPaintsLimited-DividendDistributionPolicy.pdf): Document is Dividend Distribution Policy, not ABC policy
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is Advocacy Policy, not Anti-Bribery policy
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asianpaints/website/secondary-navigation/investors/policies-programs/AsianPaintsLimited-AdvocacyPolicy.pdf): Document is Advocacy Policy, not Anti-Bribery policy
+[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Wrong policy type: non-discrimination not anti-bribery
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asianpaints/website/secondary-navigation/investors/policies-programs/asian-paints-policy-on-equal-opportunity-and-non-discrimination.pdf): Wrong policy type: non-discrimination not anti-bribery
+[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Document is Whistleblower Policy, not ABC Policy
+[browser] candidate REJECTED by class check (https://www.asianpaints.com/content/dam/asianpaints/website/secondary-navigation/investors/policies-programs/AsianPaintsLimited-WhistleBlowerPolicyfinalforwebsite.pdf): Document is Whistleblower Policy, not ABC Policy
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Document is dividend policy, not anti-bribery policy
+[browser] candidate REJECTED by class check (https://www.asianpaints.com/content/dam/asianpaints/website/secondary-navigation/investors/policies-programs/AsianPaintsLimited-DividendDistributionPolicy.pdf): Document is dividend policy, not anti-bribery policy
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Document is an integrated filing, not policy
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asianpaints/website/secondary-navigation/investors/corporate-governance/Integrated_Filing_31st_March_2026_updated.pdf): Document is an integrated filing, not policy
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=No matching anti-bribery policy document found.
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asianpaints/website/secondary-navigation/investors/policies-programs/Familiarisation-Policy-March-31-2026.pdf): No matching anti-bribery policy document found.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is SEBI circular, not ABC policy
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asianpaints/website/secondary-navigation/investors/policies-programs/SEBI-Circular-dated-30th-January-2026.pdf): Document is SEBI circular, not ABC policy
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Document is unrelated to anti-bribery policy
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asianpaints/website/secondary-navigation/investors/policies-programs/SEBI-Master-Circular-dated-6th-February-2026.pdf): Document is unrelated to anti-bribery policy
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Document is unrelated to anti-bribery policy
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asianpaints/website/secondary-navigation/investors/DividendInformation/SEBI-Master-Circular-dated-6th-February-2026-for-Registrars-to-an-Issue-and-Share-Transfer-Agents.pdf): Document is unrelated to anti-bribery policy
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=No ABC policy document found among candidates.
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asianpaints/website/secondary-navigation/investors/DividendInformation/Final-Dividend-2025-26-Tax-Communication.pdf): No ABC policy document found among candidates.
+[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Unclaimed dividend, not anti-bribery policy
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asianpaints/website/secondary-navigation/investors/unclaimed-dividend/Details-of-unclaimed-dividend-transferred-to-unpaid-dividend-account/FY-2025-26-Interim-Dividend-2025-26.pdf): Unclaimed dividend, not anti-bribery policy
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Corporate governance report, not policy document
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asianpaints/website/secondary-navigation/investors/corporate-governance/CG-Report-Quarter-ended-31st-December-2025-without-PAN.pdf): Corporate governance report, not policy document
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Corporate governance report, not ABC policy
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asianpaints/website/secondary-navigation/investors/corporate-governance/CG-Report-Quarter-ended-30th-September-2025-without-PAN.pdf): Corporate governance report, not ABC policy
+[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Not an ABC policy document, just a corporate governance report.
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asianpaints/website/secondary-navigation/investors/corporate-governance/CG-Report-Quarter-ended-30th-June-2025-without-PAN.pdf): Not an ABC policy document, just a corporate governance report.
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Report, not anti-bribery policy document
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asianpaints/website/secondary-navigation/investors/corporate-governance/2021-2022/Integrated_Governance_Report_Quarter_ended_31st_March_2025.pdf): Report, not anti-bribery policy document
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is committee composition, not policy
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asianpaints/website/secondary-navigation/investors/GovernanceStructure/Committee_Composition_15.09.2025.pdf): Document is committee composition, not policy
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Document is unrelated to anti-bribery policy
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asianpaints/website/secondary-navigation/investors/DividendInformation/SEBI_Circular_dated_14th_May_2025.pdf): Document is unrelated to anti-bribery policy
+[browser][nav] https://www.asianpaints.com/more/warranty.html: 20 doc candidates (depth=2, pages=17)
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not an anti-bribery policy document
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asian_paints/products/warranty-docs/AP_Apex_Ultima_Protek_Duralife_Warranty_Document.pdf): Not an anti-bribery policy document
+[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Warranty document, not anti-bribery policy
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asian_paints/products/warranty-docs/AP_Apex_Ultima_Warranty_Document.pdf): Warranty document, not anti-bribery policy
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Document is a warranty, not policy
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asian_paints/products/warranty-docs/AP_Apex_Warranty_Document.pdf): Document is a warranty, not policy
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Document is warranty, not policy
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asian_paints/products/warranty-docs/AP_Ace_Warranty_Document.pdf): Document is warranty, not policy
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Warranty document, not policy
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asian_paints/products/warranty-docs/AP_Ace_Sparc_Warranty_Document.pdf): Warranty document, not policy
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Document is a warranty, not anti-bribery policy.
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asianpaints/website/secondary-navigation/warranty-documents/Warranty%20PDF.pdf): Document is a warranty, not anti-bribery policy.
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Document is warranty card, not policy
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asian_paints/restricted/Hydroloc-Warranty-Card.pdf): Document is warranty card, not policy
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Document is a warranty, not an anti-bribery policy.
+[browser] candidate REJECTED by class check (https://www.asianpaints.com/content/dam/asianpaints/website/secondary-navigation/warranty-documents/Smartcare-dampblock-2k-warranty.PDF): Document is a warranty, not an anti-bribery policy.
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Warranty booklet, not policy document
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asianpaints/website/secondary-navigation/warranty-documents/COMBINED%20WARRANTY%20BOOKLET%20AW_20.9X14.87CM%20EDITED%2025MAY.pdf): Warranty booklet, not policy document
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=No ABC policy document found among candidates
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asian_paints/products/warranty-documents/DSI+WPPwarrantydoc.pdf): No ABC policy document found among candidates
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Document is a warranty, not policy
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asian_paints/products/warranty-documents/Tractor_Warranty.pdf): Document is a warranty, not policy
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Document is warranty, not policy
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asian_paints/products/warranty-documents/dsi-warranty-doc-3years.pdf): Document is warranty, not policy
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=PDF is a warranty, not policy document
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asian_paints/restricted/warranty-hydroloc.pdf): PDF is a warranty, not policy document
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=No anti-bribery policy document found.
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asian_paints/products/warranty-docs/Damp-Proof_10_Years_Warranty_Document.pdf): No anti-bribery policy document found.
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=No ABC policy document found among candidates
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asian_paints/products/warranty-docs/Damp-Proof-Xtreme_12_Years_Warranty_Document.pdf): No ABC policy document found among candidates
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=No ABC policy document found
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asian_paints/products/warranty-docs/Damp-Proof-Advanced_10_Years_Warranty_Document.pdf): No ABC policy document found
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=No ABC policy document found among candidates
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asian_paints/products/warranty-docs/Damp-Proof-Ultra_12_Years_Warranty_Document.pdf): No ABC policy document found among candidates
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=No ABC policy document found among candidates
+[browser] candidate REJECTED by class check (https://static.asianpaints.com/content/dam/asian_paints/products/warranty-docs/Damp-Sheath-Exterior_5%20Years_Warranty_Document.pdf): No ABC policy document found among candidates
+[browser][nav] https://sustainability.asianpaints.com/sustainability/index.php: 1 doc candidates (depth=2, pages=18)
+[browser][nav] https://sustainability.asianpaints.com/sustainability/environment-key-highlight.php: 1 doc candidates (depth=2, pages=19)
+[browser][nav] https://sustainability.asianpaints.com/sustainability/environment-climate-change.php: 1 doc candidates (depth=2, pages=20)
+[browser][nav] https://sustainability.asianpaints.com/sustainability/environment-water-stewardship.php: 1 doc candidates (depth=2, pages=21)
+[browser][nav] https://sustainability.asianpaints.com/sustainability/environment-nature-positive.php: 1 doc candidates (depth=2, pages=22)
+[browser][nav] https://sustainability.asianpaints.com/sustainability/environment-biodiversity.php: 1 doc candidates (depth=2, pages=23)
+[browser][nav] https://sustainability.asianpaints.com/sustainability/environment-sustainability-community.php: 1 doc candidates (depth=2, pages=24)
+[browser][nav] https://sustainability.asianpaints.com/sustainability/environment-ap-global-environment-stewardship.php: 1 doc candidates (depth=2, pages=25)
+[browser][nav] https://sustainability.asianpaints.com/sustainability/product-stewardship-key-highlight.php: 1 doc candidates (depth=2, pages=26)
+[browser][nav] https://sustainability.asianpaints.com/sustainability/product-stewardship-certified-sustainable-products-and-services.php: 1 doc candidates (depth=2, pages=27)
+[browser][nav] https://sustainability.asianpaints.com/sustainability/product-stewardship-sustainable-optimisation-of-products-and-services.php: 1 doc candidates (depth=2, pages=28)
+[browser][nav] https://sustainability.asianpaints.com/sustainability/product-stewardship-elimination-of-harmful-ingredients.php: 1 doc candidates (depth=2, pages=29)
+[browser][nav] https://sustainability.asianpaints.com/sustainability/product-stewardship-renewable-content-in-product-offerings.php: 1 doc candidates (depth=2, pages=30)
+[browser][nav] https://sustainability.asianpaints.com/sustainability/product-stewardship-durability-enhancing-product-life.php: 1 doc candidates (depth=2, pages=31)
+[browser][nav] https://sustainability.asianpaints.com/sustainability/community-key-highlight.php: 1 doc candidates (depth=2, pages=32)
+[browser][nav] https://sustainability.asianpaints.com/sustainability/community-water-stewardship.php: 1 doc candidates (depth=2, pages=33)
+[browser][nav] https://sustainability.asianpaints.com/sustainability/community-health-and-hygiene.php: 1 doc candidates (depth=2, pages=34)
+[browser][nav] https://sustainability.asianpaints.com/sustainability/community-skill-development.php: 1 doc candidates (depth=2, pages=35)
+[browser][nav] https://sustainability.asianpaints.com/sustainability/community-employee-volunteering.php: 1 doc candidates (depth=2, pages=36)
+[browser][nav] https://sustainability.asianpaints.com/sustainability/community-platform-for-creative-expression-start.php: 1 doc candidates (depth=2, pages=37)
+[browser][nav] https://sustainability.asianpaints.com/sustainability/health-and-safety-key-highlight.php: 1 doc candidates (depth=2, pages=38)
+[browser][nav] https://sustainability.asianpaints.com/sustainability/health-and-safety-process-performance-and-highlight.php: 1 doc candidates (depth=2, pages=39)
+[browser][nav] https://sustainability.asianpaints.com/sustainability/health-safety-promoting-the-safe-workspace.php: 1 doc candidates (depth=2, pages=40)
+[browser][nav] https://sustainability.asianpaints.com/sustainability/health-safety-building-a-safety-culture.php: 1 doc candidates (depth=2, pages=41)
+[browser][nav] https://sustainability.asianpaints.com/sustainability/health-safety-process-safety-management-psm.php: 1 doc candidates (depth=2, pages=42)
+[browser][nav] https://sustainability.asianpaints.com/sustainability/download-reports.php: 20 doc candidates (depth=2, pages=43)
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Not the exact anti-bribery policy document
+[browser] candidate REJECTED by class check (https://sustainability.asianpaints.com/sustainability/images/home/reports/asian_paints_sr_synopsis_2024_25.pdf): Not the exact anti-bribery policy document
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Report, not standalone policy document
+[browser] candidate REJECTED by class check (https://sustainability.asianpaints.com/sustainability/images/home/reports/AsianPaint-SR-2019.pdf): Report, not standalone policy document
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=PDF is a performance synopsis, not ABC policy
+[browser] candidate REJECTED by class check (https://sustainability.asianpaints.com/sustainability/images/home/reports/AsianPaint-Performance-Synopsis-2019.pdf): PDF is a performance synopsis, not ABC policy
+[llm] select decision: selected=None topic=False company=True year=True conf=high reason=PDF is a sustainability synopsis, not ABC policy
+[browser] candidate REJECTED by class check (https://sustainability.asianpaints.com/sustainability/images/home/reports/Asian_Paints_SR_synopsis_FY23-24_updated.pdf): PDF is a sustainability synopsis, not ABC policy
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=PDF is a synopsis, not ABC policy
+[browser] candidate REJECTED by class check (https://sustainability.asianpaints.com/sustainability/images/home/reports/asian_paints_synopsis_22_23.pdf): PDF is a synopsis, not ABC policy
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Report, not policy document
+[browser] candidate REJECTED by class check (https://sustainability.asianpaints.com/sustainability/images/home/reports/asian-paint-sr-2018.pdf): Report, not policy document
+Ignoring wrong pointing object 1470 0 (offset 0)
+Ignoring wrong pointing object 1528 0 (offset 0)
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=No explicit ABC policy document found
+[browser] candidate REJECTED by class check (https://sustainability.asianpaints.com/sustainability/images/home/reports/AP_Synopsis_revised_2023-24.pdf): No explicit ABC policy document found
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Sustainability report, not anti-bribery policy
+[browser] candidate REJECTED by class check (https://sustainability.asianpaints.com/sustainability/images/home/reports/Sustainability%20Report_2022(2).pdf): Sustainability report, not anti-bribery policy
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Report, not standalone ABC policy
+[browser] candidate REJECTED by class check (https://sustainability.asianpaints.com/sustainability/images/home/reports/AP%20Synopsis_2021-22.pdf): Report, not standalone ABC policy
+
+[class-parity] OK — 11 document classes aligned across _DOC_CLASS_RULES and report_specs.REPORT_SPECS
+WARNING:  Invalid HTTP request received.
+[identity] Vertex hint for 'Rio Tinto': ticker='RIO' cik='0000863064' domain='riotinto.com' sources=0 (untrusted until SEC validation)
+[identity] validated 'Rio Tinto' -> CIK 0000863064, ticker='RIO' via vertex_ticker+vertex_cik
+[llm-querygen] generated 8 variants for 'Rio Tinto sustainability report site:riotinto.com'
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (HTTPError: HTTP Error 429: Too Many Requests); falling back to gateway
+[search] vertex returned nothing (TimeoutError: The read operation timed out); falling back to gateway
+[find][query] 'Rio Tinto sustainability report site:riotinto.com' -> 5 hits via=vertex-grounding
+[find][query] 'Rio Tinto sustainability report latest site:riotinto.com' -> 3 hits via=vertex-grounding
+[find][query] 'Rio Tinto sustainability report 2025 site:riotinto.com' -> 3 hits via=vertex-grounding
+[find][query] 'Rio Tinto sustainability report FY2025 site:riotinto.com' -> 10 hits via=gateway(stripped-site)
+[find][query] 'Rio Tinto sustainability report updated 2026 site:riotinto.com' -> 8 hits via=vertex-grounding
+[find][query] 'Rio Tinto sustainability report ticker "RIO" site:riotinto.com' -> 4 hits via=vertex-grounding
+[find][query] 'Rio Tinto esg report site:riotinto.com' -> 3 hits via=vertex-grounding
+[find][query] 'Rio Tinto impact report site:riotinto.com' -> 0 hits via=gateway-empty-all-forms
+[find][query] 'Rio Tinto sustainability report pdf site:riotinto.com' -> 0 hits via=gateway-empty-all-forms
+[find][query] 'Rio Tinto csrd report site:riotinto.com' -> 1 hits via=vertex-grounding
+[find][query] 'Rio Tinto esrs report site:riotinto.com' -> 0 hits via=gateway-empty-all-forms
+[find][query] 'Rio Tinto impact report pdf site:riotinto.com' -> 2 hits via=vertex-grounding
+[find][query] 'Rio Tinto sustainability statement site:riotinto.com' -> 4 hits via=vertex-grounding
+[find][query] 'Rio Tinto business responsibility and sustainability reporting site:riotinto.com' -> 3 hits via=vertex-grounding
+[find][query] 'Rio Tinto integrated annual report site:riotinto.com' -> 5 hits via=vertex-grounding
+[find] dropped 1 junk-host candidate(s) (app store / media / social / aggregator subdomains — generic, not company-specific)
+[find] dropped 1 wrong-class filename candidate(s) (e.g. DEFA14A/additional-proxy, near-neighbor documents) before LLM selection
+[find] domain_mode=hard(on_domain_hits_found) | HEAD pre-filtering 10 candidates for: Rio Tinto sustainability report site:riotinto.com
+[find] 10/10 passed HEAD pre-filter
+[llm] select decision: selected=https://www.riotinto.com/en/invest/reports/sustainability-report topic=True company=True year=True conf=high reason=Exact sustainability report URL for Rio Tinto.
+[sitemap] riotinto.com: 5755 urls -> 288 candidates -> top 40
+[sitemap] inspected 12 landing page(s), discovered 0 linked document(s); 0 total document candidate(s)
+[deep-crawl] https://riotinto.com/ (depth=0, page=1): 0 doc candidates
+[deep-crawl] https://riotinto.com/en/invest/reports/sustainability-report (depth=1, page=2): 0 doc candidates
+[deep-crawl] https://riotinto.com/en/about/corporate-governance/risk-management-and-financial-reporting (depth=1, page=3): 0 doc candidates
+[deep-crawl] https://riotinto.com/en/operations/anz/rio-tinto-into (depth=1, page=4): 0 doc candidates
+[deep-crawl] https://riotinto.com/en/invest/reports/sustainability-report#sustainability-reporting (depth=2, page=5): 0 doc candidates
+[deep-crawl] https://www.riotinto.com/en/invest/reports/annual-report (depth=2, page=6): 0 doc candidates
+[deep-crawl] https://riotinto.com/en/operations/anz/rio-tinto-into/our-contribution-to-western-australia (depth=2, page=7): 0 doc candidates
+[deep-crawl] https://www.riotinto.com/en/invest/reports/sustainability-report (depth=3, page=8): 0 doc candidates
+[deep-crawl] https://www.riotinto.com/en/about/corporate-governance/risk-management-and-financial-reporting (depth=3, page=9): 0 doc candidates
+[deep-crawl] https://www.riotinto.com/en/operations/anz/rio-tinto-into (depth=3, page=10): 0 doc candidates
+[browser] redirected: requested=https://riotinto.com/ final=https://www.riotinto.com/ referer_sent='https://riotinto.com/'
+[browser][direct] navigation failed (https://www.riotinto.com/-/media/content/documents/operations/rtit/2023-sustainable-development-report-quebec.pdf?rev=558f2525b51041cd9f2f7738233ca281): Page.goto: Download is starting
+Call log:
+  - navigating to "https://www.riotinto.com/-/media/content/documents/operations/rtit/2023-sustainable-development-report-quebec.pdf?rev=558f2525b51041cd9f2f7738233ca281", waiting until "commit"
+[llm] select decision: selected=https://www.riotinto.com/-/media/content/documents/operations/rtit/2023-sustainable-development-report-quebec.pdf?rev=558f2525b51041cd9f2f7738233ca281 topic=True company=True year=True conf=high reason=Exact filename matches requested class.
+[browser][direct] resolved ranked search candidate: https://www.riotinto.com/-/media/content/documents/operations/rtit/2023-sustainable-development-report-quebec.pdf?rev=558f2525b51041cd9f2f7738233ca281 (7536774 bytes)
+[browser] hover-reveal: harvested grew to 288 links after menu hover
+[browser] harvested 288 links: 0 doc-file candidates, 0 download-labeled controls (verify_budget=10, click_budget=10)
+[store] STORED (browser): 'Rio Tinto sustainability report site:riotinto.com' -> rio-tinto/sustainability-report/4c30cfaf62ac-2023-sustainable-development-report-quebec.pdf
+{
+    "timestamp": "2026-07-20T12:47:22.675Z",
+    "level": "INFO",
+    "message": "Invocation completed successfully (197.387s)",
+    "logger": "bedrock_agentcore.app",
+    "requestId": "8c23bf7e-d91c-4c5a-b7ea-9cf7d12894a2",
+    "sessionId": "e435c790-6dcb-446e-a195-e46ac4238384"
+}

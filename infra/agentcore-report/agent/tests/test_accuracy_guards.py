@@ -4,9 +4,14 @@ import ast
 import json
 import re
 import sys
+import threading
+import time
 import types
 import unittest
 import unicodedata
+import uuid
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
@@ -69,6 +74,36 @@ def _load_worker_validation_helpers():
             "inc", "incorporated", "corp", "corporation", "company", "co",
             "limited", "ltd", "plc", "llc", "holdings", "group",
         },
+    }
+    exec(compile(module, str(path), "exec"), namespace)
+    return namespace
+
+
+def _load_bulk_queue_helpers(dynamo, executor, invoke_fn):
+    path = REPO_ROOT / "reportiq-ecs/app/backend/app.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    wanted = {"_queue_bulk_invocations", "_chunk_web_queries"}
+    nodes = [
+        item for item in tree.body
+        if isinstance(item, ast.FunctionDef) and item.name in wanted
+    ]
+    module = ast.Module(body=nodes, type_ignores=[])
+    ast.fix_missing_locations(module)
+    namespace = {
+        "uuid": uuid,
+        "datetime": datetime,
+        "timezone": timezone,
+        "json": json,
+        "get_dynamo": lambda: dynamo,
+        "RUNS_TABLE": "runs",
+        "QUERIES_TABLE": "queries",
+        "AGENT_CHUNK_SIZE": 1,
+        "AGENT_CHUNK_CONCURRENCY": 3,
+        "BULK_COMPANY_CONCURRENCY": 3,
+        "_BULK_COMPANY_EXECUTOR": executor,
+        "_do_invoke": invoke_fn,
+        "re": re,
+        "log": types.SimpleNamespace(info=lambda *args, **kwargs: None),
     }
     exec(compile(module, str(path), "exec"), namespace)
     return namespace
@@ -242,6 +277,61 @@ class BrowserWorkerValidationTests(unittest.TestCase):
             "",
         )
         self.assertFalse(ok)
+
+
+class BulkCompanyConcurrencyTests(unittest.TestCase):
+    def test_ten_company_bulk_run_never_exceeds_three_active_companies(self):
+        class FakeTable:
+            def __init__(self):
+                self.items = []
+
+            def put_item(self, **kwargs):
+                self.items.append(kwargs["Item"])
+
+            def update_item(self, **kwargs):
+                return {}
+
+        class FakeDynamo:
+            def __init__(self):
+                self.tables = {"runs": FakeTable(), "queries": FakeTable()}
+
+            def Table(self, name):
+                return self.tables[name]
+
+        dynamo = FakeDynamo()
+        lock = threading.Lock()
+        active = 0
+        maximum = 0
+
+        def invoke(_run_id, _record):
+            nonlocal active, maximum
+            with lock:
+                active += 1
+                maximum = max(maximum, active)
+            time.sleep(0.025)
+            with lock:
+                active -= 1
+
+        executor = ThreadPoolExecutor(max_workers=3)
+        helpers = _load_bulk_queue_helpers(dynamo, executor, invoke)
+        records = [
+            {
+                "query_id": f"query-{index}",
+                "company": f"Company {index}",
+                "web_query1": "Annual Report",
+            }
+            for index in range(10)
+        ]
+        run_ids, batch_id = helpers["_queue_bulk_invocations"](records)
+        executor.shutdown(wait=True)
+
+        self.assertEqual(len(run_ids), 10)
+        self.assertTrue(batch_id)
+        self.assertEqual(maximum, 3)
+        self.assertEqual(
+            [item["status"] for item in dynamo.tables["runs"].items],
+            ["queued"] * 10,
+        )
 
 
 class VertexIdentityContractTests(unittest.TestCase):

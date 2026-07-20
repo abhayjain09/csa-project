@@ -129,7 +129,7 @@ tr.detail-row td{padding:0}
 .badge.ok,.badge.complete,.badge.downloaded{background:#e7f8e9;color:#147327;border:1px solid #2bde3f}
 .badge.running{background:#e6efff;color:#0d4ea6;border:1px solid var(--info);animation:blink 1.5s ease-in-out infinite}
 .badge.browser_retry_pending,.badge.browser_retry_queued,.badge.blocked_by_source_waf{background:#fff4d6;color:#805800;border:1px solid #d6a900}
-.badge.pending{background:var(--light);color:var(--muted);border:1px solid var(--border)}
+.badge.pending,.badge.queued{background:var(--light);color:var(--muted);border:1px solid var(--border)}
 .badge.failed,.badge.no_results{background:#fdebe6;color:#a33012;border:1px solid var(--err)}
 .badge.indexed{background:#e7f8e9;color:#147327;border:1px solid #2bde3f}
 .badge.Pending{background:var(--light);color:var(--muted);border:1px solid var(--border)}
@@ -308,7 +308,7 @@ tr.detail-row td{padding:0}
   <div class="page-body">
     <div class="breadcrumbs"><a onclick="navTo('dashboard',document.getElementById('nav-dashboard'))">Home</a> / Run Query</div>
     <h1 class="page-title">Run Query</h1>
-    <p class="page-subtitle">Enter company and official site pairs one by one. A query payload is generated for each row and saved to DynamoDB, with optional immediate trigger.</p>
+    <p class="page-subtitle">Enter company and official site pairs one by one. Bulk submissions run three companies concurrently; remaining companies stay queued and start automatically as slots become available.</p>
 
     <div id="bulkRunSection" style="margin-top:24px">
       <div class="form-grid" style="margin-top:0;margin-bottom:14px">
@@ -374,6 +374,7 @@ tr.detail-row td{padding:0}
         </select>
         <select class="filter-select" id="runStatusFilter" onchange="applyRunsFilter()" style="min-width:140px">
           <option value="">All statuses</option>
+          <option value="queued">Queued</option>
           <option value="running">Running</option>
           <option value="complete">Complete</option>
           <option value="failed">Failed</option>
@@ -624,7 +625,7 @@ function escH(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 function isActiveRunStatus(s) {
-  return s === 'running' || s === 'browser_retry_pending';
+  return s === 'queued' || s === 'running' || s === 'browser_retry_pending';
 }
 
 // ─── API ──────────────────────────────────────────────────────────────────────
@@ -747,7 +748,8 @@ async function loadDashRuns() {
       tb.innerHTML = '<tr><td colspan="7" class="empty-state">No runs yet. Submit a query to start.</td></tr>';
       return;
     }
-    const sorted = [...runs].sort((a,b)=>(b.started_at||'').localeCompare(a.started_at||''));
+    const sorted = [...runs].sort((a,b)=>
+      (b.started_at||b.queued_at||'').localeCompare(a.started_at||a.queued_at||''));
     tb.innerHTML = sorted.slice(0,10).map(r => {
       const progress = getChunkProgress(r);
       const isRunning = isActiveRunStatus(r.status);
@@ -755,7 +757,7 @@ async function loadDashRuns() {
       <tr>
         <td class="mono" style="font-size:12px" title="${escH(r.run_id)}">${escH(r.run_id.substring(0,8))}…</td>
         <td><strong>${escH(r.company||'')}</strong></td>
-        <td>${fmtDt(r.started_at)}</td>
+        <td>${fmtDt(r.started_at||r.queued_at)}</td>
         <td>${countDownloaded(r)}</td>
         <td>${countFailures(r)}</td>
         <td>${statusBadge(r.status)}${isRunning && progress ? ' '+chunkProgressPill(progress) : ''}</td>
@@ -946,7 +948,10 @@ async function submitBulkRun(){
     const url='/api/queries'+(trigger?'?trigger=true':'');
     const res=await apiFetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     toast('success',trigger?'Bulk upload started':'Bulk upload saved',
-      'Saved '+(res.saved||payload.length)+' queries'+(trigger?' and triggered runs.':'.'));
+      'Saved '+(res.saved||payload.length)+' queries'+(trigger
+        ? ' — running up to '+(res.bulk_company_concurrency||3)+' companies at a time'
+          +(res.queued?' with '+res.queued+' initially queued.':'.')
+        : '.'));
     clearPreview();loadQueries();
     if(trigger)setTimeout(()=>{loadDashRuns();},2000);
   }catch(e){}
@@ -1083,7 +1088,8 @@ function applyRunsFilter(){
 function renderRunsTable(items){
   const tb=document.getElementById('runsTable');
   if(!items.length){tb.innerHTML='<tr><td colspan="7" class="empty-state">No runs found.</td></tr>';return;}
-  const sorted=[...items].sort((a,b)=>(b.started_at||'').localeCompare(a.started_at||''));
+  const sorted=[...items].sort((a,b)=>
+    (b.started_at||b.queued_at||'').localeCompare(a.started_at||a.queued_at||''));
   let html='';
   sorted.forEach(r=>{
     const rid=r.run_id;
@@ -1092,7 +1098,7 @@ function renderRunsTable(items){
     html+=`<tr class="expandable" onclick="toggleRunDetail('${rid}')" style="${isRunning?'background:#f0f6ff':''}">
       <td class="mono" style="font-size:12px" title="${escH(rid)}">${escH(rid.substring(0,8))}…</td>
       <td><strong>${escH(r.company||'')}</strong></td>
-      <td>${fmtDt(r.started_at)}</td>
+      <td>${fmtDt(r.started_at||r.queued_at)}</td>
       <td>${fmtDt(r.finished_at)}</td>
       <td>${countDownloaded(r)}</td>
       <td>${countFailures(r)}</td>
@@ -1199,7 +1205,7 @@ function toggleRunDetail(rid){
   row.cells[0].innerHTML=`<div class="detail-panel">
     <div style="display:flex;gap:16px;align-items:center;margin-bottom:12px">
       <span class="mono" style="font-size:12px;color:var(--muted)">Run: ${escH(rid)}</span>
-      ${isActiveRunStatus(run.status)?`<span class="badge ${escH(run.status)}">${run.status==='browser_retry_pending'?'Browser retry…':'Running…'}</span><button class="btn btn-sm" onclick="loadRuns()">↻ Refresh now</button>`:''}
+      ${isActiveRunStatus(run.status)?`<span class="badge ${escH(run.status)}">${run.status==='browser_retry_pending'?'Browser retry…':run.status==='queued'?'Queued…':'Running…'}</span><button class="btn btn-sm" onclick="loadRuns()">↻ Refresh now</button>`:''}
     </div>
     ${chunkHtml}
     ${(!progress || !progress.perChunk || !progress.perChunk.length) ? (dlHtml||'<span class="muted">No files downloaded.</span>') : ''}

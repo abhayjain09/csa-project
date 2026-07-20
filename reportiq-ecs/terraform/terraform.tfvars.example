@@ -9,6 +9,7 @@ image_tag        = "latest"
 cpu              = 512
 memory           = 1024
 desired_count    = 1
+bulk_company_concurrency = 3
 cpu_architecture = "ARM64"      # build on Apple Silicon natively; X86_64 if you build amd64
 assign_public_ip = false
 

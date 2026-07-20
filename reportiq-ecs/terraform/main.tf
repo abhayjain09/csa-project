@@ -32,6 +32,7 @@ locals {
     BROWSER_ECS_SUBNET_IDS         = join(",", local.browser_worker_subnet_ids)
     BROWSER_ECS_SECURITY_GROUP_IDS = join(",", local.browser_worker_security_group_ids)
     BROWSER_ECS_ASSIGN_PUBLIC_IP   = tostring(var.browser_worker_assign_public_ip)
+    BULK_COMPANY_CONCURRENCY       = tostring(var.bulk_company_concurrency)
     STATIC_DIR                     = "/app/static"
     PORT                           = "8080"
   }

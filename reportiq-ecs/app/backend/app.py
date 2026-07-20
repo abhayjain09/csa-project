@@ -102,6 +102,9 @@ Patches in this revision (1-6, plus 7-8 below):
      idempotent DynamoDB job and launches a one-off Chromium task on the
      existing ECS cluster. Worker and read-path reconciliation update the
      original per-query row without racing the normal chunk flush.
+ 10. BULK COMPANY QUEUE. Multi-company submissions persist every run as queued
+     and execute at most BULK_COMPANY_CONCURRENCY companies simultaneously
+     (default 3); each completion automatically starts the next company.
 """
 import os, json, uuid, re, threading, hashlib, logging, urllib.request, urllib.error
 import unicodedata
@@ -181,6 +184,16 @@ AGENT_READ_TIMEOUT = int(os.environ.get("AGENT_READ_TIMEOUT", "600"))
 # than pure sequential, capped low enough to avoid WebSearch 429 throttling.
 AGENT_CHUNK_SIZE        = int(os.environ.get("AGENT_CHUNK_SIZE",        "1"))
 AGENT_CHUNK_CONCURRENCY = int(os.environ.get("AGENT_CHUNK_CONCURRENCY", "3"))
+BULK_COMPANY_CONCURRENCY = max(
+    1, int(os.environ.get("BULK_COMPANY_CONCURRENCY", "3")))
+
+# One executor per backend process. A single bulk request is handled by one
+# process, so ten submitted companies occupy at most three worker threads while
+# the remaining seven stay queued in submission order.
+_BULK_COMPANY_EXECUTOR = ThreadPoolExecutor(
+    max_workers=BULK_COMPANY_CONCURRENCY,
+    thread_name_prefix="reportiq-bulk-company",
+)
 
 # A run is considered "stuck" if it has been running for more than this many
 # minutes (used only as a cheap outer gate for whether it's worth spawning a
@@ -1509,13 +1522,22 @@ def save_query():
     )
 
     run_ids = []
+    bulk_batch_id = None
     if trigger:
-        for record in saved:
-            run_id = _async_invoke(record)
-            run_ids.append(run_id)
+        if len(saved) > 1:
+            run_ids, bulk_batch_id = _queue_bulk_invocations(saved)
+        else:
+            run_ids.append(_async_invoke(saved[0]))
 
     return jsonify({"saved": len(saved), "queries": saved,
-                    "run_ids": run_ids, "triggered": trigger}), 201
+                    "run_ids": run_ids, "triggered": trigger,
+                    "bulk_batch_id": bulk_batch_id,
+                    "bulk_company_concurrency": (
+                        BULK_COMPANY_CONCURRENCY
+                        if bulk_batch_id else None),
+                    "queued": (
+                        max(0, len(run_ids) - BULK_COMPANY_CONCURRENCY)
+                        if bulk_batch_id else 0)}), 201
 
 
 @app.route("/api/queries", methods=["GET"])
@@ -1922,6 +1944,81 @@ def _async_invoke(query_record: dict) -> str:
     return run_id
 
 
+def _queue_bulk_invocations(query_records: list[dict]) -> tuple[list[str], str]:
+    """Persist all bulk runs as queued, then execute three companies at a time.
+
+    Run IDs are returned immediately for every company. ThreadPoolExecutor
+    retains the remaining callables in FIFO submission order; as soon as one
+    company finishes, the next queued company starts without requiring the
+    browser session that submitted the batch to remain open.
+    """
+    batch_id = str(uuid.uuid4())
+    now_iso = datetime.now(timezone.utc).isoformat()
+    dynamo = get_dynamo()
+    runs_table = dynamo.Table(RUNS_TABLE)
+    queries_table = dynamo.Table(QUERIES_TABLE)
+    scheduled: list[tuple[str, dict]] = []
+
+    for position, record in enumerate(query_records, start=1):
+        run_id = str(uuid.uuid4())
+        query_id = record.get("query_id", "unknown")
+        company = record.get("company", "Unknown")
+        chunks_total = len(_chunk_web_queries(record, AGENT_CHUNK_SIZE))
+        runs_table.put_item(Item={
+            "run_id": run_id,
+            "query_id": query_id,
+            "company": company,
+            "status": "queued",
+            "queued_at": now_iso,
+            "bulk_batch_id": batch_id,
+            "bulk_position": position,
+            "bulk_size": len(query_records),
+            "payload": json.dumps({
+                "company": company,
+                "run_id": run_id,
+                "search_query": record.get("search_query", ""),
+                "chunk_size": AGENT_CHUNK_SIZE,
+                "chunks_total": chunks_total,
+                "bulk_batch_id": batch_id,
+                "bulk_position": position,
+            }),
+            "downloaded": json.dumps([]),
+            "failures": json.dumps([]),
+            "diagnostics": json.dumps({
+                "chunks_total": chunks_total,
+                "chunks_done": 0,
+                "chunk_size": AGENT_CHUNK_SIZE,
+                "concurrency": AGENT_CHUNK_CONCURRENCY,
+                "bulk_company_concurrency": BULK_COMPANY_CONCURRENCY,
+                "bulk_batch_id": batch_id,
+                "bulk_position": position,
+                "bulk_size": len(query_records),
+                "per_chunk": [],
+            }),
+        })
+        queries_table.update_item(
+            Key={"query_id": query_id},
+            UpdateExpression="SET #st = :s, #rid = :r, #upd = :u",
+            ExpressionAttributeNames={
+                "#st": "status", "#rid": "run_id", "#upd": "updated_at"},
+            ExpressionAttributeValues={
+                ":s": "queued", ":r": run_id, ":u": now_iso},
+        )
+        record["run_id"] = run_id
+        record["status"] = "queued"
+        record["updated_at"] = now_iso
+        scheduled.append((run_id, record))
+
+    # Submit only after every queue row exists, so the UI always receives a
+    # complete batch and can display the seven waiting companies immediately.
+    for run_id, record in scheduled:
+        _BULK_COMPANY_EXECUTOR.submit(_do_invoke, run_id, record)
+
+    log.info("[bulk %s] queued %d companies; concurrency=%d",
+             batch_id[:8], len(scheduled), BULK_COMPANY_CONCURRENCY)
+    return [run_id for run_id, _ in scheduled], batch_id
+
+
 def _do_invoke(run_id: str, query_record: dict):
     try:
         _do_invoke_inner(run_id, query_record)
@@ -2088,6 +2185,14 @@ def _do_invoke_inner(run_id: str, query_record: dict):
     # PATCH #6: split the 23 web_query* fields into chunks of AGENT_CHUNK_SIZE.
     chunks       = _chunk_web_queries(query_record, AGENT_CHUNK_SIZE)
     chunks_total = len(chunks)
+    queued_run = runs_tbl.get_item(
+        Key={"run_id": run_id}).get("Item", {})
+    bulk_metadata = {
+        key: queued_run[key]
+        for key in (
+            "queued_at", "bulk_batch_id", "bulk_position", "bulk_size")
+        if key in queued_run
+    }
 
     base_payload = {"company": company, "run_id": run_id,
                     "search_query": search_q,
@@ -2108,6 +2213,7 @@ def _do_invoke_inner(run_id: str, query_record: dict):
         "payload":     json.dumps(base_payload),
         "downloaded":  json.dumps([]),
         "failures":    json.dumps([]),
+        **bulk_metadata,
         "diagnostics": json.dumps({
             "chunks_total": chunks_total,
             "chunks_done":  0,
@@ -2802,12 +2908,6 @@ def get_pageindex_run(run_id):
     if not items:
         return jsonify({"error": "Run not found"}), 404
     return jsonify(items[0])
-
-
-# ─── Health ───────────────────────────────────────────────────────────────────
-@app.route("/health")
-def health():
-    return jsonify({"status": "ok", "ts": datetime.now(timezone.utc).isoformat()})
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

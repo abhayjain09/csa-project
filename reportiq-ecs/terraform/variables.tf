@@ -52,6 +52,17 @@ variable "desired_count" {
   default     = 1
 }
 
+variable "bulk_company_concurrency" {
+  description = "Maximum companies executed concurrently within one bulk submission"
+  type        = number
+  default     = 3
+
+  validation {
+    condition     = var.bulk_company_concurrency >= 1 && var.bulk_company_concurrency <= 10
+    error_message = "bulk_company_concurrency must be between 1 and 10."
+  }
+}
+
 variable "cpu_architecture" {
   description = "X86_64 or ARM64 (must match the image you build)"
   type        = string

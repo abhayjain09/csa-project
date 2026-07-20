@@ -96,6 +96,10 @@ aws ecs update-service \
   Scale with `desired_count`.
 - The background AgentCore invocation runs in a task thread; results land in DynamoDB
   regardless of which task serves the later status poll.
+- **Bulk company limit**: one bulk submission persists every company as a
+  `queued` run and executes at most `bulk_company_concurrency = 3` companies at
+  once. Per-company document chunk concurrency remains independently bounded by
+  `AGENT_CHUNK_CONCURRENCY`.
 
 ---
 

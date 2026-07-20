@@ -508,7 +508,7 @@ def _store(job: dict, url: str, body: bytes, ctype: str) -> dict:
 def _all_run_jobs_terminal(run_id: str) -> bool:
     response = jobs_table.scan(
         FilterExpression="#run = :run",
-        ExpressionAttributeNames={"#run": "run_id"},
+        ExpressionAttributeNames={"#run": "run_id", "#st": "status"},
         ExpressionAttributeValues={":run": run_id},
         ProjectionExpression="#st",
     )
@@ -518,7 +518,7 @@ def _all_run_jobs_terminal(run_id: str) -> bool:
         response = jobs_table.scan(
             ExclusiveStartKey=response["LastEvaluatedKey"],
             FilterExpression="#run = :run",
-            ExpressionAttributeNames={"#run": "run_id"},
+            ExpressionAttributeNames={"#run": "run_id", "#st": "status"},
             ExpressionAttributeValues={":run": run_id},
             ProjectionExpression="#st",
         )

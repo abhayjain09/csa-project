@@ -60,6 +60,7 @@ import os
 import re
 import uuid
 import unicodedata
+from io import BytesIO
 from urllib.error import HTTPError
 from urllib.parse import unquote, urljoin, urlparse
 from urllib.request import Request, urlopen
@@ -67,6 +68,7 @@ from urllib.request import Request, urlopen
 import boto3
 from botocore.config import Config
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
+from pypdf import PdfReader
 
 import report_specs
 import registry_tier
@@ -2450,6 +2452,22 @@ def _make_browser_verify_fn(query: str, budget: "_QueryBudget | None" = None,
             if budget is not None:
                 budget.mark_rejected(url)
             return False
+        integrity_error = _document_integrity_error(
+            url, cand.get("ctype", ""), cand.get("body") or b"")
+        if integrity_error:
+            print(f"[verify] STRICT reject (invalid document bytes): "
+                  f"{url}: {integrity_error}")
+            cand["_verify_decision"] = {
+                "selected_url": None,
+                "topic_match": False,
+                "company_match": False,
+                "year_match": False,
+                "confidence": "low",
+                "reason": f"invalid-document: {integrity_error}",
+            }
+            if budget is not None:
+                budget.mark_rejected(url)
+            return False
         if budget is not None and not budget.can_verify(reserve_verifies):
             print(f"[verify] budget stop ({budget.why_stopped(reserve_verifies)}): skipping "
                   f"LLM verify for {url}")
@@ -3299,6 +3317,29 @@ def _browser_vision_resolve(page, query: str, domain: str | None,
 
 
 # ─── Store (idempotent, content-addressed) ────────────────────────────────────
+def _document_integrity_error(url: str, ctype: str, body: bytes) -> str:
+    """Fail closed when a PDF URL/content type contains HTML or corrupt bytes."""
+    expects_pdf = (
+        urlparse(url or "").path.lower().endswith(".pdf")
+        or "pdf" in (ctype or "").lower()
+    )
+    if not expects_pdf:
+        return ""
+    if not body:
+        return "PDF response is empty"
+    if b"%PDF-" not in body[:1024]:
+        return "missing %PDF header (likely HTML/XML error response)"
+    try:
+        reader = PdfReader(BytesIO(body), strict=False)
+        if reader.is_encrypted:
+            return "encrypted PDFs are not supported"
+        if len(reader.pages) < 1:
+            return "PDF has no readable pages"
+    except Exception as exc:  # noqa: BLE001
+        return f"PDF parse failed: {type(exc).__name__}"
+    return ""
+
+
 def _write_provenance_if_missing(item: dict) -> bool:
     if _table is None:
         return False
@@ -3376,6 +3417,10 @@ def _store(company: str, run_id: str, url: str, body: bytes, ctype: str,
            title: str, original_query: str, prepared_query: str,
            request_id: str = "", report_class: str | None = None,
            year: int | None = None, company_ctx: dict | None = None) -> dict:
+    integrity_error = _document_integrity_error(url, ctype, body)
+    if integrity_error:
+        raise ValueError(
+            f"refusing to store invalid document {url}: {integrity_error}")
     digest  = hashlib.sha256(body).hexdigest()
     classes = ([report_class] if report_class
                else [c for c, _ in _matched_doc_classes(prepared_query)])
@@ -3558,7 +3603,14 @@ def _find_best_document(search_queries: list[str], limit: int, company: str = ""
         waf_blocked = False
         try:
             body_bytes, ctype_head = _fetch(h["url"])
-            if "html" in ctype_head:
+            integrity_error = _document_integrity_error(
+                h["url"], ctype_head, body_bytes)
+            if integrity_error:
+                fetch_error = f"document-integrity: {integrity_error}"
+                print(f"[find] invalid document response ({h['url']}): "
+                      f"{integrity_error}")
+                body_bytes = None
+            elif "html" in ctype_head:
                 sample = _extract_visible_text(body_bytes, company=company)
                 if len(sample) < 200:
                     sample = body_bytes.decode("utf-8", "ignore")[:1500]
@@ -4492,6 +4544,31 @@ def _invoke_sync(payload: dict) -> dict:
                   f"validated and no authoritative company number was supplied")
 
         base_log["attempted_stages"] = attempted_stages
+
+        # Final storage boundary: no discovery tier, registry, or disabled LLM
+        # verifier may bypass byte-level PDF validation. A URL ending in .pdf
+        # that returned a 200 HTML/WAF/404 page is a failure, never a download.
+        if resolved is not None:
+            integrity_error = _document_integrity_error(
+                resolved.get("url", ""),
+                resolved.get("ctype", ""),
+                resolved.get("body") or b"",
+            )
+            if integrity_error:
+                rejected_url = resolved.get("url", "")
+                print(f"[integrity] rejected resolved document "
+                      f"({rejected_url}): {integrity_error}")
+                if rejected_url:
+                    _known_bad[rejected_url] = integrity_error
+                decision["reason"] = f"invalid-document: {integrity_error}"
+                base_log["decision_reason"] = decision["reason"]
+                base_log["integrity_rejection"] = {
+                    "url": rejected_url,
+                    "reason": integrity_error,
+                    "stage": stage,
+                }
+                resolved = None
+                stage = None
 
         if resolved is not None:
             rec = _commit(

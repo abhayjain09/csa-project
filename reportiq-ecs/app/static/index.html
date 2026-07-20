@@ -164,6 +164,10 @@ tr.detail-row td{padding:0}
 .dl-btn:disabled{opacity:.5;cursor:not-allowed}
 .dl-btn.upload{background:#0d4ea6}
 .dl-btn.upload:hover{background:#0b3d85}
+.dl-btn.manual-link{background:#fff;color:#0d4ea6;border:1px solid #0d4ea6;text-decoration:none}
+.dl-btn.manual-link:hover{background:#e6efff}
+.manual-recovery{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.manual-recovery .form-hint{flex-basis:100%;font-size:11px}
 .run-result-box{background:var(--light);border:1px solid var(--border);padding:14px 18px;margin-top:10px;font-size:13px;font-family:var(--mono);max-height:320px;overflow:auto;white-space:pre-wrap;word-break:break-all}
 .info-box{background:#e6efff;border:1px solid var(--info);padding:14px 18px;font-size:14px;margin-top:16px;line-height:1.6}
 .two-col{display:grid;grid-template-columns:1.1fr .9fr;gap:32px;margin-top:20px;align-items:start}
@@ -1165,11 +1169,24 @@ function toggleRunDetail(rid){
             const isDl = r.status==='downloaded' && r.s3_key;
             const isBrowserPending = r.status==='browser_retry_queued';
             const isWafBlocked = r.status==='blocked_by_source_waf';
+            const manualUrls = safeManualSourceUrls(r);
+            const browserFinishedWithoutDownload = !!r.browser_job_id
+              && !isBrowserPending && !isDl;
+            const manualSourceUrl = browserFinishedWithoutDownload && manualUrls.length
+              ? manualUrls[0] : '';
+            const uploadAction = `<button class="dl-btn upload" onclick="pickUploadForQuery(this,'${escH(rid)}','${escB64(run.company||'')}','${escH(run.query_id||'')}','${escH(String(pc.chunk))}','${escB64(r.query||'')}','${escB64(manualSourceUrl)}')">⬆ Upload file</button>`;
+            const manualRecoveryAction = manualSourceUrl
+              ? `<div class="manual-recovery">
+                  <a class="dl-btn manual-link" href="${escH(manualSourceUrl)}" target="_blank" rel="noopener noreferrer" title="Open the best Fargate candidate in your local browser">↗ Manual download</a>
+                  ${uploadAction}
+                  <span class="form-hint">1. Download from the official source. 2. Upload the saved file here.</span>
+                </div>`
+              : uploadAction;
             const action = isDl
               ? `<button class="dl-btn" onclick="downloadFileVerified('${escH(r.s3_key)}',this)">⬇ Download</button>`
               : isBrowserPending
               ? `<button class="btn btn-sm" onclick="loadRuns()">↻ Check browser</button>`
-              : `<button class="dl-btn upload" onclick="pickUploadForQuery(this,'${escH(rid)}','${escB64(run.company||'')}','${escH(run.query_id||'')}','${escH(String(pc.chunk))}','${escB64(r.query||'')}')">⬆ Upload</button>`;
+              : manualRecoveryAction;
             const badge = isDl
               ? `<span class="badge downloaded">downloaded</span>${r.duplicate?' <span class="form-hint">(already in S3)</span>':''}${r.manual_upload?' <span class="form-hint">(manual)</span>':''}`
               : isBrowserPending
@@ -1195,7 +1212,7 @@ function toggleRunDetail(rid){
       }).join('');
       chunkHtml+=`<div class="table-wrapper" style="margin-top:0;margin-bottom:14px">
         <table>
-          <thead><tr><th style="width:70px">Chunk</th><th>Query</th><th style="width:130px">Status</th><th style="width:150px">Action</th></tr></thead>
+          <thead><tr><th style="width:70px">Chunk</th><th>Query</th><th style="width:130px">Status</th><th style="width:300px">Action</th></tr></thead>
           <tbody>${rowsHtml}</tbody>
         </table>
       </div>`;
@@ -1221,9 +1238,26 @@ function toggleRunDetail(rid){
 // query, run_id, query_id and chunk are threaded through so the backend can
 // (a) place the file under the correct S3 slug prefix and (b) patch this
 // exact row in the run's diagnostics so it shows Download after a refresh.
-function pickUploadForQuery(btn, runId, companyB64, queryId, chunk, queryB64){
+function safeManualSourceUrls(result){
+  const candidates = Array.isArray(result && result.candidate_urls)
+    ? result.candidate_urls : [];
+  const valid = [];
+  candidates.forEach(value=>{
+    try{
+      const parsed = new URL(String(value||''));
+      if(parsed.protocol==='https:' && !parsed.username && !parsed.password
+          && !valid.includes(parsed.href)){
+        valid.push(parsed.href);
+      }
+    }catch(e){}
+  });
+  return valid.slice(0,8);
+}
+
+function pickUploadForQuery(btn, runId, companyB64, queryId, chunk, queryB64, sourceUrlB64){
   const company = decB64(companyB64);
   const query   = decB64(queryB64);
+  const sourceUrl = decB64(sourceUrlB64);
   const input = document.createElement('input');
   input.type = 'file';
   input.accept = '.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.html,.htm';
@@ -1233,12 +1267,13 @@ function pickUploadForQuery(btn, runId, companyB64, queryId, chunk, queryB64){
     const file = input.files && input.files[0];
     document.body.removeChild(input);
     if(!file) return;
-    await uploadReportFile(file, btn, runId, company, queryId, chunk, query);
+    await uploadReportFile(
+      file, btn, runId, company, queryId, chunk, query, sourceUrl);
   });
   input.click();
 }
 
-async function uploadReportFile(file, btn, runId, company, queryId, chunk, query){
+async function uploadReportFile(file, btn, runId, company, queryId, chunk, query, sourceUrl){
   const orig = btn ? btn.textContent : '';
   if(btn){ btn.disabled=true; btn.textContent='Uploading…'; }
   try{
@@ -1249,6 +1284,7 @@ async function uploadReportFile(file, btn, runId, company, queryId, chunk, query
     fd.append('run_id',   runId||'');
     fd.append('query_id', queryId||'');
     fd.append('chunk',    chunk||'');
+    fd.append('source_url', sourceUrl||'');
     // Do NOT set a Content-Type header here — leaving it unset lets the
     // browser generate the multipart boundary itself for FormData bodies.
     const res = await apiFetch('/api/sources/upload', { method:'POST', body: fd });
@@ -1964,7 +2000,8 @@ function rpRenderQA() {
         ? c.s3_uri.replace('s3://','').split('/').slice(1).join('/')
         : '';
       const s3Link = keyPath
-        ? '<a class="url-ref" href="/api/sources/download-url?key=' + encodeURIComponent(keyPath) + '" target="_blank">open source</a>'
+        ? "<a class=\"url-ref\" href=\"#\" onclick=\"downloadFileVerified(decB64('" +
+          escB64(keyPath) + "'),null);return false\">open source</a>"
         : '';
       return '<div class="rp-citation-box">'
         + (c.quoted_span ? '<div class="rp-citation-quote">&ldquo;' + escH(c.quoted_span) + '&rdquo;</div>' : '')

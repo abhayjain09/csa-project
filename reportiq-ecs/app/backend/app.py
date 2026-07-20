@@ -105,12 +105,17 @@ Patches in this revision (1-6, plus 7-8 below):
  10. BULK COMPANY QUEUE. Multi-company submissions persist every run as queued
      and execute at most BULK_COMPANY_CONCURRENCY companies simultaneously
      (default 3); each completion automatically starts the next company.
+ 11. CLASS-SCOPED, PDF-SAFE STORAGE. Chunk payloads now include structured
+     report_class values so AgentCore never falls back to "uncategorized".
+     Manual uploads and presigned downloads reject mislabeled/corrupt PDFs.
 """
 import os, json, uuid, re, threading, hashlib, logging, urllib.request, urllib.error
 import unicodedata
 from datetime import datetime, timezone, timedelta
+from io import BytesIO
 from pathlib import PurePosixPath
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from urllib.parse import urlsplit
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import boto3
@@ -118,6 +123,7 @@ import botocore.auth
 import botocore.awsrequest
 from botocore.config import Config
 from botocore.exceptions import ClientError, UnknownServiceError
+from pypdf import PdfReader
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 REGION            = os.environ.get("AWS_REGION",         "us-east-1")
@@ -243,6 +249,66 @@ def get_s3():
         region_name=REGION,
         config=Config(signature_version="s3v4", s3={"addressing_style": "virtual"}),
     )
+
+
+def _pdf_integrity_error(filename: str, content_type: str, body: bytes) -> str:
+    """Return an error for a mislabeled/unreadable PDF, otherwise an empty string."""
+    expects_pdf = (
+        (filename or "").lower().endswith(".pdf")
+        or "pdf" in (content_type or "").lower()
+    )
+    if not expects_pdf:
+        return ""
+    if not body:
+        return "PDF is empty"
+    if b"%PDF-" not in body[:1024]:
+        return "file is not a PDF (missing %PDF header)"
+    try:
+        reader = PdfReader(BytesIO(body), strict=False)
+        if reader.is_encrypted:
+            return "encrypted PDFs are not supported"
+        if len(reader.pages) < 1:
+            return "PDF has no readable pages"
+    except Exception as exc:
+        return f"PDF parse failed: {type(exc).__name__}"
+    return ""
+
+
+def _safe_manual_source_url(value: str) -> str:
+    """Keep only a bounded HTTPS source URL supplied by the recovery UI."""
+    candidate = str(value or "").strip()
+    if not candidate or len(candidate) > 2048:
+        return ""
+    try:
+        parsed = urlsplit(candidate)
+    except ValueError:
+        return ""
+    if (parsed.scheme.lower() != "https" or not parsed.hostname
+            or parsed.username or parsed.password):
+        return ""
+    return candidate
+
+
+def _s3_pdf_integrity_error(s3, s3_key: str) -> str:
+    """Cheaply reject existing HTML/XML error objects mislabeled as PDFs."""
+    if not (s3_key or "").lower().endswith(".pdf"):
+        return ""
+    try:
+        response = s3.get_object(
+            Bucket=REPORTS_BUCKET,
+            Key=s3_key,
+            Range="bytes=0-1023",
+        )
+        prefix = response["Body"].read()
+    except ClientError as exc:
+        code = exc.response.get("Error", {}).get("Code", "")
+        if code in {"404", "NoSuchKey", "NotFound"}:
+            return "S3 object does not exist"
+        raise
+    if b"%PDF-" not in prefix[:1024]:
+        return "S3 object is not a PDF; it is likely an HTML/XML error response"
+    return ""
+
 
 def get_ecs():
     return boto3.client("ecs", region_name=REGION)
@@ -531,28 +597,42 @@ def _clean_company_reports(company: str, dynamo=None, s3=None) -> dict:
 
 def _list_s3_files_for_run(company: str, run_id: str) -> list:
     """
-    List S3 objects belonging to this company. Tries multiple prefix variants
-    (agent slug first, then accent-/suffix-stripped, first-word) since older
-    keys may differ from the current agent naming.
+    List report objects belonging to this exact run.
+
+    Metadata sidecars and unrelated historical objects under the same company
+    prefix are deliberately excluded; presenting either as this run's download
+    can create stale links or JSON files masquerading as reports.
     """
     s3 = get_s3()
     variants = _company_prefix_variants(company)
     log.info("[s3-match] company=%r trying prefixes=%s", company, variants)
     results = []
     seen = set()
+    report_suffixes = (
+        ".pdf", ".doc", ".docx", ".rtf", ".xlsx", ".xls", ".xlsm")
     try:
         paginator = s3.get_paginator("list_objects_v2")
         for prefix in variants:
             for page in paginator.paginate(Bucket=REPORTS_BUCKET, Prefix=prefix):
                 for obj in page.get("Contents", []):
-                    if obj["Key"] in seen:
+                    key = obj["Key"]
+                    if key in seen or not key.lower().endswith(report_suffixes):
                         continue
-                    seen.add(obj["Key"])
+                    seen.add(key)
+                    head = s3.head_object(Bucket=REPORTS_BUCKET, Key=key)
+                    object_run_id = (
+                        head.get("Metadata", {}).get("run_id", "").strip())
+                    if run_id and object_run_id != run_id:
+                        log.info(
+                            "[s3-match] skipping key from another/legacy run: %s",
+                            key,
+                        )
+                        continue
                     results.append({
-                        "s3_key":        obj["Key"],
+                        "s3_key":        key,
                         "size":          obj["Size"],
                         "last_modified": obj["LastModified"].isoformat(),
-                })
+                    })
     except ClientError as e:
         log.error("[reconcile] S3 list error: %s", e)
     return results
@@ -1083,6 +1163,8 @@ def _enqueue_browser_retries(agent_results: list, company: str, run_id: str,
                     ":u": datetime.now(timezone.utc).isoformat(),
                 },
             )
+            item["browser_job_id"] = job_id
+            item["browser_job_status"] = "launch_failed"
             log.error("[browser-fallback] launch failed job=%s: %s",
                       job_id, exc)
     return results
@@ -1285,7 +1367,8 @@ def _refresh_browser_retry_run(run: dict, dynamo=None) -> dict:
 
 
 def _patch_run_with_upload(run_id: str, s3_key: str, file_name: str, query: str,
-                            chunk: str, dynamo=None) -> bool:
+                           chunk: str, dynamo=None,
+                           source_url: str = "") -> bool:
     """
     PATCH #7 (+ #9 fix below): after a manual upload succeeds, patch the run
     row so the portal's next refresh shows a Download button instead of
@@ -1325,7 +1408,8 @@ def _patch_run_with_upload(run_id: str, s3_key: str, file_name: str, query: str,
         downloaded.append({
             "s3_key":      s3_key,
             "file_name":   file_name,
-            "source_url":  ("manual-upload: " + query) if query else "manual-upload",
+            "source_url":  source_url or (
+                ("manual-upload: " + query) if query else "manual-upload"),
             "manual_upload": True,
         })
 
@@ -1370,6 +1454,7 @@ def _patch_run_with_upload(run_id: str, s3_key: str, file_name: str, query: str,
                     "status":     "downloaded",
                     "s3_key":     s3_key,
                     "file_name":  file_name,
+                    "source_url": source_url or r.get("source_url", ""),
                     "manual_upload": True,
                 })
                 result_patched = True
@@ -1729,12 +1814,33 @@ def presigned_url():
         return jsonify({"error": "key param required"}), 400
     s3 = get_s3()
     try:
+        integrity_error = _s3_pdf_integrity_error(s3, s3_key)
+        if integrity_error:
+            status = 404 if integrity_error == "S3 object does not exist" else 422
+            return jsonify({
+                "error": integrity_error,
+                "key": s3_key,
+                "valid_pdf": False,
+            }), status
+        download_name = re.sub(
+            r"[^A-Za-z0-9._-]+", "_", PurePosixPath(s3_key).name
+        ).strip("._") or "download"
         url = s3.generate_presigned_url(
             "get_object",
-            Params={"Bucket": REPORTS_BUCKET, "Key": s3_key},
+            Params={
+                "Bucket": REPORTS_BUCKET,
+                "Key": s3_key,
+                "ResponseContentDisposition": (
+                    f'attachment; filename="{download_name}"'),
+            },
             ExpiresIn=3600,
         )
-        return jsonify({"url": url, "key": s3_key, "expires_in": 3600})
+        return jsonify({
+            "url": url,
+            "key": s3_key,
+            "expires_in": 3600,
+            "valid_pdf": True if s3_key.lower().endswith(".pdf") else None,
+        })
     except ClientError as e:
         return jsonify({"error": str(e)}), 500
 
@@ -1839,6 +1945,8 @@ def upload_source():
       chunk     - optional, the chunk index the query belonged to (narrows
                   the patch match when the same query text could appear in
                   more than one chunk)
+      source_url - optional HTTPS candidate opened for the manual download;
+                   retained as provenance for the uploaded file
     """
     f = request.files.get("file")
     if not f or not f.filename:
@@ -1851,16 +1959,25 @@ def upload_source():
     run_id   = (request.form.get("run_id")   or "").strip()
     query_id = (request.form.get("query_id") or "").strip()
     chunk    = (request.form.get("chunk")    or "").strip()
+    source_url = _safe_manual_source_url(request.form.get("source_url") or "")
 
     slug      = _agent_slug(company)
     safe_name = re.sub(r"[^A-Za-z0-9._-]+", "_", os.path.basename(f.filename)).strip("_") or "upload"
     s3_key    = f"{slug}/manual/{safe_name}"
+    body      = f.read()
+    integrity_error = _pdf_integrity_error(
+        safe_name, f.mimetype or "", body)
+    if integrity_error:
+        return jsonify({
+            "error": f"Upload rejected: {integrity_error}",
+            "file_name": safe_name,
+        }), 422
 
     try:
         get_s3().put_object(
             Bucket=REPORTS_BUCKET,
             Key=s3_key,
-            Body=f.read(),
+            Body=body,
             ContentType=f.mimetype or "application/octet-stream",
             Metadata={"uploaded-by": "portal-manual", "query": query[:1024]},
             # If the bucket's policy requires SSE-KMS to be specified explicitly
@@ -1881,7 +1998,8 @@ def upload_source():
             slug,
             [{
                 "s3_key":     s3_key,
-                "source_url": ("manual-upload: " + query) if query else "manual-upload",
+                "source_url": source_url or (
+                    ("manual-upload: " + query) if query else "manual-upload"),
                 "rag_status": "Pending",
             }],
             run_id or "manual-upload", query_id or "manual-upload", now_iso, dynamo,
@@ -1895,7 +2013,9 @@ def upload_source():
     patched = False
     if run_id:
         try:
-            patched = _patch_run_with_upload(run_id, s3_key, safe_name, query, chunk, dynamo)
+            patched = _patch_run_with_upload(
+                run_id, s3_key, safe_name, query, chunk, dynamo,
+                source_url=source_url)
         except Exception as ex:
             log.error("[upload] run patch failed for %s: %s", run_id[:8], ex)
 
@@ -2040,7 +2160,102 @@ def _do_invoke(run_id: str, query_record: dict):
             log.error("[run %s] Could not write fatal status: %s", run_id[:8], ex2)
 
 
-# ─── Chunking helpers (PATCH #6) ──────────────────────────────────────────────
+# ─── Chunking helpers (PATCH #6 + class-safe structured payloads) ─────────────
+_REPORT_CLASS_ALIASES = (
+    ("supplier code of conduct", (
+        "supplier code of conduct", "vendor code of conduct",
+        "third party code of conduct", "business partner code of conduct",
+    )),
+    ("anti-bribery and corruption policy", (
+        "anti corruption and bribery policy",
+        "anti bribery and corruption policy",
+        "anti-corruption and bribery policy",
+        "anti-bribery and corruption policy",
+    )),
+    ("conflicts of interest policy", (
+        "conflicts of interest policy", "conflict of interest policy",
+    )),
+    ("discrimination and harassment policy", (
+        "discrimination and harassment policy",
+        "anti discrimination and harassment policy",
+    )),
+    ("whistleblowing mechanism", (
+        "whistleblowing policy", "whistleblower policy",
+        "speak up policy", "ethics hotline policy",
+    )),
+    ("occupational health & safety policy", (
+        "environment health and safety policy",
+        "environmental health and safety policy",
+        "environment health safety policy",
+        "occupational health and safety policy",
+        "health and safety policy",
+        "ehs policy", "hse policy",
+    )),
+    ("tax strategy and governance", (
+        "tax strategy and policy document", "tax strategy and governance",
+        "tax strategy", "tax policy",
+    )),
+    ("political contributions and lobbying policy", (
+        "political contributions and lobbying policy",
+        "political contributions policy", "lobbying policy",
+    )),
+    ("corporate governance guidelines", (
+        "corporate governance guidelines", "governance guidelines",
+    )),
+    ("insider trading policy", (
+        "insider trading policy", "share trading policy",
+    )),
+    ("ghg emission report", (
+        "ghg emission report", "greenhouse gas emissions report",
+        "emissions report",
+    )),
+    ("environmental policy", (
+        "environment policy", "environmental policy",
+    )),
+    ("sustainability report", (
+        "sustainability report", "esg report",
+    )),
+    ("annual report", (
+        "annual report", "report and accounts",
+    )),
+    ("proxy statement", (
+        "proxy statement", "definitive proxy", "def 14a",
+    )),
+    ("code of conduct", (
+        "code of conduct", "code of business conduct", "code of ethics",
+    )),
+    ("biodiversity policy", ("biodiversity policy",)),
+    ("impact report", ("impact report",)),
+    ("human rights policy", ("human rights policy",)),
+    ("remuneration report", ("remuneration report", "compensation report")),
+    ("risk management policy", ("risk management policy",)),
+    ("wolfsberg questionnaire", ("wolfsberg questionnaire",)),
+)
+
+
+def _infer_report_class(query: str, company: str = "") -> str:
+    """Map a legacy web query to a stable class; never return uncategorized."""
+    without_scope = re.sub(
+        r"\b(?:site|filetype):\s*\S+", " ", str(query or ""), flags=re.I)
+    normalized = re.sub(
+        r"[^a-z0-9]+", " ", without_scope.lower()).strip()
+    for canonical, aliases in _REPORT_CLASS_ALIASES:
+        if any(re.sub(r"[^a-z0-9]+", " ", alias.lower()).strip() in normalized
+               for alias in aliases):
+            return canonical
+
+    fallback = without_scope
+    if company:
+        fallback = re.sub(
+            rf"^\s*{re.escape(company)}\b", " ", fallback, flags=re.I)
+    fallback = re.sub(r"\b(?:19|20)\d{2}\b", " ", fallback)
+    fallback = re.sub(
+        r"\b(?:latest|official|download|document|file|pdf)\b",
+        " ", fallback, flags=re.I)
+    fallback = re.sub(r"[^A-Za-z0-9]+", " ", fallback).strip().lower()
+    return fallback[:120] or "other official document"
+
+
 def _chunk_web_queries(query_record: dict, size: int) -> list:
     """
     Split the query_record's web_query* fields into ordered chunks of `size`.
@@ -2059,9 +2274,12 @@ def _chunk_web_queries(query_record: dict, size: int) -> list:
 def _build_chunk_payload(company: str, run_id: str, search_query: str,
                          chunk_queries: list, chunk_index: int) -> dict:
     """
-    One chunk = one normal small AgentCore payload. Queries are RENUMBERED
-    web_query1.. within the chunk so the agent always sees a clean sequence and
-    never has to reason over a 23-class candidate set.
+    One chunk = one normal small AgentCore payload.
+
+    The legacy web_query fields remain for compatibility and domain inference,
+    while ``reports`` is authoritative. Supplying report_class explicitly keeps
+    AgentCore on its structured input path and prevents valid downloads from
+    being written beneath ``uncategorized/``.
     """
     payload = {
         "company":      company,
@@ -2069,11 +2287,25 @@ def _build_chunk_payload(company: str, run_id: str, search_query: str,
         "search_query": search_query,
         "chunk_index":  chunk_index,     # informational; agent may ignore it
         "web_query_ids": {},
+        "reports": [],
     }
     for i, q in enumerate(chunk_queries, start=1):
         key = "web_query" + str(i)
+        request_id = f"{chunk_index}:{i}"
         payload[key] = q
-        payload["web_query_ids"][key] = f"{chunk_index}:{i}"
+        payload["web_query_ids"][key] = request_id
+        report = {
+            "query": str(q),
+            "request_id": request_id,
+            "report_class": _infer_report_class(str(q), company),
+        }
+        years = [
+            int(value) for value in re.findall(
+                r"\b(?:19|20)\d{2}\b", str(q))
+        ]
+        if years:
+            report["year"] = max(years)
+        payload["reports"].append(report)
     return payload
 
 

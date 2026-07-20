@@ -12,8 +12,11 @@ import unicodedata
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
+from io import BytesIO
 from pathlib import Path
 from urllib.parse import unquote, urlparse
+
+from pypdf import PdfReader, PdfWriter
 
 
 AGENT_DIR = Path(__file__).resolve().parents[1]
@@ -107,6 +110,80 @@ def _load_bulk_queue_helpers(dynamo, executor, invoke_fn):
     }
     exec(compile(module, str(path), "exec"), namespace)
     return namespace
+
+
+def _load_structured_payload_helpers():
+    path = REPO_ROOT / "reportiq-ecs/app/backend/app.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    wanted_functions = {"_infer_report_class", "_build_chunk_payload"}
+    nodes = []
+    for item in tree.body:
+        if (isinstance(item, ast.Assign)
+                and any(isinstance(target, ast.Name)
+                        and target.id == "_REPORT_CLASS_ALIASES"
+                        for target in item.targets)):
+            nodes.append(item)
+        elif (isinstance(item, ast.FunctionDef)
+              and item.name in wanted_functions):
+            nodes.append(item)
+    module = ast.Module(body=nodes, type_ignores=[])
+    ast.fix_missing_locations(module)
+    namespace = {"re": re}
+    exec(compile(module, str(path), "exec"), namespace)
+    return namespace
+
+
+def _load_pdf_integrity_helper(relative_path: str, function_name: str):
+    path = REPO_ROOT / relative_path
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    node = next(
+        item for item in tree.body
+        if isinstance(item, ast.FunctionDef) and item.name == function_name
+    )
+    module = ast.Module(body=[node], type_ignores=[])
+    ast.fix_missing_locations(module)
+    namespace = {
+        "BytesIO": BytesIO,
+        "PdfReader": PdfReader,
+        "urlparse": urlparse,
+    }
+    exec(compile(module, str(path), "exec"), namespace)
+    return namespace[function_name]
+
+
+def _load_manual_source_url_helper():
+    path = REPO_ROOT / "reportiq-ecs/app/backend/app.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    node = next(
+        item for item in tree.body
+        if isinstance(item, ast.FunctionDef)
+        and item.name == "_safe_manual_source_url"
+    )
+    module = ast.Module(body=[node], type_ignores=[])
+    ast.fix_missing_locations(module)
+    namespace = {"urlsplit": urlparse}
+    exec(compile(module, str(path), "exec"), namespace)
+    return namespace["_safe_manual_source_url"]
+
+
+def _load_worker_terminal_helper(jobs_table):
+    path = REPO_ROOT / "reportiq-ecs/app/backend/browser_worker.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    node = next(
+        item for item in tree.body
+        if isinstance(item, ast.FunctionDef)
+        and item.name == "_all_run_jobs_terminal"
+    )
+    module = ast.Module(body=[node], type_ignores=[])
+    ast.fix_missing_locations(module)
+    namespace = {
+        "jobs_table": jobs_table,
+        "_TERMINAL_JOB_STATUSES": {
+            "downloaded", "blocked_by_source_waf", "failed", "launch_failed",
+        },
+    }
+    exec(compile(module, str(path), "exec"), namespace)
+    return namespace["_all_run_jobs_terminal"]
 
 
 def _load_vertex_helpers():
@@ -277,6 +354,157 @@ class BrowserWorkerValidationTests(unittest.TestCase):
             "",
         )
         self.assertFalse(ok)
+
+
+class StructuredPayloadTests(unittest.TestCase):
+    def test_chunk_payload_preserves_explicit_report_classes(self):
+        helpers = _load_structured_payload_helpers()
+        payload = helpers["_build_chunk_payload"](
+            "S&P Global",
+            "run-123",
+            "",
+            [
+                "site:spglobal.com Whistleblowing Policy",
+                "site:spglobal.com Annual Report 2025",
+            ],
+            4,
+        )
+        self.assertEqual(
+            [item["report_class"] for item in payload["reports"]],
+            ["whistleblowing mechanism", "annual report"],
+        )
+        self.assertEqual(payload["reports"][0]["request_id"], "4:1")
+        self.assertEqual(payload["reports"][1]["year"], 2025)
+        self.assertNotIn(
+            "uncategorized",
+            {item["report_class"] for item in payload["reports"]},
+        )
+        self.assertEqual(
+            payload["web_query_ids"],
+            {"web_query1": "4:1", "web_query2": "4:2"},
+        )
+
+    def test_unknown_class_uses_stable_fallback_not_uncategorized(self):
+        infer = _load_structured_payload_helpers()["_infer_report_class"]
+        self.assertEqual(
+            infer("site:example.com Responsible AI Principles", "Example Inc"),
+            "responsible ai principles",
+        )
+
+    def test_portal_labels_map_to_agent_canonical_classes(self):
+        infer = _load_structured_payload_helpers()["_infer_report_class"]
+        cases = {
+            "Anti-Corruption and Bribery Policy":
+                "anti-bribery and corruption policy",
+            "Environment, Health and Safety Policy":
+                "occupational health & safety policy",
+            "Tax Strategy and Policy Document":
+                "tax strategy and governance",
+            "Supplier Code of Conduct":
+                "supplier code of conduct",
+        }
+        for query, expected in cases.items():
+            with self.subTest(query=query):
+                self.assertEqual(infer(query), expected)
+
+
+class PdfIntegrityTests(unittest.TestCase):
+    @staticmethod
+    def _valid_pdf() -> bytes:
+        output = BytesIO()
+        writer = PdfWriter()
+        writer.add_blank_page(width=612, height=792)
+        writer.write(output)
+        return output.getvalue()
+
+    def test_agent_rejects_html_disguised_as_pdf(self):
+        validate = _load_pdf_integrity_helper(
+            "infra/agentcore-report/agent/agent.py",
+            "_document_integrity_error",
+        )
+        error = validate(
+            "https://example.com/report.pdf",
+            "text/html",
+            b"<html><h1>404 Not Found</h1></html>",
+        )
+        self.assertIn("missing %PDF header", error)
+
+    def test_agent_accepts_parseable_pdf(self):
+        validate = _load_pdf_integrity_helper(
+            "infra/agentcore-report/agent/agent.py",
+            "_document_integrity_error",
+        )
+        self.assertEqual(
+            validate(
+                "https://example.com/report.pdf",
+                "application/pdf",
+                self._valid_pdf(),
+            ),
+            "",
+        )
+
+    def test_portal_manual_upload_uses_same_pdf_gate(self):
+        validate = _load_pdf_integrity_helper(
+            "reportiq-ecs/app/backend/app.py",
+            "_pdf_integrity_error",
+        )
+        self.assertTrue(validate(
+            "report.pdf", "application/pdf", b"<Error>NoSuchKey</Error>"))
+        self.assertEqual(
+            validate("report.pdf", "application/pdf", self._valid_pdf()), "")
+
+
+class BrowserWorkerPatchTests(unittest.TestCase):
+    def test_projection_defines_status_alias_on_every_page(self):
+        class FakeJobsTable:
+            def __init__(self):
+                self.calls = []
+
+            def scan(self, **kwargs):
+                self.calls.append(kwargs)
+                if len(self.calls) == 1:
+                    return {
+                        "Items": [{"status": "downloaded"}],
+                        "LastEvaluatedKey": {"job_id": "one"},
+                    }
+                return {"Items": [{"status": "failed"}]}
+
+        table = FakeJobsTable()
+        terminal = _load_worker_terminal_helper(table)
+        self.assertTrue(terminal("run-123"))
+        self.assertEqual(len(table.calls), 2)
+        for call in table.calls:
+            self.assertEqual(
+                call["ExpressionAttributeNames"]["#st"], "status")
+
+
+class FrontendDownloadTests(unittest.TestCase):
+    def test_citation_uses_verified_download_flow_not_json_endpoint(self):
+        path = REPO_ROOT / "reportiq-ecs/app/static/index.html"
+        source = path.read_text(encoding="utf-8")
+        self.assertNotIn(
+            'href="/api/sources/download-url?key=', source)
+        self.assertIn(
+            "downloadFileVerified(decB64(", source)
+
+    def test_terminal_fargate_failure_offers_manual_download_and_upload(self):
+        path = REPO_ROOT / "reportiq-ecs/app/static/index.html"
+        source = path.read_text(encoding="utf-8")
+        self.assertIn("browserFinishedWithoutDownload", source)
+        self.assertIn("↗ Manual download", source)
+        self.assertIn("⬆ Upload file", source)
+        self.assertIn("fd.append('source_url', sourceUrl||'');", source)
+        self.assertIn('rel="noopener noreferrer"', source)
+
+
+class ManualRecoveryUrlTests(unittest.TestCase):
+    def test_only_bounded_https_urls_are_kept_for_provenance(self):
+        clean = _load_manual_source_url_helper()
+        expected = "https://www.spglobal.com/report.pdf"
+        self.assertEqual(clean(expected), expected)
+        self.assertEqual(clean("javascript:alert(1)"), "")
+        self.assertEqual(clean("http://example.com/report.pdf"), "")
+        self.assertEqual(clean("https://user:secret@example.com/report.pdf"), "")
 
 
 class BulkCompanyConcurrencyTests(unittest.TestCase):

@@ -1,513 +1,204 @@
 [class-parity] OK — 11 document classes aligned across _DOC_CLASS_RULES and report_specs.REPORT_SPECS
 WARNING:  Invalid HTTP request received.
-[identity] Vertex hint for 'S&P Global': ticker='SPGI' cik='0000064040' domain='spglobal.com' sources=0 (untrusted until SEC validation)
-[identity] validated 'S&P Global' -> CIK 0000064040, ticker='SPGI' via vertex_ticker+vertex_cik
-[llm-querygen] generated 8 variants for 'Code of Conduct site:spglobal.com'
+[identity] Vertex hint for 'CISCO SYSTEM': ticker='CSCO' cik='0000858877' domain='cisco.com' sources=0 (untrusted until SEC validation)
+[identity] rejected real-but-mismatched identifier CIK 0000858877 for 'CISCO SYSTEM'
+[llm-querygen] generated 8 variants for 'Whistleblowing Policy site:cisco.com'
 [search] vertex returned nothing (vertex-grounding); falling back to gateway
 [search] vertex returned nothing (vertex-grounding); falling back to gateway
-[find][query] 'Code of Conduct site:spglobal.com' -> 2 hits via=vertex-grounding
-[find][query] 'Code of Conduct ticker "SPGI" site:spglobal.com' -> 9 hits via=gateway(native-site)
-[find][query] 'code of business conduct and ethics site:spglobal.com' -> 4 hits via=vertex-grounding
-[find][query] 'code of conduct for board of employees, directors and senior management site:spglobal.com' -> 3 hits via=vertex-grounding
-[find][query] 'code of ethics site:spglobal.com' -> 4 hits via=vertex-grounding
-[find][query] 'code of fair disclosure and conduct site:spglobal.com' -> 10 hits via=gateway(native-site)
-[find][query] 'employee code of conduct site:spglobal.com' -> 3 hits via=vertex-grounding
-[find][query] 'Code of Conduct filetype:pdf site:spglobal.com' -> 5 hits via=vertex-grounding
-[find][query] 'Code of Fair Disclosure and Conduct filetype:pdf site:spglobal.com' -> 4 hits via=vertex-grounding
-[find][query] 'Code of Business Conduct and Ethics filetype:pdf site:spglobal.com' -> 2 hits via=vertex-grounding
-[find] domain_mode=hard(on_domain_hits_found) | HEAD pre-filtering 10 candidates for: Code of Conduct site:spglobal.com
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[find][query] 'Whistleblowing Policy site:cisco.com' -> 1 hits via=vertex-grounding
+[find][query] 'whistleblowing mechanism site:cisco.com' -> 10 hits via=gateway(native-site)
+[find][query] 'speak up policy site:cisco.com' -> 3 hits via=vertex-grounding
+[find][query] 'ethics hotline policy site:cisco.com' -> 2 hits via=vertex-grounding
+[find][query] 'grievance & whistleblowing policy site:cisco.com' -> 10 hits via=gateway(native-site)
+[find][query] 'whistleblower policy site:cisco.com' -> 2 hits via=vertex-grounding
+[find][query] 'ethics hotline site:cisco.com' -> 10 hits via=gateway(native-site)
+[find][query] 'whistleblowing policy filetype:pdf site:cisco.com' -> 10 hits via=gateway(native-site)
+[find][query] 'speak up policy filetype:pdf site:cisco.com' -> 2 hits via=vertex-grounding
+[find] domain_mode=hard(on_domain_hits_found) | HEAD pre-filtering 10 candidates for: Whistleblowing Policy site:cisco.com
 [find] 10/10 passed HEAD pre-filter
-[find] sample fetch failed (https://www.spglobal.com/content/dam/spglobal/corporate/en/documents/organization/who-we-are/sp-global-vendor-code-of-conduct.pdf): HTTP Error 403: Forbidden
-[find] sample fetch failed (https://www.spglobal.com/content/dam/spglobal/corporate/en/documents/organization/who-we-are/Modern-Slavery-Act-Statement-2019.pdf): HTTP Error 403: Forbidden
-[find] sample fetch failed (https://www.spglobal.com/en/who-we-are/corporate-responsibility/impact-report/responsible-business-conduct/responsible-sourcing-and-supply-chain-management): HTTP Error 403: Forbidden
-[find] sample fetch failed (https://www.spglobal.com/esg/insights/featured/special-editorial/assessing-the-missing-links-in-sustainable-supply-chain-management?): HTTP Error 403: Forbidden
-[llm] contamination guard: selected https://www.spglobal.com/content/dam/spglobal/corporate/en/documents/organization/who-we-are/sp-global-vendor-code-of-conduct.pdf has no readable content sample (0 chars) but a company match was required — cannot confirm company identity from filename alone; FAILING CLOSED
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=company-unverifiable-empty-sample-failed-closed
-[deep-crawl] fetch failed (https://spglobal.com/): HTTP Error 403: Forbidden
-[browser] redirected: requested=https://spglobal.com/ final=https://www.spglobal.com/ referer_sent='https://spglobal.com/'
-[browser] possible WAF/bot-challenge page (matched 'access denied') at https://www.spglobal.com/
-[browser] hover-reveal: harvested grew to 0 links after menu hover
-[browser] harvested 0 links: 0 doc-file candidates, 0 download-labeled controls (verify_budget=10, click_budget=10) | block_marker=access denied
-[browser][vision] model found no download control
-[browser] https://spglobal.com/: no document resolved through any tier
-[result] NO DOCUMENT FOUND (failed closed): 'Code of Conduct site:spglobal.com'
-{
-    "timestamp": "2026-07-19T20:48:02.447Z",
-    "level": "INFO",
-    "message": "Invocation completed successfully (47.311s)",
-    "logger": "bedrock_agentcore.app",
-    "requestId": "3739acd0-0e89-4664-b1f9-451e4bc69647",
-    "sessionId": "397962bc-5cb7-4872-bf9f-fb208f468f3f"
-}
-[class-parity] OK — 11 document classes aligned across _DOC_CLASS_RULES and report_specs.REPORT_SPECS
-WARNING:  Invalid HTTP request received.
-[identity] Vertex hint for 'S&P Global': ticker='SPGI' cik='0000064040' domain='spglobal.com' sources=0 (untrusted until SEC validation)
-[identity] validated 'S&P Global' -> CIK 0000064040, ticker='SPGI' via vertex_ticker+vertex_cik
-[llm-querygen] generated 8 variants for 'Supplier Code of Conduct site:spglobal.com'
-[search] vertex returned nothing (vertex-grounding); falling back to gateway
-[search] vertex returned nothing (vertex-grounding); falling back to gateway
-[search] vertex returned nothing (vertex-grounding); falling back to gateway
-[search] vertex returned nothing (vertex-grounding); falling back to gateway
-[search] vertex returned nothing (vertex-grounding); falling back to gateway
-[search] vertex returned nothing (vertex-grounding); falling back to gateway
-[search] vertex returned nothing (vertex-grounding); falling back to gateway
-[search] vertex returned nothing (vertex-grounding); falling back to gateway
-[search] vertex returned nothing (vertex-grounding); falling back to gateway
-[find][query] 'Supplier Code of Conduct site:spglobal.com' -> 10 hits via=gateway(native-site)
-[find][query] 'Supplier Code of Conduct ticker "SPGI" site:spglobal.com' -> 2 hits via=vertex-grounding
-[find][query] 'vendor code of conduct site:spglobal.com' -> 10 hits via=gateway(native-site)
-[find][query] 'third-party code of conduct site:spglobal.com' -> 8 hits via=gateway(native-site)
-[find][query] 'business partner code of conduct site:spglobal.com' -> 1 hits via=vertex-grounding
-[find][query] 'supply chain code of conduct site:spglobal.com' -> 10 hits via=gateway(native-site)
-[find][query] 'sustainable supply chain policy site:spglobal.com' -> 1 hits via=vertex-grounding
-[find][query] 'responsible sourcing policy site:spglobal.com' -> 9 hits via=gateway(native-site)
-[find][query] 'supplier charter site:spglobal.com' -> 10 hits via=gateway(native-site)
-[find][query] 'procurement code of conduct site:spglobal.com' -> 10 hits via=gateway(native-site)
-[find][query] 'supplier esg policy site:spglobal.com' -> 1 hits via=vertex-grounding
-[find][query] 'Supplier Code of Conduct filetype:pdf site:spglobal.com' -> 10 hits via=gateway(native-site)
-[find][query] 'procurement code of conduct filetype:pdf site:spglobal.com' -> 10 hits via=gateway(native-site)
-[find] dropped 1 junk-host candidate(s) (app store / media / social / aggregator subdomains — generic, not company-specific)
-[find] dropped 3 wrong-class filename candidate(s) (e.g. DEFA14A/additional-proxy, near-neighbor documents) before LLM selection
-[find] domain_mode=hard(on_domain_hits_found) | HEAD pre-filtering 10 candidates for: Supplier Code of Conduct site:spglobal.com
-[find] 10/10 passed HEAD pre-filter
-[find] sample fetch failed (https://www.spglobal.com/content/dam/spglobal/corporate/en/documents/organization/who-we-are/sp-global-vendor-code-of-conduct.pdf): HTTP Error 403: Forbidden
-[find] sample fetch failed (https://www.spglobal.com/sustainable1/en/csa/insights/elevating-supplier-esg-maturity-managing-supply-chain-risks-through-assessment-development): HTTP Error 403: Forbidden
-[find] sample fetch failed (https://www.spglobal.com/en/who-we-are/corporate-responsibility/impact-report/responsible-business-conduct/responsible-sourcing-and-supply-chain-management): HTTP Error 403: Forbidden
-[find] sample fetch failed (https://www.spglobal.com/en/who-we-are/corporate-responsibility/reports-commitments/global-human-rights-policy-2022-.pdf): HTTP Error 403: Forbidden
-[find] sample fetch failed (https://www.spglobal.com/sustainable1/en/csa/insights/supplier-codes-of-conduct-show-notable-gap-in-environmental-requirements): HTTP Error 403: Forbidden
-[find] sample fetch failed (https://www.spglobal.com/en/who-we-are/corporate-responsibility/impact-report/responsible-business1/responsible-sourcing-and-supply-chain-management): HTTP Error 403: Forbidden
-[llm] contamination guard: selected https://www.spglobal.com/content/dam/spglobal/corporate/en/documents/organization/who-we-are/sp-global-vendor-code-of-conduct.pdf has no readable content sample (0 chars) but a company match was required — cannot confirm company identity from filename alone; FAILING CLOSED
-[llm] select decision: selected=None topic=False company=False year=True conf=high reason=company-unverifiable-empty-sample-failed-closed
-[deep-crawl] fetch failed (https://spglobal.com/): HTTP Error 403: Forbidden
-[browser] redirected: requested=https://spglobal.com/ final=https://www.spglobal.com/ referer_sent='https://spglobal.com/'
-[browser] possible WAF/bot-challenge page (matched 'access denied') at https://www.spglobal.com/
-[browser] hover-reveal: harvested grew to 0 links after menu hover
-[browser] harvested 0 links: 0 doc-file candidates, 0 download-labeled controls (verify_budget=10, click_budget=10) | block_marker=access denied
-[browser][vision] model found no download control
-[browser] https://spglobal.com/: no document resolved through any tier
-[result] NO DOCUMENT FOUND (failed closed): 'Supplier Code of Conduct site:spglobal.com'
-{
-    "timestamp": "2026-07-19T20:49:11.418Z",
-    "level": "INFO",
-    "message": "Invocation completed successfully (53.432s)",
-    "logger": "bedrock_agentcore.app",
-    "requestId": "9305ca1e-1377-4074-b7b8-55ba0927c7fa",
-    "sessionId": "34dc6f68-3643-4651-a628-d6e10684f3b0"
-}
-No more records within selected time range 
-Auto retry paused.
- 
-Resume
- [class-parity] OK — 11 document classes aligned across _DOC_CLASS_RULES and report_specs.REPORT_SPECS
-WARNING:  Invalid HTTP request received.
-[identity] Vertex hint for 'S&P Global': ticker='SPGI' cik='0000064040' domain='spglobal.com' sources=0 (untrusted until SEC validation)
-[identity] validated 'S&P Global' -> CIK 0000064040, ticker='SPGI' via vertex_ticker+vertex_cik
-[llm-querygen] generated 8 variants for 'Discrimination and Harassment Policy site:spglobal.com'
-[search] vertex returned nothing (vertex-grounding); falling back to gateway
-[search] vertex returned nothing (vertex-grounding); falling back to gateway
-[find][query] 'Discrimination and Harassment Policy site:spglobal.com' -> 10 hits via=gateway(native-site)
-[find][query] 'Discrimination and Harassment Policy ticker "SPGI" site:spglobal.com' -> 2 hits via=vertex-grounding
-[find][query] 'Discrimination and Harassment Policy filetype:pdf site:spglobal.com' -> 3 hits via=vertex-grounding
-[find][query] 'Policy Discrimination Harassment site:spglobal.com' -> 10 hits via=gateway(native-site)
-[find][query] 'Harassment and Discrimination Policy site:spglobal.com' -> 1 hits via=vertex-grounding
-[find][query] 'Employee Conduct Policy site:spglobal.com' -> 8 hits via=vertex-grounding
-[find][query] 'Code of Conduct site:spglobal.com' -> 3 hits via=vertex-grounding
-[find] domain_mode=hard(on_domain_hits_found) | HEAD pre-filtering 10 candidates for: Discrimination and Harassment Policy site:spglobal.com
-[find] 10/10 passed HEAD pre-filter
-[find] sample fetch failed (https://www.spglobal.com/en/who-we-are/corporate-responsibility/reports-commitments/global-human-rights-policy-2022-.pdf): HTTP Error 403: Forbidden
-[find] sample fetch failed (https://www.spglobal.com/market-intelligence/en/news-insights/articles/2023/1/biden-administration-ai-policy-efforts-to-be-complex-balancing-act-in-2023-73477426): HTTP Error 403: Forbidden
-[find] sample fetch failed (https://www.spglobal.com/sustainable1/en/insights/creating-visibility-and-positive-recognition-lgbtq-inclusion-in-the-workplace): HTTP Error 403: Forbidden
-[find] sample fetch failed (https://www.spglobal.com/marketintelligence/en/news-insights/latest-news-headlines/weighing-risks-of-using-nondisclosure-agreements-in-sexual-misconduct-cases-57052975): HTTP Error 403: Forbidden
-[find] sample fetch failed (https://www.spglobal.com/en/research-insights/special-reports/social-justice-as-a-social-factor?): HTTP Error 403: Forbidden
-[find] sample fetch failed (https://www.spglobal.com/en/research-insights/featured/markets-in-motion/social-justice-as-a-social-factor): HTTP Error 403: Forbidden
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=No exact Discrimination and Harassment Policy document found.
-[deep-crawl] fetch failed (https://spglobal.com/): HTTP Error 403: Forbidden
-[browser] redirected: requested=https://spglobal.com/ final=https://www.spglobal.com/ referer_sent='https://spglobal.com/'
-[browser] possible WAF/bot-challenge page (matched 'access denied') at https://www.spglobal.com/
-[browser] hover-reveal: harvested grew to 0 links after menu hover
-[browser] harvested 0 links: 0 doc-file candidates, 0 download-labeled controls (verify_budget=10, click_budget=10) | block_marker=access denied
-[browser][vision] model found no download control
-[browser] https://spglobal.com/: no document resolved through any tier
-[result] NO DOCUMENT FOUND (failed closed): 'Discrimination and Harassment Policy site:spglobal.com'
-{
-    "timestamp": "2026-07-19T20:48:39.586Z",
-    "level": "INFO",
-    "message": "Invocation completed successfully (35.442s)",
-    "logger": "bedrock_agentcore.app",
-    "requestId": "92eb6e70-21a3-4f9f-8527-d027698d353c",
-    "sessionId": "ac2fbfe3-aea3-40dd-9f01-16d3bb175fbc"
-}
-
-[class-parity] OK — 11 document classes aligned across _DOC_CLASS_RULES and report_specs.REPORT_SPECS
-WARNING:  Invalid HTTP request received.
-[identity] Vertex hint for 'Cisco Systems, Inc.': ticker='CSCO' cik='0000858877' domain='cisco.com' sources=0 (untrusted until SEC validation)
-[identity] validated 'Cisco Systems, Inc.' -> CIK 0000858877, ticker='CSCO' via vertex_ticker+vertex_cik
-[llm-querygen] generated 8 variants for 'Conflicts of Interest Policy site:cisco.com'
-[search] vertex returned nothing (vertex-grounding); falling back to gateway
-[find][query] 'Conflicts of Interest Policy site:cisco.com' -> 4 hits via=vertex-grounding
-[find][query] 'Conflicts of Interest Policy ticker "CSCO" site:cisco.com' -> 2 hits via=vertex-grounding
-[find][query] 'Conflicts of Interest Policy filetype:pdf site:cisco.com' -> 3 hits via=vertex-grounding
-[find][query] 'investors.cisco.com conflicts of interest policy site:cisco.com' -> 2 hits via=vertex-grounding
-[find][query] 'governance.cisco.com conflicts of interest policy site:cisco.com' -> 1 hits via=vertex-grounding
-[find][query] 'cisco.com governance conflicts of interest policy site:cisco.com' -> 3 hits via=vertex-grounding
-[find][query] 'cisco.com policies conflicts of interest site:cisco.com' -> 10 hits via=gateway(native-site)
-[find][query] 'sustainability.cisco.com conflicts of interest policy site:cisco.com' -> 1 hits via=vertex-grounding
-[find][query] 'cisco.com pdf conflicts of interest policy site:cisco.com' -> 2 hits via=vertex-grounding
-[find][query] 'static.cisco.com conflicts of interest policy site:cisco.com' -> 1 hits via=vertex-grounding
-[find] dropped 1 junk-host candidate(s) (app store / media / social / aggregator subdomains — generic, not company-specific)
-[find] domain_mode=hard(on_domain_hits_found) | HEAD pre-filtering 10 candidates for: Conflicts of Interest Policy site:cisco.com
-[find] 10/10 passed HEAD pre-filter
-[find] sample fetch failed (https://www.cisco.com/c/dam/assets/about/ethics/cobc/ebook/2016/pdf/COBC_FY16_English.pdf): HTTP Error 403: Forbidden
-[find] sample fetch failed (http://www.cisco.com/web/learning/exams/policies.html): HTTP Error 403: Forbidden
-[find] sample fetch failed (http://www.cisco.com/assets/about/ethics/cobc/ebook/page/09-conflicts-of-interest.html): HTTP Error 403: Forbidden
-[find] sample fetch failed (https://www.cisco.com/c/en/us/about/suppliers/policies/code-of-ethics.html): HTTP Error 403: Forbidden
-[llm] contamination guard: selected http://www.cisco.com/assets/about/ethics/cobc/ebook/page/09-conflicts-of-interest.html has no readable content sample (0 chars) but a company match was required — cannot confirm company identity from filename alone; FAILING CLOSED
-[llm] select decision: selected=None topic=False company=False year=True conf=high reason=company-unverifiable-empty-sample-failed-closed
+[find] sample fetch failed (https://www.cisco.com/site/us/en/learn/topics/security/what-is-siem.html): HTTP Error 403: Forbidden
+[llm] select decision: selected=None topic=False company=True year=True conf=high reason=No exact whistleblowing policy document found.
 [deep-crawl] fetch failed (https://cisco.com/): HTTP Error 403: Forbidden
 [browser] redirected: requested=https://cisco.com/ final=https://www.cisco.com/ referer_sent='https://cisco.com/'
 [browser] possible WAF/bot-challenge page (matched 'akamai') at https://www.cisco.com/
 [browser] hover-reveal: harvested grew to 383 links after menu hover
 [browser] harvested 383 links: 3 doc-file candidates, 0 download-labeled controls (verify_budget=10, click_budget=10) | block_marker=akamai
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=PDF is a purpose report, not a policy.
-[browser] candidate REJECTED by class check (https://www.cisco.com/c/dam/m/en_us/about/purpose/reporting-hub/_pdf/purpose-report-2025.pdf): PDF is a purpose report, not a policy.
-[browser] in-session candidate 1/10 not accepted (https://www.cisco.com/c/dam/m/en_us/about/purpose/reporting-hub/_pdf/purpose-report-2025.pdf): PDF is a purpose report, not a policy.; trying next candidate
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=No exact Conflicts of Interest Policy found
-[browser] candidate REJECTED by class check (https://www.cisco.com/c/dam/en_us/partners/cisco-partner-designations-faq.pdf): No exact Conflicts of Interest Policy found
-[browser] in-session candidate 2/10 not accepted (https://www.cisco.com/c/dam/en_us/partners/cisco-partner-designations-faq.pdf): No exact Conflicts of Interest Policy found; trying next candidate
-[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Document is Modern Slavery Statement, not Conflicts of Interest Policy.
-[browser] candidate REJECTED by class check (https://www.cisco.com/c/dam/en_us/about/supply-chain/cisco-modern-slavery-statement.pdf): Document is Modern Slavery Statement, not Conflicts of Interest Policy.
-[browser] in-session candidate 3/10 not accepted (https://www.cisco.com/c/dam/en_us/about/supply-chain/cisco-modern-slavery-statement.pdf): Document is Modern Slavery Statement, not Conflicts of Interest Policy.; trying next candidate
-[browser][nav] IR-prioritized frontier: 1/324 nav links (IR-nav first, query terms ['conflicts', 'interest'] secondary)
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=PDF content unreadable, likely not policy
+[browser] candidate REJECTED by class check (https://www.cisco.com/c/dam/m/en_us/about/purpose/reporting-hub/_pdf/purpose-report-2025.pdf): PDF content unreadable, likely not policy
+[browser] in-session candidate 1/10 not accepted (https://www.cisco.com/c/dam/m/en_us/about/purpose/reporting-hub/_pdf/purpose-report-2025.pdf): PDF content unreadable, likely not policy; trying next candidate
+[llm] select decision: selected=None topic=False company=True year=True conf=high reason=PDF contains no whistleblowing policy content
+[browser] candidate REJECTED by class check (https://www.cisco.com/c/dam/en_us/partners/cisco-partner-designations-faq.pdf): PDF contains no whistleblowing policy content
+[browser] in-session candidate 2/10 not accepted (https://www.cisco.com/c/dam/en_us/partners/cisco-partner-designations-faq.pdf): PDF contains no whistleblowing policy content; trying next candidate
+[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Document is Modern Slavery Statement, not Whistleblowing Policy
+[browser] candidate REJECTED by class check (https://www.cisco.com/c/dam/en_us/about/supply-chain/cisco-modern-slavery-statement.pdf): Document is Modern Slavery Statement, not Whistleblowing Policy
+[browser] in-session candidate 3/10 not accepted (https://www.cisco.com/c/dam/en_us/about/supply-chain/cisco-modern-slavery-statement.pdf): Document is Modern Slavery Statement, not Whistleblowing Policy; trying next candidate
+[browser][nav] IR-prioritized frontier: 1/324 nav links (IR-nav first, query terms ['whistleblowing'] secondary)
 [browser][nav] https://www.cisco.com/site/us/en/solutions/industries/financial-services/index.html: 4 doc candidates (depth=1, pages=1)
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Document is not a Conflicts of Interest Policy.
-[browser] candidate REJECTED by class check (https://www.cisco.com/c/dam/en/us/solutions/industries/financial-services/from-autonomous-ai-to-controlled-outcomes.pdf): Document is not a Conflicts of Interest Policy.
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=No actual whistleblowing policy document found
+[browser] candidate REJECTED by class check (https://www.cisco.com/c/dam/en/us/solutions/industries/financial-services/from-autonomous-ai-to-controlled-outcomes.pdf): No actual whistleblowing policy document found
 [browser][nav] https://investor.cisco.com/overview/default.aspx: 8 doc candidates (depth=2, pages=2)
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Investor deck, not policy document
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_presentations/2026/05/Cisco-Investor-Relations-Deck-5-17-2026.pdf): Investor deck, not policy document
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No Conflicts of Interest Policy document found.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_news/Cisco-Unveils-Agentic-Platform-for-Operating-and-Defending-Critical-IT-Infrastructure-2026.pdf): No Conflicts of Interest Policy document found.
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not Cisco, unrelated content
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_news/The-600-Billion-Wake-up-Call-New-Splunk-Research-Reveals-Downtime-is-a-Systemic-Business-Crisis-2026.pdf): Not Cisco, unrelated content
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Earnings report, not policy document
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_news/CISCO-REPORTS-THIRD-QUARTER-EARNINGS-2026.pdf): Earnings report, not policy document
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not a conflicts of interest policy document
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_news/Cisco-to-Participate-in-May--June-Events-with-the-Financial-Community-2026.pdf): Not a conflicts of interest policy document
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No exact Conflicts of Interest Policy document found.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2026/q3/Q3FY26-Earnings-Slides.pdf): No exact Conflicts of Interest Policy document found.
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Earnings transcript, not policy document
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_earnings/2026/q3/transcript/Q3FY26-Prepared-Remarks.pdf): Earnings transcript, not policy document
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not a conflicts of interest policy document
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_earnings/2026/q3/generic/Q3-26-Income-Statements-GAAP-Reconciliation.xlsx): Not a conflicts of interest policy document
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is investor relations deck, not policy
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_presentations/2026/05/Cisco-Investor-Relations-Deck-5-17-2026.pdf): Document is investor relations deck, not policy
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No relevant policy document found
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_news/Cisco-Unveils-Agentic-Platform-for-Operating-and-Defending-Critical-IT-Infrastructure-2026.pdf): No relevant policy document found
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Document about Splunk, not Cisco policy
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_news/The-600-Billion-Wake-up-Call-New-Splunk-Research-Reveals-Downtime-is-a-Systemic-Business-Crisis-2026.pdf): Document about Splunk, not Cisco policy
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Document is earnings report, not policy
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_news/CISCO-REPORTS-THIRD-QUARTER-EARNINGS-2026.pdf): Document is earnings report, not policy
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document does not contain whistleblowing policy content.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_news/Cisco-to-Participate-in-May--June-Events-with-the-Financial-Community-2026.pdf): Document does not contain whistleblowing policy content.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No exact whistleblowing policy document found
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2026/q3/Q3FY26-Earnings-Slides.pdf): No exact whistleblowing policy document found
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not a policy document, earnings transcript only
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_earnings/2026/q3/transcript/Q3FY26-Prepared-Remarks.pdf): Not a policy document, earnings transcript only
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not a policy document, just financial statement
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_earnings/2026/q3/generic/Q3-26-Income-Statements-GAAP-Reconciliation.xlsx): Not a policy document, just financial statement
 [browser][nav] https://www.cisco.com/site/us/en/solutions/industries/financial-services/why-cisco-for-financial-services.html: 3 doc candidates (depth=2, pages=3)
 [browser][nav] https://www.cisco.com/c/m/en_us/solutions/industries/portfolio-explorer/portfolio-explorer-for-financial-services.html: 1 doc candidates (depth=2, pages=4)
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=No exact Conflicts of Interest Policy document found.
-[browser] candidate REJECTED by class check (https://www.cisco.com/c/dam/en/us/products/collateral/security/kb-securities-infographic-sustainability.pdf): No exact Conflicts of Interest Policy document found.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=PDF is metadata, no policy content
+[browser] candidate REJECTED by class check (https://www.cisco.com/c/dam/en/us/products/collateral/security/kb-securities-infographic-sustainability.pdf): PDF is metadata, no policy content
 [browser][nav] https://www.cisco.com/site/us/en/about/case-studies-customer-stories/myinvestor.html: 3 doc candidates (depth=2, pages=5)
 [browser][nav] https://www.cisco.com/site/us/en/solutions/global-partners/aws/financial-services.html: 3 doc candidates (depth=2, pages=6)
 [browser][nav] https://blogs.cisco.com/tag/financial-services-solutions: 1 doc candidates (depth=2, pages=7)
-[browser][nav] https://investor.cisco.com/overview/investor.cisco.com: 0 doc candidates (depth=3, pages=8)
-[browser][nav] https://investor.cisco.com/financials/quarterly-results/default.aspx: 20 doc candidates (depth=3, pages=9)
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Earnings slides, not policy document
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2026/q2/Q2-26-Earnings-Slides.pdf): Earnings slides, not policy document
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is not a Conflicts of Interest Policy.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2026/q2/Q2FY26-Prepared-Remarks.pdf): Document is not a Conflicts of Interest Policy.
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is not a conflicts of interest policy.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2026/q2/ac19bfc8-b091-48d9-be7b-1ffd74e455a1.pdf): Document is not a conflicts of interest policy.
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Earnings slides, not policy document
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2026/q1/Q1-26-Earnings-Slides.pdf): Earnings slides, not policy document
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Not a conflicts of interest policy document.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2026/q1/Q1FY26-Prepared-Remarks.pdf): Not a conflicts of interest policy document.
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not a Conflicts of Interest Policy document
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2026/q1/d85cf96e-2601-4c51-b3f6-2ae6a42e1f6b.pdf): Not a Conflicts of Interest Policy document
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is earnings slides, not policy.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q4/Q4FY25-Earnings-Slides.pdf): Document is earnings slides, not policy.
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not the exact Conflicts of Interest Policy document.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q4/Q4FY25-Prepared-Remarks.pdf): Not the exact Conflicts of Interest Policy document.
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Document is not a Conflicts of Interest Policy
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q4/6c821d1a-cf4e-4310-9801-df9399aa701b.pdf): Document is not a Conflicts of Interest Policy
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Quarterly remarks, not policy document.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q1/Cisco-1Q25-Prepared-Remarks.pdf): Quarterly remarks, not policy document.
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Not the exact Conflicts of Interest Policy document.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q2/Q2FY25-Prepared-Remarks-IR.pdf): Not the exact Conflicts of Interest Policy document.
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is a financial remark, not policy.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q3/Q3FY25-Prepared-Remarks.pdf): Document is a financial remark, not policy.
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Document is not a Conflicts of Interest Policy.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q1/6b3cfcbf-0877-43bd-ae39-29379794b5f4.pdf): Document is not a Conflicts of Interest Policy.
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=PDF content not readable, likely not policy.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q2/csco-20250125.pdf): PDF content not readable, likely not policy.
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=PDF is a financial report, not policy document
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q3/960df9bc-19e9-4f49-a441-2b48ff0af251.pdf): PDF is a financial report, not policy document
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is earnings slides, not policy.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q1/Q1FY25-Earnings-Slides-Web.pdf): Document is earnings slides, not policy.
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not a conflicts of interest policy document
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q2/Q2FY25-Earnings-Slides.pdf): Not a conflicts of interest policy document
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No Conflicts of Interest Policy document found
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q3/Q3FY25-Earnings-Slides.pdf): No Conflicts of Interest Policy document found
-[browser][nav] https://investor.cisco.com/financials/annual-reports/default.aspx: 9 doc candidates (depth=3, pages=10)
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Annual Report, not Conflicts of Interest Policy
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/ar/2025-Cisco-Full-Annual-Report.pdf): Annual Report, not Conflicts of Interest Policy
-[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Annual report, not conflicts policy
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/ar/2025-Cisco-Summary-Report.pdf): Annual report, not conflicts policy
-[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Proxy does not contain Conflicts of Interest Policy.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/ar/2025-Cisco-Proxy.pdf): Proxy does not contain Conflicts of Interest Policy.
-[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Annual report, not conflicts of interest policy.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2024/ar/2024-Cisco-Full-Annual-Report.pdf): Annual report, not conflicts of interest policy.
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Annual report, not Conflicts of Interest Policy.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2023/ar/cisco-annual-report-2023.pdf): Annual report, not Conflicts of Interest Policy.
-[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Annual report, not Conflicts of Interest Policy
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2022/ar/cisco-annual-report-2022.pdf): Annual report, not Conflicts of Interest Policy
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Annual report, not conflicts policy.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2021/ar/cisco-annual-report-2021.pdf): Annual report, not conflicts policy.
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Annual report, not conflicts policy.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2020/ar/cisco-annual-report-2020.pdf): Annual report, not conflicts policy.
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Annual report, not Conflicts of Interest Policy.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2019/ar/cisco-annual-report-2019.pdf): Annual report, not Conflicts of Interest Policy.
-[browser][nav] https://investor.cisco.com/financials/sec-filings/default.aspx: 0 doc candidates (depth=3, pages=11)
-[browser][nav] https://investor.cisco.com/financials/Annual-Meeting/default.aspx: 0 doc candidates (depth=3, pages=12)
-[browser][nav] https://investor.cisco.com/default.aspx: 8 doc candidates (depth=3, pages=13)
-[browser][nav] https://investor.cisco.com/governance/Governance-Highlights/default.aspx: 0 doc candidates (depth=3, pages=14)
-[browser][nav] https://investor.cisco.com/governance/executive-management/default.aspx: 0 doc candidates (depth=3, pages=15)
-[browser][nav] https://investor.cisco.com/governance/board-of-directors/default.aspx: 0 doc candidates (depth=3, pages=16)
-[browser][nav] https://investor.cisco.com/governance/Governance-Documents/default.aspx: 7 doc candidates (depth=3, pages=17)
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Document is committee charter, not policy
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/committee/2026/Cisco-s-Public-Policy-Committee-Charter-effective-5-28-26.pdf): Document is committee charter, not policy
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Document is governance guidelines, not conflicts policy.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/1/Corporate-Governance-Guidelines-Aug-2025.pdf): Document is governance guidelines, not conflicts policy.
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Document is bylaws, not policy.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/1/Amended-and-Restated-Bylaws-August-2025.pdf): Document is bylaws, not policy.
-[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not a Conflicts of Interest Policy document.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/committee/Audit-Committee-Charter-Aug-2025.pdf): Not a Conflicts of Interest Policy document.
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not a Conflicts of Interest Policy document
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/committee/Compensation-Committee-Charter-Dec-2025.pdf): Not a Conflicts of Interest Policy document
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not the exact Conflicts of Interest Policy document.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/committee/Nomination-and-Governance-Committee-Charter-Aug-2025.pdf): Not the exact Conflicts of Interest Policy document.
+[browser][nav] https://investor.cisco.com/financials/quarterly-results/default.aspx: 20 doc candidates (depth=3, pages=8)
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not a whistleblowing policy document
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2026/q2/Q2-26-Earnings-Slides.pdf): Not a whistleblowing policy document
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not the exact whistleblowing policy document.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2026/q2/Q2FY26-Prepared-Remarks.pdf): Not the exact whistleblowing policy document.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not Cisco's whistleblowing policy document
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2026/q2/ac19bfc8-b091-48d9-be7b-1ffd74e455a1.pdf): Not Cisco's whistleblowing policy document
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not a whistleblowing policy document
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2026/q1/Q1-26-Earnings-Slides.pdf): Not a whistleblowing policy document
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Document is not Cisco's whistleblowing policy
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2026/q1/Q1FY26-Prepared-Remarks.pdf): Document is not Cisco's whistleblowing policy
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No explicit whistleblowing policy document found
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2026/q1/d85cf96e-2601-4c51-b3f6-2ae6a42e1f6b.pdf): No explicit whistleblowing policy document found
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is earnings slides, not policy
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q4/Q4FY25-Earnings-Slides.pdf): Document is earnings slides, not policy
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is not Cisco's whistleblowing policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q4/Q4FY25-Prepared-Remarks.pdf): Document is not Cisco's whistleblowing policy.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not a whistleblowing policy document
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q4/6c821d1a-cf4e-4310-9801-df9399aa701b.pdf): Not a whistleblowing policy document
+[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Document is a financial report, not a policy
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q1/Cisco-1Q25-Prepared-Remarks.pdf): Document is a financial report, not a policy
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not a whistleblowing policy document
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q2/Q2FY25-Prepared-Remarks-IR.pdf): Not a whistleblowing policy document
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Document is not a policy, it's a speech transcript.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q3/Q3FY25-Prepared-Remarks.pdf): Document is not a policy, it's a speech transcript.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=PDF content incomplete, not identifiable as policy
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q1/6b3cfcbf-0877-43bd-ae39-29379794b5f4.pdf): PDF content incomplete, not identifiable as policy
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=PDF content unreadable, no policy details visible
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q2/csco-20250125.pdf): PDF content unreadable, no policy details visible
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=PDF content not readable, unknown class
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q3/960df9bc-19e9-4f49-a441-2b48ff0af251.pdf): PDF content not readable, unknown class
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Earnings slides, not policy document
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q1/Q1FY25-Earnings-Slides-Web.pdf): Earnings slides, not policy document
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No actual whistleblowing policy document found
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q2/Q2FY25-Earnings-Slides.pdf): No actual whistleblowing policy document found
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Document is earnings slides, not policy
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q3/Q3FY25-Earnings-Slides.pdf): Document is earnings slides, not policy
+[browser][nav] https://investor.cisco.com/financials/annual-reports/default.aspx: 9 doc candidates (depth=3, pages=9)
+[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Annual report, not whistleblowing policy
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/ar/2025-Cisco-Full-Annual-Report.pdf): Annual report, not whistleblowing policy
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Report, not policy document
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/ar/2025-Cisco-Summary-Report.pdf): Report, not policy document
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not a whistleblowing policy document
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/ar/2025-Cisco-Proxy.pdf): Not a whistleblowing policy document
+[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Annual report, not whistleblowing policy
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2024/ar/2024-Cisco-Full-Annual-Report.pdf): Annual report, not whistleblowing policy
+[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Annual report, not whistleblowing policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2023/ar/cisco-annual-report-2023.pdf): Annual report, not whistleblowing policy.
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Annual report, not whistleblowing policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2022/ar/cisco-annual-report-2022.pdf): Annual report, not whistleblowing policy.
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Annual report, not whistleblowing policy
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2021/ar/cisco-annual-report-2021.pdf): Annual report, not whistleblowing policy
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Annual report, not whistleblowing policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2020/ar/cisco-annual-report-2020.pdf): Annual report, not whistleblowing policy.
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Annual report, not whistleblowing policy
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2019/ar/cisco-annual-report-2019.pdf): Annual report, not whistleblowing policy
+[browser][nav] https://investor.cisco.com/financials/sec-filings/default.aspx: 0 doc candidates (depth=3, pages=10)
+[browser][nav] https://investor.cisco.com/financials/Annual-Meeting/default.aspx: 0 doc candidates (depth=3, pages=11)
+[browser][nav] https://investor.cisco.com/default.aspx: 8 doc candidates (depth=3, pages=12)
+[browser][nav] https://investor.cisco.com/governance/Governance-Highlights/default.aspx: 0 doc candidates (depth=3, pages=13)
+[browser][nav] https://investor.cisco.com/governance/executive-management/default.aspx: 0 doc candidates (depth=3, pages=14)
+[browser][nav] https://investor.cisco.com/governance/board-of-directors/default.aspx: 0 doc candidates (depth=3, pages=15)
+[browser][nav] https://investor.cisco.com/governance/Governance-Documents/default.aspx: 7 doc candidates (depth=3, pages=16)
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Not the exact whistleblowing policy document.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/committee/2026/Cisco-s-Public-Policy-Committee-Charter-effective-5-28-26.pdf): Not the exact whistleblowing policy document.
+[verify] STRICT reject (near-neighbor filename, no LLM): https://s21.q4cdn.com/812015656/files/doc_downloads/1/Corporate-Governance-Guidelines-Aug-2025.pdf
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is bylaws, not whistleblowing policy
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/1/Amended-and-Restated-Bylaws-August-2025.pdf): Document is bylaws, not whistleblowing policy
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Document is Audit Committee Charter, not policy
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/committee/Audit-Committee-Charter-Aug-2025.pdf): Document is Audit Committee Charter, not policy
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not Cisco's whistleblowing policy document
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/committee/Compensation-Committee-Charter-Dec-2025.pdf): Not Cisco's whistleblowing policy document
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Document is a committee charter, not whistleblowing policy
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/committee/Nomination-and-Governance-Committee-Charter-Aug-2025.pdf): Document is a committee charter, not whistleblowing policy
 [llm] select decision: selected=None topic=False company=True year=True conf=high reason=Document is Certificate of Incorporation, not policy
 [browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/1/Cisco-Certificate-of-Incorporation.pdf): Document is Certificate of Incorporation, not policy
-[browser][nav] https://investor.cisco.com/governance/committee-composition/default.aspx: 4 doc candidates (depth=3, pages=18)
-[browser][nav] https://investor.cisco.com/governance/Code-of-Business-Conduct/default.aspx: 16 doc candidates (depth=3, pages=19)
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Document is a Code of Conduct, not Conflicts policy
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/new-new-codeofconduct/FY26COBC_Arabic.pdf): Document is a Code of Conduct, not Conflicts policy
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Document is Code of Conduct, not Conflicts of Interest Policy
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/code-of-conduct-new/FY26COBC_Indonesian.pdf): Document is Code of Conduct, not Conflicts of Interest Policy
-[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not a conflicts of interest policy document
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/code-of-conduct-new/FY26COBC_Malay.pdf): Not a conflicts of interest policy document
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not the exact Conflicts of Interest Policy.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/new-new-codeofconduct/FY26COBC_Serbian.pdf): Not the exact Conflicts of Interest Policy.
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No exact Conflicts of Interest Policy found.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/new-new-codeofconduct/FY26COBC_Thai.pdf): No exact Conflicts of Interest Policy found.
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is a Code of Conduct, not Conflicts policy.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/new-new-codeofconduct/FY26COBC_Vietnamese.pdf): Document is a Code of Conduct, not Conflicts policy.
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is Code of Conduct, not Conflicts of Interest Policy
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/code-of-conduct-v3/FY26COBC_Chinese-1.pdf): Document is Code of Conduct, not Conflicts of Interest Policy
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is not a Conflicts of Interest Policy.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/code-of-conduct-v3/FY26COBC_Dutch-1.pdf): Document is not a Conflicts of Interest Policy.
-[llm] select decision: selected=https://s21.q4cdn.com/812015656/files/doc_downloads/new-new-codeofconduct/FY26COBC_French.pdf topic=True company=True year=True conf=high reason=Exact Conflicts of Interest Policy document from Cisco.
-[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Document is a Code of Conduct, not Conflicts policy
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/new-new-codeofconduct/FY26COBC_German.pdf): Document is a Code of Conduct, not Conflicts policy
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is a code of conduct, not conflicts policy.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/code-of-conduct-v3/FY26COBC_Japanese-1.pdf): Document is a code of conduct, not conflicts policy.
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is in Korean, not English policy.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/code-of-conduct-v3/FY26COBC_Korean-1.pdf): Document is in Korean, not English policy.
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is not a Conflicts of Interest Policy.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/new-new-codeofconduct/FY26COBC_Polish.pdf): Document is not a Conflicts of Interest Policy.
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Document is a Code of Conduct, not Conflicts policy
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/code-of-conduct-new/FY26COBC_Portuguese.pdf): Document is a Code of Conduct, not Conflicts policy
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not the exact Conflicts of Interest Policy document.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/code-of-conduct-v3/FY26COBC_Spanish-Latam-1.pdf): Not the exact Conflicts of Interest Policy document.
-[browser][nav] resolved via deep nav: https://s21.q4cdn.com/812015656/files/doc_downloads/new-new-codeofconduct/FY26COBC_French.pdf
-[store] STORED (browser): 'Conflicts of Interest Policy site:cisco.com' -> cisco-systems-inc/uncategorized/d65f057426a1-FY26COBC_French.pdf
+[browser][nav] https://investor.cisco.com/governance/committee-composition/default.aspx: 4 doc candidates (depth=3, pages=17)
+[browser][nav] https://investor.cisco.com/governance/Code-of-Business-Conduct/default.aspx: 16 doc candidates (depth=3, pages=18)
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Code of Conduct, not specific policy
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/code-of-conduct-new/FY26COBC_English.pdf): Code of Conduct, not specific policy
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not Cisco's whistleblowing policy document
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/new-new-codeofconduct/FY26COBC_Arabic.pdf): Not Cisco's whistleblowing policy document
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not Cisco's whistleblowing policy document
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/code-of-conduct-new/FY26COBC_Indonesian.pdf): Not Cisco's whistleblowing policy document
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not Cisco's official whistleblowing policy
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/code-of-conduct-new/FY26COBC_Malay.pdf): Not Cisco's official whistleblowing policy
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No exact whistleblowing policy document found.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/new-new-codeofconduct/FY26COBC_Serbian.pdf): No exact whistleblowing policy document found.
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not Cisco's whistleblowing policy document.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/new-new-codeofconduct/FY26COBC_Thai.pdf): Not Cisco's whistleblowing policy document.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not actual whistleblowing policy document
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/new-new-codeofconduct/FY26COBC_Vietnamese.pdf): Not actual whistleblowing policy document
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=PDF is Chinese code of conduct, not policy
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/code-of-conduct-v3/FY26COBC_Chinese-1.pdf): PDF is Chinese code of conduct, not policy
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No exact whistleblowing policy document found.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/code-of-conduct-v3/FY26COBC_Dutch-1.pdf): No exact whistleblowing policy document found.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not the exact whistleblowing policy document.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/new-new-codeofconduct/FY26COBC_French.pdf): Not the exact whistleblowing policy document.
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not Cisco's official whistleblowing policy document.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/new-new-codeofconduct/FY26COBC_German.pdf): Not Cisco's official whistleblowing policy document.
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Document is not Cisco's whistleblowing policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/code-of-conduct-v3/FY26COBC_Japanese-1.pdf): Document is not Cisco's whistleblowing policy.
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not a whistleblowing policy document
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/code-of-conduct-v3/FY26COBC_Korean-1.pdf): Not a whistleblowing policy document
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is unrelated to Cisco's whistleblowing policy.
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/new-new-codeofconduct/FY26COBC_Polish.pdf): Document is unrelated to Cisco's whistleblowing policy.
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not Cisco's whistleblowing policy document
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/code-of-conduct-v3/FY26COBC_Spanish-Latam-1.pdf): Not Cisco's whistleblowing policy document
+[browser][nav] https://investor.cisco.com/governance/Financial-Officer-Code-of-Ethics/default.aspx: 1 doc candidates (depth=3, pages=19)
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not a whistleblowing policy document
+[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/Financial-Officer-Code-of-Ethics-2018.pdf): Not a whistleblowing policy document
+[browser][nav] https://investor.cisco.com/resources/investor-faqs/default.aspx: 1 doc candidates (depth=3, pages=20)
+[verify] STRICT reject (near-neighbor filename, no LLM): https://investor.cisco.com/files/doc_downloads/EU-Public-CbCr-Cisco-Template.pdf
+[browser][nav] https://investor.cisco.com/resources/investor-email-alerts/default.aspx: 0 doc candidates (depth=3, pages=21)
+[browser][nav] https://investor.cisco.com/resources/investor-contacts/default.aspx: 0 doc candidates (depth=3, pages=22)
+[browser][nav] https://www.cisco.com/c/en/us/solutions/industries/financial-services/digital-delivery-financial-services-ig.html: 1 doc candidates (depth=3, pages=23)
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=No actual whistleblowing policy document provided
+[browser] candidate REJECTED by class check (https://www.cisco.com/c/dam/m/en_us/solutions/industries/financial-services/digital-delivery-financial-services/pdf/Digital-Delivery-of-Financial-Services.pdf): No actual whistleblowing policy document provided
+[browser][nav] https://video.cisco.com/detail/video/6344499400112: 0 doc candidates (depth=3, pages=24)
+[browser][nav] https://blogs.cisco.com/financialservices/boardroom-focus-communications-compliance: 1 doc candidates (depth=3, pages=25)
+[browser][nav] https://www.cisco.com/site/us/en/about/case-studies-customer-stories/global-finance-serviceprovider.html?ccid=cc005334&oid=csydnc032433: 3 doc candidates (depth=3, pages=26)
+[browser][nav] https://www.cisco.com/c/en/us/about/case-studies-customer-success-stories/customer-stories-listing.html?flt1_general-table0=Financial%20services: 2 doc candidates (depth=3, pages=27)
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=No explicit whistleblowing policy document found
+[browser] candidate REJECTED by class check (https://www.cisco.com/c/dam/en/us/products/collateral/security/firewalls/cust-perspectives-firewalls.pdf): No explicit whistleblowing policy document found
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=No actual whistleblowing policy document found.
+[browser] candidate REJECTED by class check (https://www.cisco.com/c/dam/global/en_uk/solutions/collateral/collaboration/uk-cabinet-office-case-study.pdf): No actual whistleblowing policy document found.
+[browser][nav] https://blogs.cisco.com/gov: 1 doc candidates (depth=3, pages=28)
+[browser][nav] https://blogs.cisco.com/industries/navigating-dora-is-your-financial-institution-ready: 1 doc candidates (depth=3, pages=29)
+[browser][nav] https://blogs.cisco.com/industries/the-evolving-rate-of-patch-management-and-eissu-for-financials: 1 doc candidates (depth=3, pages=30)
+[browser][vision] model found no download control
+[browser] https://cisco.com/: no document resolved through any tier
+[result] NO DOCUMENT FOUND (failed closed): 'Whistleblowing Policy site:cisco.com'
 {
-    "timestamp": "2026-07-19T19:25:17.552Z",
+    "timestamp": "2026-07-20T08:05:31.077Z",
     "level": "INFO",
-    "message": "Invocation completed successfully (475.825s)",
+    "message": "Invocation completed successfully (707.920s)",
     "logger": "bedrock_agentcore.app",
-    "requestId": "72d36781-74c0-44f8-8004-152b57c473bc",
-    "sessionId": "5e4edea2-06a0-43e0-81b8-4b2117ba5630"
-
-} 
-[class-parity] OK — 11 document classes aligned across _DOC_CLASS_RULES and report_specs.REPORT_SPECS
-WARNING:  Invalid HTTP request received.
-[identity] Vertex hint for 'Cisco Systems, Inc.': ticker='CSCO' cik='0000858877' domain='cisco.com' sources=0 (untrusted until SEC validation)
-[identity] validated 'Cisco Systems, Inc.' -> CIK 0000858877, ticker='CSCO' via vertex_ticker+vertex_cik
-[llm-querygen] generated 8 variants for 'Conflicts of Interest Policy site:cisco.com'
-[search] vertex returned nothing (vertex-grounding); falling back to gateway
-[find][query] 'Conflicts of Interest Policy site:cisco.com' -> 4 hits via=vertex-grounding
-[find][query] 'Conflicts of Interest Policy ticker "CSCO" site:cisco.com' -> 2 hits via=vertex-grounding
-[find][query] 'Conflicts of Interest Policy filetype:pdf site:cisco.com' -> 3 hits via=vertex-grounding
-[find][query] 'investors.cisco.com conflicts of interest policy site:cisco.com' -> 2 hits via=vertex-grounding
-[find][query] 'governance.cisco.com conflicts of interest policy site:cisco.com' -> 1 hits via=vertex-grounding
-[find][query] 'cisco.com governance conflicts of interest policy site:cisco.com' -> 3 hits via=vertex-grounding
-[find][query] 'cisco.com policies conflicts of interest site:cisco.com' -> 10 hits via=gateway(native-site)
-[find][query] 'sustainability.cisco.com conflicts of interest policy site:cisco.com' -> 1 hits via=vertex-grounding
-[find][query] 'cisco.com pdf conflicts of interest policy site:cisco.com' -> 2 hits via=vertex-grounding
-[find][query] 'static.cisco.com conflicts of interest policy site:cisco.com' -> 1 hits via=vertex-grounding
-[find] dropped 1 junk-host candidate(s) (app store / media / social / aggregator subdomains — generic, not company-specific)
-[find] domain_mode=hard(on_domain_hits_found) | HEAD pre-filtering 10 candidates for: Conflicts of Interest Policy site:cisco.com
-[find] 10/10 passed HEAD pre-filter
-[find] sample fetch failed (https://www.cisco.com/c/dam/assets/about/ethics/cobc/ebook/2016/pdf/COBC_FY16_English.pdf): HTTP Error 403: Forbidden
-[find] sample fetch failed (http://www.cisco.com/web/learning/exams/policies.html): HTTP Error 403: Forbidden
-[find] sample fetch failed (http://www.cisco.com/assets/about/ethics/cobc/ebook/page/09-conflicts-of-interest.html): HTTP Error 403: Forbidden
-[find] sample fetch failed (https://www.cisco.com/c/en/us/about/suppliers/policies/code-of-ethics.html): HTTP Error 403: Forbidden
-[llm] contamination guard: selected http://www.cisco.com/assets/about/ethics/cobc/ebook/page/09-conflicts-of-interest.html has no readable content sample (0 chars) but a company match was required — cannot confirm company identity from filename alone; FAILING CLOSED
-[llm] select decision: selected=None topic=False company=False year=True conf=high reason=company-unverifiable-empty-sample-failed-closed
-[deep-crawl] fetch failed (https://cisco.com/): HTTP Error 403: Forbidden
-[browser] redirected: requested=https://cisco.com/ final=https://www.cisco.com/ referer_sent='https://cisco.com/'
-[browser] possible WAF/bot-challenge page (matched 'akamai') at https://www.cisco.com/
-[browser] hover-reveal: harvested grew to 383 links after menu hover
-[browser] harvested 383 links: 3 doc-file candidates, 0 download-labeled controls (verify_budget=10, click_budget=10) | block_marker=akamai
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=PDF is a purpose report, not a policy.
-[browser] candidate REJECTED by class check (https://www.cisco.com/c/dam/m/en_us/about/purpose/reporting-hub/_pdf/purpose-report-2025.pdf): PDF is a purpose report, not a policy.
-[browser] in-session candidate 1/10 not accepted (https://www.cisco.com/c/dam/m/en_us/about/purpose/reporting-hub/_pdf/purpose-report-2025.pdf): PDF is a purpose report, not a policy.; trying next candidate
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=No exact Conflicts of Interest Policy found
-[browser] candidate REJECTED by class check (https://www.cisco.com/c/dam/en_us/partners/cisco-partner-designations-faq.pdf): No exact Conflicts of Interest Policy found
-[browser] in-session candidate 2/10 not accepted (https://www.cisco.com/c/dam/en_us/partners/cisco-partner-designations-faq.pdf): No exact Conflicts of Interest Policy found; trying next candidate
-[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Document is Modern Slavery Statement, not Conflicts of Interest Policy.
-[browser] candidate REJECTED by class check (https://www.cisco.com/c/dam/en_us/about/supply-chain/cisco-modern-slavery-statement.pdf): Document is Modern Slavery Statement, not Conflicts of Interest Policy.
-[browser] in-session candidate 3/10 not accepted (https://www.cisco.com/c/dam/en_us/about/supply-chain/cisco-modern-slavery-statement.pdf): Document is Modern Slavery Statement, not Conflicts of Interest Policy.; trying next candidate
-[browser][nav] IR-prioritized frontier: 1/324 nav links (IR-nav first, query terms ['conflicts', 'interest'] secondary)
-[browser][nav] https://www.cisco.com/site/us/en/solutions/industries/financial-services/index.html: 4 doc candidates (depth=1, pages=1)
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Document is not a Conflicts of Interest Policy.
-[browser] candidate REJECTED by class check (https://www.cisco.com/c/dam/en/us/solutions/industries/financial-services/from-autonomous-ai-to-controlled-outcomes.pdf): Document is not a Conflicts of Interest Policy.
-[browser][nav] https://investor.cisco.com/overview/default.aspx: 8 doc candidates (depth=2, pages=2)
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Investor deck, not policy document
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_presentations/2026/05/Cisco-Investor-Relations-Deck-5-17-2026.pdf): Investor deck, not policy document
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No Conflicts of Interest Policy document found.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_news/Cisco-Unveils-Agentic-Platform-for-Operating-and-Defending-Critical-IT-Infrastructure-2026.pdf): No Conflicts of Interest Policy document found.
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not Cisco, unrelated content
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_news/The-600-Billion-Wake-up-Call-New-Splunk-Research-Reveals-Downtime-is-a-Systemic-Business-Crisis-2026.pdf): Not Cisco, unrelated content
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Earnings report, not policy document
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_news/CISCO-REPORTS-THIRD-QUARTER-EARNINGS-2026.pdf): Earnings report, not policy document
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not a conflicts of interest policy document
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_news/Cisco-to-Participate-in-May--June-Events-with-the-Financial-Community-2026.pdf): Not a conflicts of interest policy document
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No exact Conflicts of Interest Policy document found.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2026/q3/Q3FY26-Earnings-Slides.pdf): No exact Conflicts of Interest Policy document found.
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Earnings transcript, not policy document
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_earnings/2026/q3/transcript/Q3FY26-Prepared-Remarks.pdf): Earnings transcript, not policy document
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not a conflicts of interest policy document
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_earnings/2026/q3/generic/Q3-26-Income-Statements-GAAP-Reconciliation.xlsx): Not a conflicts of interest policy document
-[browser][nav] https://www.cisco.com/site/us/en/solutions/industries/financial-services/why-cisco-for-financial-services.html: 3 doc candidates (depth=2, pages=3)
-[browser][nav] https://www.cisco.com/c/m/en_us/solutions/industries/portfolio-explorer/portfolio-explorer-for-financial-services.html: 1 doc candidates (depth=2, pages=4)
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=No exact Conflicts of Interest Policy document found.
-[browser] candidate REJECTED by class check (https://www.cisco.com/c/dam/en/us/products/collateral/security/kb-securities-infographic-sustainability.pdf): No exact Conflicts of Interest Policy document found.
-[browser][nav] https://www.cisco.com/site/us/en/about/case-studies-customer-stories/myinvestor.html: 3 doc candidates (depth=2, pages=5)
-[browser][nav] https://www.cisco.com/site/us/en/solutions/global-partners/aws/financial-services.html: 3 doc candidates (depth=2, pages=6)
-[browser][nav] https://blogs.cisco.com/tag/financial-services-solutions: 1 doc candidates (depth=2, pages=7)
-[browser][nav] https://investor.cisco.com/overview/investor.cisco.com: 0 doc candidates (depth=3, pages=8)
-[browser][nav] https://investor.cisco.com/financials/quarterly-results/default.aspx: 20 doc candidates (depth=3, pages=9)
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Earnings slides, not policy document
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2026/q2/Q2-26-Earnings-Slides.pdf): Earnings slides, not policy document
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is not a Conflicts of Interest Policy.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2026/q2/Q2FY26-Prepared-Remarks.pdf): Document is not a Conflicts of Interest Policy.
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is not a conflicts of interest policy.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2026/q2/ac19bfc8-b091-48d9-be7b-1ffd74e455a1.pdf): Document is not a conflicts of interest policy.
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Earnings slides, not policy document
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2026/q1/Q1-26-Earnings-Slides.pdf): Earnings slides, not policy document
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Not a conflicts of interest policy document.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2026/q1/Q1FY26-Prepared-Remarks.pdf): Not a conflicts of interest policy document.
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not a Conflicts of Interest Policy document
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2026/q1/d85cf96e-2601-4c51-b3f6-2ae6a42e1f6b.pdf): Not a Conflicts of Interest Policy document
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is earnings slides, not policy.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q4/Q4FY25-Earnings-Slides.pdf): Document is earnings slides, not policy.
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not the exact Conflicts of Interest Policy document.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q4/Q4FY25-Prepared-Remarks.pdf): Not the exact Conflicts of Interest Policy document.
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Document is not a Conflicts of Interest Policy
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q4/6c821d1a-cf4e-4310-9801-df9399aa701b.pdf): Document is not a Conflicts of Interest Policy
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Quarterly remarks, not policy document.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q1/Cisco-1Q25-Prepared-Remarks.pdf): Quarterly remarks, not policy document.
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Not the exact Conflicts of Interest Policy document.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q2/Q2FY25-Prepared-Remarks-IR.pdf): Not the exact Conflicts of Interest Policy document.
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is a financial remark, not policy.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q3/Q3FY25-Prepared-Remarks.pdf): Document is a financial remark, not policy.
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Document is not a Conflicts of Interest Policy.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q1/6b3cfcbf-0877-43bd-ae39-29379794b5f4.pdf): Document is not a Conflicts of Interest Policy.
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=PDF content not readable, likely not policy.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q2/csco-20250125.pdf): PDF content not readable, likely not policy.
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=PDF is a financial report, not policy document
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q3/960df9bc-19e9-4f49-a441-2b48ff0af251.pdf): PDF is a financial report, not policy document
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is earnings slides, not policy.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q1/Q1FY25-Earnings-Slides-Web.pdf): Document is earnings slides, not policy.
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not a conflicts of interest policy document
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q2/Q2FY25-Earnings-Slides.pdf): Not a conflicts of interest policy document
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No Conflicts of Interest Policy document found
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/q3/Q3FY25-Earnings-Slides.pdf): No Conflicts of Interest Policy document found
-[browser][nav] https://investor.cisco.com/financials/annual-reports/default.aspx: 9 doc candidates (depth=3, pages=10)
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Annual Report, not Conflicts of Interest Policy
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/ar/2025-Cisco-Full-Annual-Report.pdf): Annual Report, not Conflicts of Interest Policy
-[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Annual report, not conflicts policy
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/ar/2025-Cisco-Summary-Report.pdf): Annual report, not conflicts policy
-[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Proxy does not contain Conflicts of Interest Policy.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2025/ar/2025-Cisco-Proxy.pdf): Proxy does not contain Conflicts of Interest Policy.
-[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Annual report, not conflicts of interest policy.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2024/ar/2024-Cisco-Full-Annual-Report.pdf): Annual report, not conflicts of interest policy.
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Annual report, not Conflicts of Interest Policy.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2023/ar/cisco-annual-report-2023.pdf): Annual report, not Conflicts of Interest Policy.
-[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Annual report, not Conflicts of Interest Policy
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2022/ar/cisco-annual-report-2022.pdf): Annual report, not Conflicts of Interest Policy
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Annual report, not conflicts policy.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2021/ar/cisco-annual-report-2021.pdf): Annual report, not conflicts policy.
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Annual report, not conflicts policy.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2020/ar/cisco-annual-report-2020.pdf): Annual report, not conflicts policy.
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Annual report, not Conflicts of Interest Policy.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_financials/2019/ar/cisco-annual-report-2019.pdf): Annual report, not Conflicts of Interest Policy.
-[browser][nav] https://investor.cisco.com/financials/sec-filings/default.aspx: 0 doc candidates (depth=3, pages=11)
-[browser][nav] https://investor.cisco.com/financials/Annual-Meeting/default.aspx: 0 doc candidates (depth=3, pages=12)
-[browser][nav] https://investor.cisco.com/default.aspx: 8 doc candidates (depth=3, pages=13)
-[browser][nav] https://investor.cisco.com/governance/Governance-Highlights/default.aspx: 0 doc candidates (depth=3, pages=14)
-[browser][nav] https://investor.cisco.com/governance/executive-management/default.aspx: 0 doc candidates (depth=3, pages=15)
-[browser][nav] https://investor.cisco.com/governance/board-of-directors/default.aspx: 0 doc candidates (depth=3, pages=16)
-[browser][nav] https://investor.cisco.com/governance/Governance-Documents/default.aspx: 7 doc candidates (depth=3, pages=17)
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Document is committee charter, not policy
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/committee/2026/Cisco-s-Public-Policy-Committee-Charter-effective-5-28-26.pdf): Document is committee charter, not policy
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Document is governance guidelines, not conflicts policy.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/1/Corporate-Governance-Guidelines-Aug-2025.pdf): Document is governance guidelines, not conflicts policy.
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Document is bylaws, not policy.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/1/Amended-and-Restated-Bylaws-August-2025.pdf): Document is bylaws, not policy.
-[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not a Conflicts of Interest Policy document.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/committee/Audit-Committee-Charter-Aug-2025.pdf): Not a Conflicts of Interest Policy document.
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not a Conflicts of Interest Policy document
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/committee/Compensation-Committee-Charter-Dec-2025.pdf): Not a Conflicts of Interest Policy document
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not the exact Conflicts of Interest Policy document.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/committee/Nomination-and-Governance-Committee-Charter-Aug-2025.pdf): Not the exact Conflicts of Interest Policy document.
-[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Document is Certificate of Incorporation, not policy
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/1/Cisco-Certificate-of-Incorporation.pdf): Document is Certificate of Incorporation, not policy
-[browser][nav] https://investor.cisco.com/governance/committee-composition/default.aspx: 4 doc candidates (depth=3, pages=18)
-[browser][nav] https://investor.cisco.com/governance/Code-of-Business-Conduct/default.aspx: 16 doc candidates (depth=3, pages=19)
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Document is a Code of Conduct, not Conflicts policy
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/new-new-codeofconduct/FY26COBC_Arabic.pdf): Document is a Code of Conduct, not Conflicts policy
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Document is Code of Conduct, not Conflicts of Interest Policy
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/code-of-conduct-new/FY26COBC_Indonesian.pdf): Document is Code of Conduct, not Conflicts of Interest Policy
-[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Not a conflicts of interest policy document
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/code-of-conduct-new/FY26COBC_Malay.pdf): Not a conflicts of interest policy document
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not the exact Conflicts of Interest Policy.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/new-new-codeofconduct/FY26COBC_Serbian.pdf): Not the exact Conflicts of Interest Policy.
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=No exact Conflicts of Interest Policy found.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/new-new-codeofconduct/FY26COBC_Thai.pdf): No exact Conflicts of Interest Policy found.
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is a Code of Conduct, not Conflicts policy.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/new-new-codeofconduct/FY26COBC_Vietnamese.pdf): Document is a Code of Conduct, not Conflicts policy.
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is Code of Conduct, not Conflicts of Interest Policy
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/code-of-conduct-v3/FY26COBC_Chinese-1.pdf): Document is Code of Conduct, not Conflicts of Interest Policy
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is not a Conflicts of Interest Policy.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/code-of-conduct-v3/FY26COBC_Dutch-1.pdf): Document is not a Conflicts of Interest Policy.
-[llm] select decision: selected=https://s21.q4cdn.com/812015656/files/doc_downloads/new-new-codeofconduct/FY26COBC_French.pdf topic=True company=True year=True conf=high reason=Exact Conflicts of Interest Policy document from Cisco.
-[llm] select decision: selected=None topic=False company=True year=True conf=high reason=Document is a Code of Conduct, not Conflicts policy
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/new-new-codeofconduct/FY26COBC_German.pdf): Document is a Code of Conduct, not Conflicts policy
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is a code of conduct, not conflicts policy.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/code-of-conduct-v3/FY26COBC_Japanese-1.pdf): Document is a code of conduct, not conflicts policy.
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is in Korean, not English policy.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/code-of-conduct-v3/FY26COBC_Korean-1.pdf): Document is in Korean, not English policy.
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Document is not a Conflicts of Interest Policy.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/new-new-codeofconduct/FY26COBC_Polish.pdf): Document is not a Conflicts of Interest Policy.
-[llm] select decision: selected=None topic=False company=True year=True conf=low reason=Document is a Code of Conduct, not Conflicts policy
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/code-of-conduct-new/FY26COBC_Portuguese.pdf): Document is a Code of Conduct, not Conflicts policy
-[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Not the exact Conflicts of Interest Policy document.
-[browser] candidate REJECTED by class check (https://s21.q4cdn.com/812015656/files/doc_downloads/code-of-conduct-v3/FY26COBC_Spanish-Latam-1.pdf): Not the exact Conflicts of Interest Policy document.
-[browser][nav] resolved via deep nav: https://s21.q4cdn.com/812015656/files/doc_downloads/new-new-codeofconduct/FY26COBC_French.pdf
-[store] STORED (browser): 'Conflicts of Interest Policy site:cisco.com' -> cisco-systems-inc/uncategorized/d65f057426a1-FY26COBC_French.pdf
-{
-    "timestamp": "2026-07-19T19:25:17.552Z",
-    "level": "INFO",
-    "message": "Invocation completed successfully (475.825s)",
-    "logger": "bedrock_agentcore.app",
-    "requestId": "72d36781-74c0-44f8-8004-152b57c473bc",
-    "sessionId": "5e4edea2-06a0-43e0-81b8-4b2117ba5630"
+    "requestId": "d6e6db09-89ae-4213-a787-eb24ca10679a",
+    "sessionId": "a0a03598-5569-44e2-984e-e95379b292fd"
 }

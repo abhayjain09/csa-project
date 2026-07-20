@@ -46,7 +46,10 @@ REPORT_SPECS: dict[str, dict] = {
             "(acceptable equivalents: Form 10-K, Form 20-F, Annual Report and "
             "Accounts, Integrated Annual Report){year_clause}. A Board's Report, "
             "Directors' Report, a quarterly (10-Q), an 8-K / current report, an "
-            "interim/half-year report, or an ESG-only supplement is NOT a match."
+            "interim/half-year report, or an ESG-only supplement is NOT a match. "
+            "For a corporate-group request, a report limited to one subsidiary, "
+            "country, site, facility, mine, plant, project, or operation is NOT "
+            "the group's Annual Report."
         ),
     },
     "sustainability report": {
@@ -57,7 +60,10 @@ REPORT_SPECS: dict[str, dict] = {
             "The document must BE a standalone Sustainability / ESG / BRSR / "
             "CSRD-ESRS report for {company}. A Strategic Report, an Annual "
             "Report, an ESG factbook or supplement, a CDP score report, a "
-            "green/SDG-bond report, or an assurance statement is NOT a match."
+            "green/SDG-bond report, or an assurance statement is NOT a match. "
+            "For a corporate-group request, reject a sustainability report "
+            "limited to one subsidiary, country, region, site, facility, mine, "
+            "plant, project, or operation."
         ),
     },
     "proxy statement": {

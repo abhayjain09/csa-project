@@ -14,7 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import unquote, urljoin, urlparse
 
 from pypdf import PdfReader, PdfWriter
 
@@ -225,6 +225,7 @@ def _load_routing_helpers():
         "_scope_to_official_domain",
         "_official_search_queries",
         "_discovery_route",
+        "_latest_search_query_variants",
     }
     nodes = [
         item for item in tree.body
@@ -235,11 +236,90 @@ def _load_routing_helpers():
     namespace = {
         "re": re,
         "REQUIRE_OFFICIAL_DOMAIN_FOR_WEB": True,
-        "REGISTRY_FIRST_CLASSES": set(),
+        "REGISTRY_FIRST_CLASSES": {"annual report", "proxy statement"},
+        "LATEST_DOCUMENT_SEARCH": True,
+        "LATEST_DOCUMENT_SEARCH_VARIANTS": 6,
+        "LATEST_COMPLETED_FISCAL_YEAR_LAG": 1,
+        "CURRENT_YEAR": 2026,
+        "_extract_year_intent": lambda value: {
+            int(year) for year in re.findall(r"\b20\d{2}\b", value or "")
+        },
         "_clean_domain": lambda value: str(value or "").lower().strip(),
         "_strip_site": lambda value: re.sub(
             r"site:\s*\S+", "", value or "", flags=re.I).strip(),
         "_query_variant_preserves_years": lambda original, variant: True,
+    }
+    exec(compile(module, str(path), "exec"), namespace)
+    return namespace
+
+
+def _load_language_and_scope_helpers():
+    path = REPO_ROOT / "infra/agentcore-report/agent/agent.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    wanted_assignments = {
+        "_NON_ENGLISH_LANGUAGE_CODES",
+        "_NON_ENGLISH_LANGUAGE_WORDS",
+    }
+    wanted_functions = {
+        "_candidate_document_year",
+        "_language_preference_score",
+        "_is_local_scope_report_url",
+        "_prefer_newer_document",
+    }
+    nodes = []
+    for item in tree.body:
+        if (isinstance(item, ast.Assign)
+                and any(isinstance(target, ast.Name)
+                        and target.id in wanted_assignments
+                        for target in item.targets)):
+            nodes.append(item)
+        elif (isinstance(item, ast.FunctionDef)
+              and item.name in wanted_functions):
+            nodes.append(item)
+    module = ast.Module(body=nodes, type_ignores=[])
+    ast.fix_missing_locations(module)
+    def _years(value):
+        out = {
+            int(year) for year in re.findall(r"\b20\d{2}\b", value or "")
+        }
+        out.update(
+            2000 + int(year)
+            for year in re.findall(r"\bfy\s*(\d{2})\b", value or "", re.I)
+        )
+        return out
+
+    namespace = {
+        "re": re,
+        "unquote": unquote,
+        "urlparse": urlparse,
+        "CURRENT_YEAR": 2026,
+        "_matched_doc_classes": lambda query: [
+            ("sustainability report", {})
+        ] if "sustainability" in query.lower() else [
+            ("annual report", {})
+        ] if "annual" in query.lower() else [],
+        "_extract_year_intent": _years,
+    }
+    exec(compile(module, str(path), "exec"), namespace)
+    return namespace
+
+
+def _load_document_link_helpers():
+    path = REPO_ROOT / "infra/agentcore-report/agent/agent.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    wanted = {"_registrable", "_is_official_source_page", "_doc_links"}
+    nodes = [
+        item for item in tree.body
+        if isinstance(item, ast.FunctionDef) and item.name in wanted
+    ]
+    module = ast.Module(body=nodes, type_ignores=[])
+    ast.fix_missing_locations(module)
+    namespace = {
+        "re": re,
+        "urljoin": urljoin,
+        "urlparse": urlparse,
+        "_is_safe_remote_document_url": lambda url: url.endswith(".pdf"),
+        "_is_junk_host": lambda url: False,
     }
     exec(compile(module, str(path), "exec"), namespace)
     return namespace
@@ -375,6 +455,10 @@ class StructuredPayloadTests(unittest.TestCase):
         )
         self.assertEqual(payload["reports"][0]["request_id"], "4:1")
         self.assertEqual(payload["reports"][1]["year"], 2025)
+        self.assertTrue(payload["reports"][0]["prefer_latest"])
+        self.assertFalse(payload["reports"][1]["prefer_latest"])
+        self.assertEqual(
+            payload["document_preferences"]["preferred_language"], "en")
         self.assertNotIn(
             "uncategorized",
             {item["report_class"] for item in payload["reports"]},
@@ -611,15 +695,15 @@ class SelectionConfidenceTests(unittest.TestCase):
 
 
 class DiscoveryRoutingTests(unittest.TestCase):
-    def test_annual_report_uses_registry_after_official_company_path(self):
+    def test_annual_report_uses_authoritative_registry_before_browser(self):
         route = _load_routing_helpers()["_discovery_route"](
             "annual report", True)
         self.assertEqual(route, [
+            "registry",
             "direct_search",
             "official_crawl",
             "deep_crawl",
             "browser",
-            "registry",
         ])
 
     def test_non_deterministic_registry_is_last(self):
@@ -633,10 +717,74 @@ class DiscoveryRoutingTests(unittest.TestCase):
             "registry",
         ])
 
-    def test_proxy_statement_uses_sec_only_after_browser(self):
+    def test_proxy_statement_uses_authoritative_registry_first(self):
         route = _load_routing_helpers()["_discovery_route"](
             "proxy statement", True)
-        self.assertEqual(route[-2:], ["browser", "registry"])
+        self.assertEqual(route[0], "registry")
+
+    def test_undated_search_checks_current_and_previous_fiscal_labels(self):
+        variants = _load_routing_helpers()["_latest_search_query_variants"](
+            "Acme annual report site:acme.com")
+        self.assertIn("Acme annual report 2026", variants)
+        self.assertIn("Acme annual report FY2026", variants)
+        self.assertIn("Acme annual report 2025", variants)
+        self.assertIn("Acme annual report FY2025", variants)
+
+
+class LanguageScopeAndDomainTests(unittest.TestCase):
+    def test_english_and_default_files_rank_above_localized_variants(self):
+        score = _load_language_and_scope_helpers()[
+            "_language_preference_score"]
+        self.assertGreater(
+            score("https://example.com/reports/code-of-conduct.pdf"),
+            score("https://example.com/reports/code-of-conduct-es.pdf"),
+        )
+        self.assertGreater(
+            score("https://example.com/en-us/reports/policy.pdf"),
+            score("https://example.com/es-la/reports/policy.pdf"),
+        )
+
+    def test_operation_report_is_not_group_sustainability_report(self):
+        is_local = _load_language_and_scope_helpers()[
+            "_is_local_scope_report_url"]
+        self.assertTrue(is_local(
+            "https://example.com/documents/operations/mine/"
+            "2025-sustainability-report.pdf",
+            "Example sustainability report",
+        ))
+        self.assertFalse(is_local(
+            "https://example.com/reports/2025-sustainability-report.pdf",
+            "Example sustainability report",
+        ))
+
+    def test_latest_english_document_wins_and_fy_two_digit_is_parsed(self):
+        helpers = _load_language_and_scope_helpers()
+        prefer = helpers["_prefer_newer_document"]
+        year = helpers["_candidate_document_year"]
+        older = {"url": "https://example.com/report-2023.pdf"}
+        latest = {"url": "https://example.com/FY25-report.pdf"}
+        self.assertEqual(year(latest), 2025)
+        self.assertIs(prefer(older, latest), latest)
+
+    def test_localized_newer_file_does_not_displace_english_default(self):
+        prefer = _load_language_and_scope_helpers()[
+            "_prefer_newer_document"]
+        english = {"url": "https://example.com/report-2025.pdf"}
+        localized = {"url": "https://example.com/report-2026-es.pdf"}
+        self.assertIs(prefer(english, localized), english)
+
+    def test_official_page_can_attest_document_on_separate_cdn_domain(self):
+        links = _load_document_link_helpers()["_doc_links"](
+            b'<a href="https://cdn.example-assets.net/latest-report.pdf">'
+            b'Download report PDF</a>',
+            "https://www.example.com/sustainability/reports",
+            "example.com",
+            official_domain="example.com",
+        )
+        self.assertEqual(
+            links,
+            ["https://cdn.example-assets.net/latest-report.pdf"],
+        )
 
     def test_direct_queries_are_officially_scoped_and_use_ticker(self):
         helpers = _load_routing_helpers()

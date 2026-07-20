@@ -2287,6 +2287,11 @@ def _build_chunk_payload(company: str, run_id: str, search_query: str,
         "search_query": search_query,
         "chunk_index":  chunk_index,     # informational; agent may ignore it
         "web_query_ids": {},
+        "document_preferences": {
+            "preferred_language": "en",
+            "prefer_latest": True,
+            "allow_source_attested_external_documents": True,
+        },
         "reports": [],
     }
     for i, q in enumerate(chunk_queries, start=1):
@@ -2305,6 +2310,8 @@ def _build_chunk_payload(company: str, run_id: str, search_query: str,
         ]
         if years:
             report["year"] = max(years)
+        report["preferred_language"] = "en"
+        report["prefer_latest"] = not bool(years)
         payload["reports"].append(report)
     return payload
 

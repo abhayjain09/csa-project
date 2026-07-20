@@ -1,4 +1,10 @@
-"""Report download agent (single AgentCore Runtime) — v46.
+"""Report download agent (single AgentCore Runtime) — v47.
+
+v47 makes undated requests latest-first across current/prior fiscal labels,
+prefers English/default-language documents, follows safe document links from
+official pages across company CDNs/domains, rejects operation-level reports
+for group-wide recurring classes, and resolves deterministic annual/proxy
+filings before the bounded browser fallback.
 
 v46 retries ranked official search candidates inside the live browser session
 before crawling the homepage and returns a typed blocked_by_source_waf result
@@ -105,7 +111,7 @@ REQUIRE_OFFICIAL_DOMAIN_FOR_WEB = os.environ.get(
 REGISTRY_FIRST_CLASSES = {
     c.strip().lower()
     for c in os.environ.get(
-        "REGISTRY_FIRST_CLASSES", "").split(",")
+        "REGISTRY_FIRST_CLASSES", "annual report,proxy statement").split(",")
     if c.strip()
 }
 
@@ -151,14 +157,14 @@ LATEST_COMPLETED_FISCAL_YEAR_LAG = int(os.environ.get(
 LATEST_COMPLETED_FISCAL_YEAR_CLASSES = {
     c.strip().lower()
     for c in os.environ.get(
-        "LATEST_COMPLETED_FISCAL_YEAR_CLASSES", "annual report",
+        "LATEST_COMPLETED_FISCAL_YEAR_CLASSES", "",
     ).split(",")
     if c.strip()
 }
 LATEST_DOCUMENT_SEARCH = os.environ.get(
     "LATEST_DOCUMENT_SEARCH", "true").lower() != "false"
 LATEST_DOCUMENT_SEARCH_VARIANTS = max(1, int(os.environ.get(
-    "LATEST_DOCUMENT_SEARCH_VARIANTS", "4")))
+    "LATEST_DOCUMENT_SEARCH_VARIANTS", "6")))
 ENFORCE_SITE_DOMAIN = os.environ.get("ENFORCE_SITE_DOMAIN", "true").lower() != "false"
 DOMAIN_FILTER_MODE = os.environ.get("DOMAIN_FILTER_MODE", "soft").strip().lower()
 
@@ -862,7 +868,12 @@ def _strip_site(q: str) -> str:
 
 
 def _latest_search_query_variants(query: str) -> list[str]:
-    """Add generic soft-recency probes while retaining the plain query."""
+    """Add soft-recency probes without assuming a calendar fiscal year.
+
+    A company can publish FY2026 during calendar 2025, so an undated request
+    must search both the current and prior fiscal labels.  An explicit year
+    remains strict and never receives these variants.
+    """
     if not LATEST_DOCUMENT_SEARCH or _extract_year_intent(query):
         return []
     base = _strip_site(query)
@@ -874,6 +885,8 @@ def _latest_search_query_variants(query: str) -> list[str]:
     if not re.search(r"\blatest\b", base, re.I):
         variants.append(f"{base} latest")
     variants.extend([
+        f"{base} {CURRENT_YEAR}",
+        f"{base} FY{CURRENT_YEAR}",
         f"{base} {latest_completed}",
         f"{base} FY{latest_completed}",
     ])
@@ -959,6 +972,63 @@ def _discovery_route(report_class: str | None,
     if registry_eligible and "registry" not in route:
         route.append("registry")
     return route
+
+
+_NON_ENGLISH_LANGUAGE_CODES = {
+    "ar", "cs", "da", "de", "el", "es", "fi", "fr", "he", "hu", "hy",
+    "id", "it", "ja", "jp", "ko", "kr", "nl", "no", "pl", "pt", "ro",
+    "ru", "scn", "sv", "th", "tcn", "tr", "uk", "vi", "zh",
+}
+_NON_ENGLISH_LANGUAGE_WORDS = (
+    "arabic", "chinese", "czech", "danish", "deutsch", "dutch", "espanol",
+    "finnish", "francais", "french", "german", "greek", "hungarian",
+    "italian", "japanese", "korean", "norwegian", "polish", "portuguese",
+    "romanian", "russian", "spanish", "swedish", "turkish", "ukrainian",
+    "verhaltenskodex",
+)
+
+
+def _language_preference_score(url: str, text: str = "") -> int:
+    """Prefer English/default files and strongly demote localized variants."""
+    parsed = urlparse(url or "")
+    path = unquote(parsed.path).lower()
+    hay = f"{path} {text or ''}".lower()
+    if "english" in hay or re.search(
+            r"(?:^|[/_.-])en(?:[-_](?:us|gb|au|ca|eu))?(?:[/_.-]|$)", path):
+        return 20
+    language_codes = "|".join(sorted(_NON_ENGLISH_LANGUAGE_CODES))
+    localized_path = re.search(
+        rf"(?:^|/)(?:{language_codes})(?:[-_][a-z]{{2}})?(?:/|$)", path)
+    localized_filename = re.search(
+        rf"[-_.](?:{language_codes})(?:[-_][a-z]{{2}})?"
+        rf"(?:\.(?:pdf|docx?|rtf|xlsx?|xlsm)|$)",
+        path,
+    )
+    if (localized_path or localized_filename
+            or any(word in hay for word in _NON_ENGLISH_LANGUAGE_WORDS)):
+        return -30
+    # Most corporate sites use an unqualified URL for their default English
+    # document; keep it in the preferred tier.
+    return 20
+
+
+def _is_local_scope_report_url(url: str, query: str) -> bool:
+    """Reject operation/site reports for classes that request a group report."""
+    matched = {canonical for canonical, _ in _matched_doc_classes(query)}
+    if not matched.intersection({"annual report", "sustainability report"}):
+        return False
+    path = unquote(urlparse(url or "").path).lower()
+    local_scope_path = re.search(
+        r"/(?:operations?|projects?|sites?|locations?|facilities|plants?|mines?)/",
+        path,
+    )
+    looks_like_report = (
+        "report" in path
+        or "annual" in path
+        or "sustainab" in path
+        or bool(_extract_year_intent(path))
+    )
+    return bool(local_scope_path and looks_like_report)
 
 
 def _slug(name: str) -> str:
@@ -1066,11 +1136,17 @@ def _candidate_document_year(candidate: dict | str | None) -> int | None:
 
 def _prefer_newer_document(current: dict | None,
                            candidate: dict | None) -> dict | None:
-    """Keep the newest class-verified candidate without company-specific rules."""
+    """Keep the preferred-language, newest class-verified candidate."""
     if current is None:
         return candidate
     if candidate is None:
         return current
+    current_language = _language_preference_score(
+        str(current.get("url") or ""), str(current.get("title") or ""))
+    candidate_language = _language_preference_score(
+        str(candidate.get("url") or ""), str(candidate.get("title") or ""))
+    if candidate_language != current_language:
+        return candidate if candidate_language > current_language else current
     current_year = _candidate_document_year(current)
     candidate_year = _candidate_document_year(candidate)
     if candidate_year is None:
@@ -1226,6 +1302,15 @@ def _llm_select_best(query: str, candidates: list[dict], company: str = "") -> d
         + year_rule
         + company_rule
         + _spec_contract
+        + "- Language rule: prefer the English document (including an "
+        "unqualified/default-language URL) over Spanish, French, German, "
+        "Portuguese, Japanese, Chinese, or any other localized variant when "
+        "both are valid matches. Use a non-English document only when no "
+        "English/default-language match is available.\n"
+        "- Corporate-scope rule: an Annual or Sustainability Report requested "
+        "for a corporate group must cover that group. Reject reports limited "
+        "to one operation, mine, plant, facility, project, country, region, or "
+        "subsidiary unless that local entity is itself the named company.\n"
         + "- Class rule: the candidate must BE the requested class. Reject a "
         "near-neighbor even when it shares words. WRONG matches to reject: a Board's "
         "Report or Directors' Report is NOT an Annual Report and NOT a Sustainability "
@@ -1723,16 +1808,11 @@ def _rank(hits: list[dict], query: str, site_domain: str | None) -> list[tuple[i
             score -= 3
         score += _year_alignment_score(query, hay)
         score += _filing_type_score_adjustment(u, hay, query)
+        score += _language_preference_score(u, hay)
+        if _is_local_scope_report_url(u, query):
+            score -= 100
         if c.get("_from_alias"):
             score += ALIAS_HIT_BOOST
-        if "english" in hay:
-            score += 3
-        if any(lang in hay for lang in (
-                "german", "french", "spanish", "italian", "norwegian", "swedish",
-                "danish", "dutch", "polish", "portuguese", "chinese", "japanese",
-                "korean", "turkish", "czech", "finnish", "hungarian", "romanian",
-                "deutsch", "espanol", "francais", "verhaltenskodex")):
-            score -= 4
         scored.append((score, c))
     scored.sort(key=lambda x: x[0], reverse=True)
     return scored
@@ -1827,13 +1907,22 @@ def _is_safe_remote_document_url(url: str) -> bool:
         return False
 
 
-def _is_official_investor_source(page_url: str,
-                                 official_domain: str | None) -> bool:
-    """True only when an investor page belongs to the requested official site."""
-    if not official_domain or not _is_investor_page(page_url):
+def _is_official_source_page(page_url: str,
+                             official_domain: str | None) -> bool:
+    """True when a page belongs to the attested official company site."""
+    if not official_domain:
         return False
     page_host = urlparse(page_url or "").netloc.lower().split(":")[0]
     return _registrable(page_host) == _registrable(official_domain)
+
+
+def _is_official_investor_source(page_url: str,
+                                 official_domain: str | None) -> bool:
+    """Backward-compatible investor-page specialization."""
+    return (
+        _is_investor_page(page_url)
+        and _is_official_source_page(page_url, official_domain)
+    )
 
 
 def _doc_links(html: bytes, base_url: str, domain: str,
@@ -1850,7 +1939,7 @@ def _doc_links(html: bytes, base_url: str, domain: str,
     for u in found:
         same_site = _registrable(urlparse(u).netloc) == _registrable(domain)
         source_attested_document = (
-            _is_official_investor_source(base_url, official_domain)
+            _is_official_source_page(base_url, official_domain)
             and _is_safe_remote_document_url(u)
             and not _is_junk_host(u)
         )
@@ -2217,6 +2306,9 @@ def _verify_priority(url: str, query: str) -> int:
     name = path.rsplit("/", 1)[-1]
     terms = [t for t in _keywords(query) if len(t) > 3]
     score = 3 if any(t in name for t in terms) else 0
+    score += _language_preference_score(url)
+    if _is_local_scope_report_url(url, query):
+        score -= 100
     matched = {c for c, _ in _matched_doc_classes(query)}
     if "annual report" in matched:
         if "/doc_financials/annual/" in path:
@@ -2529,6 +2621,18 @@ def _make_browser_verify_fn(query: str, budget: "_QueryBudget | None" = None,
             if budget is not None:
                 budget.mark_rejected(url)
             return False
+        if _is_local_scope_report_url(url, query):
+            print(f"[verify] STRICT reject (local operation/site report when "
+                  f"group-wide report requested): {url}")
+            cand["_verify_decision"] = {
+                "selected_url": None,
+                "topic_match": False,
+                "company_match": False,
+                "reason": "strict-local-scope-report-reject",
+            }
+            if budget is not None:
+                budget.mark_rejected(url)
+            return False
         if _is_wrong_class_filename(url, query):
             print(f"[verify] STRICT reject (near-neighbor filename, no LLM): {url}")
             cand["_verify_decision"] = {"selected_url": None, "topic_match": False,
@@ -2630,6 +2734,7 @@ def _browser_resolve_document_uncached(page_url: str, domain: str | None,
     had_candidates = False
     blocked_urls: list[str] = []
     observed_block_markers: list[str] = []
+    scan_for_recency = _query_needs_recency_scan(query)
     verify_budget = BROWSER_MAX_VERIFY_CANDIDATES if verify_fn else 1
     click_budget = min(BROWSER_MAX_CLICK_ATTEMPTS, verify_budget) if verify_fn else 1
     pool_cap = max(BROWSER_MAX_DOC_CANDIDATES, verify_budget)
@@ -2701,9 +2806,11 @@ def _browser_resolve_document_uncached(page_url: str, domain: str | None,
                     # browser only opened the company root, so a WAF-blocked
                     # homepage prevented trying a directly downloadable PDF
                     # that succeeds in a normal interactive browser.
+                    direct_verified_hits: list[dict] = []
                     for direct_url in list(dict.fromkeys(
                             candidate_urls or []))[:BROWSER_SEARCH_CANDIDATE_LIMIT]:
-                        if resolved is not None or not _time_left():
+                        if ((resolved is not None and not scan_for_recency)
+                                or not _time_left()):
                             break
                         if (not _is_doc_url(direct_url)
                                 or not _is_safe_remote_document_url(direct_url)
@@ -2796,9 +2903,20 @@ def _browser_resolve_document_uncached(page_url: str, domain: str | None,
                                 continue
                             direct_doc["verified"] = True
                             direct_doc["_verified_for"] = query
-                        resolved = direct_doc
-                        print(f"[browser][direct] resolved ranked search "
+                        direct_verified_hits.append(direct_doc)
+                        if not scan_for_recency:
+                            resolved = direct_doc
+                        print(f"[browser][direct] verified ranked search "
                               f"candidate: {direct_url} ({len(body)} bytes)")
+
+                    if direct_verified_hits:
+                        best_direct: dict | None = None
+                        for direct_hit in direct_verified_hits:
+                            best_direct = _prefer_newer_document(
+                                best_direct, direct_hit)
+                        resolved = best_direct
+                        print(f"[browser][direct] resolved preferred-language, "
+                              f"latest candidate: {resolved['url']}")
 
                     try:
                         harvested = page.evaluate(_JS_HARVEST_LINKS) or []
@@ -3050,7 +3168,28 @@ def _browser_resolve_document_uncached(page_url: str, domain: str | None,
                             _seen_seed.add(sf)
                             if _is_ir_nav_link(u) or _nav_relevant(u):
                                 _seed_nav.append(u)
-                        _seed_nav.sort(key=lambda u: 0 if _is_ir_nav_link(u) else 1)
+                        def _nav_priority(u: str) -> tuple[int, int, int]:
+                            parsed = urlparse(u)
+                            host = parsed.netloc.lower()
+                            path = unquote(parsed.path).lower()
+                            investor_host = int(host.startswith(
+                                ("investor.", "investors.", "ir.")))
+                            report_hub = int(any(marker in path for marker in (
+                                "annual-report", "financial-info", "financials",
+                                "reports-and-filings", "reports", "filings",
+                                "sustainability", "governance", "policies",
+                            )))
+                            noise = int(any(marker in path for marker in (
+                                "/news/", "/blog/", "/stories/", "/media/",
+                            )))
+                            return (
+                                investor_host * 100 + report_hub * 40
+                                + (20 if _is_ir_nav_link(u) else 0)
+                                - noise * 30,
+                                _language_preference_score(u),
+                                _doc_candidate_score(u, "", query, domain),
+                            )
+                        _seed_nav.sort(key=_nav_priority, reverse=True)
                         if not _seed_nav:
                             _seed_nav = [u for u in nav_links[:5]]
                         frontier = [(u, 1) for u in _seed_nav]
@@ -3058,6 +3197,7 @@ def _browser_resolve_document_uncached(page_url: str, domain: str | None,
                               f"{len(_seed_nav)}/{len(nav_links)} nav links "
                               f"(IR-nav first, query terms {_nav_terms} secondary)")
                         nav_pages_done = 0
+                        nav_best: dict | None = None
                         req = context.request
                         while frontier and resolved is None and _time_left():
                             nav_url, depth = frontier.pop(0)
@@ -3128,14 +3268,16 @@ def _browser_resolve_document_uncached(page_url: str, domain: str | None,
                                         or target_years.intersection(candidate_years)):
                                     break
                             if nav_hits:
-                                nav_hits.sort(
-                                    key=lambda d: (max(_extract_year_intent(d["url"]))
-                                                   if _extract_year_intent(d["url"]) else -1),
-                                    reverse=True)
-                                resolved = nav_hits[0]
-                                print(f"[browser][nav] resolved via deep nav: "
-                                      f"{resolved['url']}")
-                                break
+                                for nav_hit in nav_hits:
+                                    nav_best = _prefer_newer_document(
+                                        nav_best, nav_hit)
+                                if (not scan_for_recency
+                                        or not _needs_latest_document_upgrade(
+                                            nav_best)):
+                                    resolved = nav_best
+                                    print(f"[browser][nav] resolved via deep "
+                                          f"nav: {resolved['url']}")
+                                    break
                             for h in sub:
                                 u2 = h.get("url", "")
                                 if (_is_navigation_href(u2, domain)
@@ -3146,6 +3288,11 @@ def _browser_resolve_document_uncached(page_url: str, domain: str | None,
                                     nk = u2.rstrip("/")
                                     if nk not in visited_nav:
                                         frontier.append((u2, depth + 1))
+                        if resolved is None and nav_best is not None:
+                            resolved = nav_best
+                            print(f"[browser][nav] exhausted relevant pages; "
+                                  f"using newest verified candidate: "
+                                  f"{resolved['url']}")
 
                     # ── Tier 5: optional vision ──
                     if (resolved is None and BROWSER_VISION_MODEL_ID
@@ -3633,7 +3780,9 @@ def _find_best_document(search_queries: list[str], limit: int, company: str = ""
     if _matched_doc_classes(primary):
         _pre_class_count = len(merged)
         merged = [h for h in merged
-                  if not _is_wrong_class_filename(h.get("url", ""), primary)]
+                  if (not _is_wrong_class_filename(h.get("url", ""), primary)
+                      and not _is_local_scope_report_url(
+                          h.get("url", ""), primary))]
         class_dropped = _pre_class_count - len(merged)
         if class_dropped:
             print(f"[find] dropped {class_dropped} wrong-class filename "
@@ -3647,8 +3796,19 @@ def _find_best_document(search_queries: list[str], limit: int, company: str = ""
         off_domain_hits = [h for h in merged if not _host_matches(h.get("url", ""), qdomain)]
         if DOMAIN_FILTER_MODE == "hard":
             if on_domain_hits:
-                merged = on_domain_hits
-                domain_mode = "hard(on_domain_hits_found)"
+                # A small allow-list of document CDNs is retained because many
+                # official investor pages publish their files there. Every CDN
+                # file still passes byte, company, class, year and scope checks.
+                known_cdn_hits = [
+                    h for h in off_domain_hits
+                    if _is_known_document_cdn(h.get("url", ""))
+                    and _is_safe_remote_document_url(h.get("url", ""))
+                ]
+                merged = on_domain_hits + known_cdn_hits
+                domain_mode = (
+                    "hard(on_domain_hits_found"
+                    f",known_cdn_kept={len(known_cdn_hits)})"
+                )
             elif raw_count > 0:
                 merged = []
                 domain_mode = "hard_reject(no_on_domain_hits)"
@@ -4213,6 +4373,14 @@ def _deep_static_crawl(seed_url: str, domain: str | None, query: str,
 # ─── Orchestrator ─────────────────────────────────────────────────────────────
 def _invoke_sync(payload: dict) -> dict:
     run_id = (payload or {}).get("run_id") or uuid.uuid4().hex[:8]
+    _document_preferences = (payload or {}).get("document_preferences") or {}
+    if not isinstance(_document_preferences, dict):
+        _document_preferences = {}
+    _default_preferred_language = str(
+        _document_preferences.get("preferred_language") or "en"
+    ).strip().lower()
+    _default_prefer_latest = bool(
+        _document_preferences.get("prefer_latest", True))
 
     # ── Company context: accepts a structured dict OR a legacy string ──
     _raw_company = (payload or {}).get("company")
@@ -4295,6 +4463,13 @@ def _invoke_sync(payload: dict) -> dict:
                 "request_id": str(_r.get("request_id") or f"report:{_report_index}"),
                 "report_class": _rc.lower(),
                 "year": _yr,
+                "preferred_language": str(
+                    _r.get("preferred_language")
+                    or _default_preferred_language
+                ).strip().lower(),
+                "prefer_latest": bool(
+                    _r.get("prefer_latest", _default_prefer_latest)
+                ) and _yr is None,
             })
     else:
         _query_ids = ((payload or {}).get("web_query_ids") or {})
@@ -4317,6 +4492,8 @@ def _invoke_sync(payload: dict) -> dict:
                 "request_id": str(_query_ids.get(_key) or _key.lower()),
                 "report_class": None,
                 "year": None,
+                "preferred_language": _default_preferred_language,
+                "prefer_latest": _default_prefer_latest,
             })
 
     if not work_items:
@@ -4337,6 +4514,10 @@ def _invoke_sync(payload: dict) -> dict:
         "v39_filing_fallback_all_classes": FILING_FALLBACK_ALL_CLASSES,
         "alias_region": region_override,
         "work_item_count": len(work_items),
+        "document_preferences": {
+            "preferred_language": _default_preferred_language,
+            "prefer_latest": _default_prefer_latest,
+        },
         "per_query": [],
     }
 
@@ -4435,6 +4616,8 @@ def _invoke_sync(payload: dict) -> dict:
         request_id = _item["request_id"]
         known_class = _item.get("report_class")
         known_year = _item.get("year")
+        preferred_language = _item.get("preferred_language") or "en"
+        prefer_latest = bool(_item.get("prefer_latest", True))
         prepared = _prepare_query(str(raw))
         prepared, inferred_year = _apply_latest_completed_fiscal_year(
             prepared, known_class=known_class, known_year=known_year)
@@ -4451,6 +4634,7 @@ def _invoke_sync(payload: dict) -> dict:
         _budget = _QueryBudget()
         latest_discovery_mode = bool(
             LATEST_DOCUMENT_SEARCH
+            and prefer_latest
             and not _extract_year_intent(prepared)
         )
 
@@ -4470,6 +4654,8 @@ def _invoke_sync(payload: dict) -> dict:
             "prepared": prepared,
             "known_class": known_class,
             "known_year": effective_year,
+            "preferred_language": preferred_language,
+            "prefer_latest": prefer_latest,
             "matched_classes": matched_classes,
             "status": "pending",
             "resolved_via": None,
@@ -4488,6 +4674,7 @@ def _invoke_sync(payload: dict) -> dict:
         }
         found: dict = {"candidate_infos": []}
         browser_candidates: list[str] = []
+        browser_landing_pages: list[str] = []
         browser_blocked: dict | None = None
 
         _reg_class = known_class or (
@@ -4517,9 +4704,9 @@ def _invoke_sync(payload: dict) -> dict:
             domain or not REQUIRE_OFFICIAL_DOMAIN_FOR_WEB)
         registry_attempted = False
 
-        # Registry-first remains configurable, but the deployment default is
-        # empty: annual/proxy requests exhaust the official-company path before
-        # using the validated CIK on SEC EDGAR.
+        # Deterministic annual/proxy registries run first when a validated
+        # company identifier is available. Other classes retain the official
+        # website path before their best-effort registry fallback.
         if route and route[0] == "registry":
             attempted_stages.append("registry")
             registry_attempted = True
@@ -4548,6 +4735,16 @@ def _invoke_sync(payload: dict) -> dict:
             found = _find_best_document(
                 search_queries, MAX_RESULTS, company=company_raw)
             browser_candidates = list(found.get("browser_candidates") or [])
+            browser_landing_pages = [
+                candidate.get("url", "")
+                for _, candidate in found.get("ranked", [])
+                if (candidate.get("url")
+                    and not _is_doc_url(candidate.get("url", ""))
+                    and _host_matches(candidate.get("url", ""), domain or "")
+                    and urlparse(candidate.get("url", "")).scheme in {
+                        "http", "https",
+                    })
+            ][:3]
             decision = found["decision"]
             base_log["via"] = found.get("via")
             base_log["domain_mode"] = found.get("domain_mode")
@@ -4626,10 +4823,11 @@ def _invoke_sync(payload: dict) -> dict:
                 and "browser" in route and _use_browser
                 and domain):
             root = _site_root(prepared) or (f"https://{domain}/" if domain else None)
-            if root:
+            browser_seed = browser_landing_pages[0] if browser_landing_pages else root
+            if browser_seed:
                 attempted_stages.append("browser")
                 br = _browser_resolve_document(
-                    root, domain, prepared, cache=_root_crawl_cache,
+                    browser_seed, domain, prepared, cache=_root_crawl_cache,
                     verify_fn=browser_verify_fn, known_bad=_known_bad,
                     budget=_budget, candidate_urls=browser_candidates)
                 if br and br.get("body"):
@@ -4644,9 +4842,8 @@ def _invoke_sync(payload: dict) -> dict:
                 elif br and br.get("_blocked_by_source_waf"):
                     browser_blocked = br
 
-        # Registry lookup is the final fallback in the deployed route. Annual
-        # reports and proxy statements reach EDGAR here only after official
-        # search, sitemap/landing pages, deep crawl, and browser all fail.
+        # Registry lookup is the final fallback for classes that are not
+        # configured registry-first (for example sustainability best-effort).
         if (resolved is None and "registry" in route
                 and not registry_attempted):
             attempted_stages.append("registry")

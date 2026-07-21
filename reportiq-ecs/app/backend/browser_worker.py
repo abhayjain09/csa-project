@@ -61,6 +61,8 @@ _BLOCK_MARKERS = (
     "bot detection",
     "captcha",
     "verify you are human",
+    "cloudflare",
+    "challenge",
     "temporarily blocked",
 )
 _TERMINAL_JOB_STATUSES = {
@@ -69,6 +71,11 @@ _TERMINAL_JOB_STATUSES = {
 _LEGAL_SUFFIXES = {
     "inc", "incorporated", "corp", "corporation", "company", "co", "limited",
     "ltd", "plc", "llc", "holdings", "group",
+}
+_NON_ENGLISH_CODES = {
+    "ar", "cs", "da", "de", "el", "es", "fi", "fr", "he", "hu", "hy",
+    "id", "it", "ja", "jp", "ko", "kr", "nl", "no", "pl", "pt", "ro",
+    "ru", "sv", "th", "tr", "uk", "vi", "zh",
 }
 
 
@@ -95,6 +102,50 @@ def _normalize_text(value: str) -> str:
     value = value.encode("ascii", "ignore").decode("ascii").lower()
     value = value.replace("s&p", "sp").replace("&", " and ")
     return re.sub(r"[^a-z0-9]+", " ", value).strip()
+
+
+def _candidate_year(url: str) -> int:
+    """Extract the newest visible report/FY year, including 2024_25."""
+    path = unquote(urlparse(url or "").path).lower()
+    years = [int(value) for value in re.findall(r"(?<!\d)(20\d{2})(?!\d)", path)]
+    for first, second in re.findall(
+            r"(?<!\d)(20\d{2})[-_/](\d{2}|20\d{2})(?!\d)", path):
+        start = int(first)
+        end = int(second) if len(second) == 4 else (start // 100) * 100 + int(second)
+        if abs(end - start) <= 1:
+            years.extend([start, end])
+    for value in re.findall(r"\bfy[-_ ]?(\d{2}|20\d{2})(?!\d)", path):
+        years.append(int(value) if len(value) == 4 else 2000 + int(value))
+    return max(years) if years else -1
+
+
+def _language_score(url: str) -> int:
+    """English/default URLs outrank explicit localized file variants."""
+    path = unquote(urlparse(url or "").path).lower()
+    if re.search(
+            r"(?:^|[/_.-])en(?:[-_](?:us|gb|au|ca|eu))?(?:[/_.-]|$)",
+            path):
+        return 1
+    codes = "|".join(sorted(_NON_ENGLISH_CODES))
+    if (re.search(rf"(?:^|/)(?:{codes})(?:[-_][a-z]{{2}})?(?:/|$)", path)
+            or re.search(
+                rf"[-_.](?:{codes})(?:[-_][a-z]{{2}})?\.pdf$", path)):
+        return -1
+    return 1
+
+
+def _candidate_preference_key(url: str) -> tuple[int, int]:
+    return _language_score(url), _candidate_year(url)
+
+
+def _has_preferred_unresolved(best_url: str, unresolved: list[str],
+                              prefer_latest: bool) -> bool:
+    """Do not store a stale/localized fallback while a better URL is blocked."""
+    if not prefer_latest:
+        return False
+    best_key = _candidate_preference_key(best_url)
+    return any(
+        _candidate_preference_key(url) > best_key for url in unresolved)
 
 
 def _same_official_domain(host: str, official_domain: str) -> bool:
@@ -349,7 +400,9 @@ def _download(job: dict) -> tuple:
     candidates = [
         url for url in candidates
         if isinstance(url, str) and _safe_candidate(url, official_domain)
-    ][:8]
+    ]
+    candidates.sort(key=_candidate_preference_key, reverse=True)
+    candidates = candidates[:8]
     if not candidates:
         raise ValueError("job has no safe same-domain PDF candidates")
 
@@ -367,6 +420,9 @@ def _download(job: dict) -> tuple:
         launch_args["proxy"] = proxy
     last_reason = "no candidate returned a PDF"
     blocked = False
+    prefer_latest = str(job.get("prefer_latest", "true")).lower() not in {
+        "0", "false", "no",
+    }
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(**launch_args)
         try:
@@ -385,6 +441,8 @@ def _download(job: dict) -> tuple:
             root = f"https://{official_domain}/"
             for attempt in range(1, MAX_ATTEMPTS + 1):
                 page = context.new_page()
+                verified_candidates = []
+                unresolved_candidates = []
                 try:
                     try:
                         page.goto(
@@ -403,17 +461,36 @@ def _download(job: dict) -> tuple:
                             continue
                         if status in {401, 403, 406, 429} or marker:
                             blocked = True
+                            unresolved_candidates.append(url)
                             last_reason = marker or f"HTTP {status}"
                             continue
                         if not body:
+                            unresolved_candidates.append(url)
                             last_reason = f"empty response (HTTP {status})"
                             continue
                         ok, reason, _ = _verify_pdf(job, url, body)
                         if ok:
-                            return url, body, "application/pdf", False
+                            verified_candidates.append((url, body))
+                            continue
+                        if reason == "response is not a PDF":
+                            unresolved_candidates.append(url)
                         last_reason = reason
                 finally:
                     page.close()
+                if verified_candidates:
+                    verified_candidates.sort(
+                        key=lambda item: _candidate_preference_key(item[0]),
+                        reverse=True,
+                    )
+                    best_url, best_body = verified_candidates[0]
+                    if not _has_preferred_unresolved(
+                            best_url, unresolved_candidates, prefer_latest):
+                        return best_url, best_body, "application/pdf", False
+                    blocked = True
+                    last_reason = (
+                        "newer or preferred-language candidate remains "
+                        "transport-blocked; refusing stale fallback"
+                    )
                 if attempt < MAX_ATTEMPTS and RETRY_DELAY_SECONDS:
                     time.sleep(RETRY_DELAY_SECONDS)
         finally:
@@ -426,6 +503,9 @@ def _store(job: dict, url: str, body: bytes, ctype: str) -> dict:
     company_slug = _slug(job.get("company", ""))
     class_slug = _slug(job.get("report_class", "")) or "uncategorized"
     filename = _safe_filename(url)
+    detected_year = _candidate_year(url)
+    report_year = job.get("year") or (
+        detected_year if detected_year >= 0 else None)
     s3_key = (
         f"{company_slug}/{class_slug}/{digest[:12]}-{filename}")
     metadata = {
@@ -454,7 +534,7 @@ def _store(job: dict, url: str, body: bytes, ctype: str) -> dict:
         "company_name": job.get("company", ""),
         "doc_class": job.get("report_class") or None,
         "doc_classes": [job.get("report_class")] if job.get("report_class") else [],
-        "year": job.get("year") or None,
+        "year": report_year,
         "source_url": url,
         "sha256": digest,
         "content_type": ctype,
@@ -480,7 +560,7 @@ def _store(job: dict, url: str, body: bytes, ctype: str) -> dict:
         "prepared_query": job.get("prepared_query", ""),
         "request_id": job.get("request_id", ""),
         "doc_class": job.get("report_class") or None,
-        "year": job.get("year") or None,
+        "year": report_year,
         "hash": digest,
         "content_type": ctype,
         "downloaded": _now(),

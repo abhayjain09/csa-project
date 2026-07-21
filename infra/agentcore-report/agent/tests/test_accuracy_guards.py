@@ -61,11 +61,20 @@ def _load_pairing_function():
 def _load_worker_validation_helpers():
     path = REPO_ROOT / "reportiq-ecs/app/backend/browser_worker.py"
     tree = ast.parse(path.read_text(encoding="utf-8"))
-    wanted = {"_normalize_text", "_company_matches", "_class_matches"}
-    nodes = [
-        item for item in tree.body
-        if isinstance(item, ast.FunctionDef) and item.name in wanted
-    ]
+    wanted = {
+        "_normalize_text", "_company_matches", "_class_matches",
+        "_candidate_year", "_language_score", "_candidate_preference_key",
+        "_has_preferred_unresolved",
+    }
+    nodes = []
+    for item in tree.body:
+        if (isinstance(item, ast.Assign)
+                and any(isinstance(target, ast.Name)
+                        and target.id == "_NON_ENGLISH_CODES"
+                        for target in item.targets)):
+            nodes.append(item)
+        elif isinstance(item, ast.FunctionDef) and item.name in wanted:
+            nodes.append(item)
     module = ast.Module(body=nodes, type_ignores=[])
     ast.fix_missing_locations(module)
     namespace = {
@@ -259,9 +268,12 @@ def _load_language_and_scope_helpers():
     wanted_assignments = {
         "_NON_ENGLISH_LANGUAGE_CODES",
         "_NON_ENGLISH_LANGUAGE_WORDS",
+        "_YEAR_RE",
+        "_YY_OR_YYYY_RE",
     }
     wanted_functions = {
         "_candidate_document_year",
+        "_extract_year_intent",
         "_language_preference_score",
         "_is_local_scope_report_url",
         "_prefer_newer_document",
@@ -278,16 +290,6 @@ def _load_language_and_scope_helpers():
             nodes.append(item)
     module = ast.Module(body=nodes, type_ignores=[])
     ast.fix_missing_locations(module)
-    def _years(value):
-        out = {
-            int(year) for year in re.findall(r"\b20\d{2}\b", value or "")
-        }
-        out.update(
-            2000 + int(year)
-            for year in re.findall(r"\bfy\s*(\d{2})\b", value or "", re.I)
-        )
-        return out
-
     namespace = {
         "re": re,
         "unquote": unquote,
@@ -298,7 +300,6 @@ def _load_language_and_scope_helpers():
         ] if "sustainability" in query.lower() else [
             ("annual report", {})
         ] if "annual" in query.lower() else [],
-        "_extract_year_intent": _years,
     }
     exec(compile(module, str(path), "exec"), namespace)
     return namespace
@@ -434,6 +435,49 @@ class BrowserWorkerValidationTests(unittest.TestCase):
             "",
         )
         self.assertFalse(ok)
+
+    def test_latest_fiscal_range_url_outranks_older_report(self):
+        helpers = _load_worker_validation_helpers()
+        key = helpers["_candidate_preference_key"]
+        latest = (
+            "https://sustainability.example.com/reports/"
+            "company_sr_2024_25.pdf"
+        )
+        older = (
+            "https://sustainability.example.com/reports/"
+            "company_sr_2023-24.pdf"
+        )
+        self.assertEqual(helpers["_candidate_year"](latest), 2025)
+        self.assertGreater(key(latest), key(older))
+
+    def test_worker_refuses_old_report_when_latest_url_is_blocked(self):
+        helpers = _load_worker_validation_helpers()
+        stale = "https://example.com/report_2023-24.pdf"
+        latest = "https://example.com/report_2024_25.pdf"
+        self.assertTrue(helpers["_has_preferred_unresolved"](
+            stale, [latest], True))
+        self.assertFalse(helpers["_has_preferred_unresolved"](
+            stale, [latest], False))
+
+    def test_transport_integrity_failure_remains_retryable(self):
+        path = REPO_ROOT / "infra/agentcore-report/agent/agent.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        function = next(
+            item for item in tree.body
+            if isinstance(item, ast.FunctionDef)
+            and item.name == "_make_browser_verify_fn"
+        )
+        integrity_branch = next(
+            item for item in ast.walk(function)
+            if isinstance(item, ast.If)
+            and isinstance(item.test, ast.Name)
+            and item.test.id == "integrity_error"
+        )
+        self.assertFalse(any(
+            isinstance(node, ast.Attribute)
+            and node.attr == "mark_rejected"
+            for node in ast.walk(integrity_branch)
+        ))
 
 
 class StructuredPayloadTests(unittest.TestCase):
@@ -765,6 +809,19 @@ class LanguageScopeAndDomainTests(unittest.TestCase):
         latest = {"url": "https://example.com/FY25-report.pdf"}
         self.assertEqual(year(latest), 2025)
         self.assertIs(prefer(older, latest), latest)
+
+    def test_main_agent_understands_underscored_fiscal_year_range(self):
+        helpers = _load_language_and_scope_helpers()
+        year = helpers["_candidate_document_year"]
+        latest = {
+            "url": "https://example.com/asian_paints_sr_2024_25.pdf",
+        }
+        older = {
+            "url": "https://example.com/asian_paints_sr_2023-24.pdf",
+        }
+        self.assertEqual(year(latest), 2025)
+        self.assertEqual(year(older), 2024)
+        self.assertIs(helpers["_prefer_newer_document"](older, latest), latest)
 
     def test_localized_newer_file_does_not_displace_english_default(self):
         prefer = _load_language_and_scope_helpers()[

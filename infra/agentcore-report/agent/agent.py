@@ -1106,12 +1106,14 @@ def _extract_year_intent(text: str) -> set[int]:
     for yy in re.findall(rf"\bfy\s*{_YY_OR_YYYY_RE}", t):
         y = int(yy)
         out.add(y if y >= 1000 else 2000 + y)
-    for a, b in re.findall(rf"\bfy\s*{_YY_OR_YYYY_RE}\s*[-/]\s*{_YY_OR_YYYY_RE}", t):
+    for a, b in re.findall(
+            rf"\bfy\s*{_YY_OR_YYYY_RE}\s*[-/_]\s*{_YY_OR_YYYY_RE}", t):
         ya = int(a) if len(a) == 4 else 2000 + int(a)
         yb = int(b) if len(b) == 4 else 2000 + int(b)
         if abs(yb - ya) <= 1:
             out.update({ya, yb})
-    for a, b in re.findall(rf"{_YEAR_RE}\s*[-/]\s*{_YY_OR_YYYY_RE}", t):
+    for a, b in re.findall(
+            rf"{_YEAR_RE}\s*[-/_]\s*{_YY_OR_YYYY_RE}", t):
         ya = int(a)
         yb = int(b) if len(b) == 4 else (ya // 100) * 100 + int(b)
         if abs(yb - ya) <= 1:
@@ -2651,10 +2653,14 @@ def _make_browser_verify_fn(query: str, budget: "_QueryBudget | None" = None,
                 "company_match": False,
                 "year_match": False,
                 "confidence": "low",
-                "reason": f"invalid-document: {integrity_error}",
+                "reason": f"transport-invalid-document: {integrity_error}",
             }
-            if budget is not None:
-                budget.mark_rejected(url)
+            # A PDF URL can return a transient HTML/WAF page to the static
+            # client and real PDF bytes later inside a browser session. This is
+            # a transport failure, not permanent class evidence; do not add the
+            # URL to the query's class-rejected set or later browser tiers will
+            # skip the exact latest candidate they are meant to retry.
+            cand["_transport_failure"] = integrity_error
             return False
         if budget is not None and not budget.can_verify(reserve_verifies):
             print(f"[verify] budget stop ({budget.why_stopped(reserve_verifies)}): skipping "
@@ -3623,6 +3629,9 @@ def _write_metadata_sidecar(s3_key, company, url, digest, ctype,
     classes = ([report_class] if report_class
                else [c for c, _ in _matched_doc_classes(prepared_query)])
     yrs = ([year] if year else sorted(_extract_year_intent(prepared_query)))
+    detected_year = _candidate_document_year(url)
+    if not yrs and detected_year is not None:
+        yrs = [detected_year]
     identity = ((company_ctx or {}).get("_identity_validation") or {})
     meta = {
         "company": _slug(company), "company_name": company,
@@ -3672,6 +3681,9 @@ def _store(company: str, run_id: str, url: str, body: bytes, ctype: str,
         request_id=request_id, report_class=report_class, year=year,
         run_id=run_id, company_ctx=company_ctx)
     years = ([year] if year else sorted(_extract_year_intent(prepared_query)))
+    detected_year = _candidate_document_year(url)
+    if not years and detected_year is not None:
+        years = [detected_year]
     wrote = _write_provenance_if_missing({
         "company": _slug(company), "s3_key": s3_key, "run_id": run_id,
         "report": title or _safe_name(url, ctype), "source_url": url,
@@ -4935,6 +4947,8 @@ def _invoke_sync(payload: dict) -> dict:
                 "candidate_urls": blocked_urls,
                 "report_class": _reg_class,
                 "year": _reg_year,
+                "preferred_language": preferred_language,
+                "prefer_latest": latest_discovery_mode,
                 "official_domain": domain,
             })
             query_results.append({
@@ -4946,6 +4960,8 @@ def _invoke_sync(payload: dict) -> dict:
                 "candidate_urls": blocked_urls,
                 "report_class": _reg_class,
                 "year": _reg_year,
+                "preferred_language": preferred_language,
+                "prefer_latest": latest_discovery_mode,
                 "official_domain": domain,
             })
             if blocked_by_waf:

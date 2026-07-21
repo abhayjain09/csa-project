@@ -21,7 +21,7 @@ enforce_site_domain = true
 #   "amazon.nova-2-lite-v1:0"                     (current gen, cheap, recommended)
 #   "us.anthropic.claude-haiku-4-5-20251001"      (best judgement, ~$30/10k runs)
 # Leave empty to skip the relevance check (then wrong docs are kept).
-llm_model_id = "us.amazon.nova-2-lite-v1:0" #"amazon.nova-lite-v1:0"
+llm_model_id = "us.anthropic.claude-sonnet-5"
 
 # Optional literal Google search (honors site:). Leave empty to use managed/DDG.
 # google_api_key = "AIza..."

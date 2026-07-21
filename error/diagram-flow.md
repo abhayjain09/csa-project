@@ -1,24 +1,12 @@
-```mermaid
-flowchart TD
-    T0["Tier 0: Known URL / cached metadata<br/>Check existing links first"] -->|Valid latest report| V["Validate report<br/>year, type, language, company scope"]
-    T0 -->|No valid match| T1["Tier 1: Google search<br/>Latest year + report type + official domain"]
+| Case | Flow | Google | LLM Tokens | Browser |
+|---|---|---:|---:|---:|
+| Best case | Tier 0 cached URL / known metadata | 0 queries | 5k input + 500 output | No |
+| Average case | Google + official site + ranking | 3 queries | 20k input + 2k output | No |
+| Worst case | Multi-domain + browser fallback | 10 queries | 100k input + 10k output | Yes, short ECS run |
 
-    T1 -->|Valid latest report| V
-    T1 -->|No valid match| T2["Tier 2: Official website discovery<br/>Sitemap, report pages, PDF links"]
 
-    T2 -->|Valid latest report| V
-    T2 -->|No valid match| T3["Tier 3: Official report hubs<br/>Investor, annual, sustainability, ESG pages"]
-
-    T3 -->|Valid latest report| V
-    T3 -->|No valid match| T4["Tier 4: Multi-domain search<br/>Investor microsites, sustainability sites, CDN/DAM links"]
-
-    T4 -->|Valid latest report| V
-    T4 -->|No valid match| T5["Tier 5: Browser fallback<br/>Navigate filters, year selectors, download buttons"]
-
-    T5 -->|Report found| V
-    T5 -->|Login / CAPTCHA / blocked| M["Manual review"]
-    T5 -->|No report| N["Not found"]
-
-    V --> R["Rank and download<br/>Prefer latest completed year + English + group-level report"]
-    R --> S["Store PDF + metadata"]
-```
+| Case | Claude Sonnet 5 | Amazon Nova 2 Lite |
+|---|---:|---:|
+| Best case | `$15.00` | `$2.75` |
+| Average case | `$75.00` | `$26.00` |
+| Worst case | `$362.00` | `$117.00` |

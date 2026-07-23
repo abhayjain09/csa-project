@@ -3168,6 +3168,110 @@ def _category_from_filename(filename: str) -> str:
     return name.replace("_", " ").replace("-", " ").title()
 
 
+def _s3_key_from_uri(s3_uri: str) -> str:
+    """Return the object key from an s3://bucket/key URI."""
+    candidate = str(s3_uri or "").strip()
+    if not candidate:
+        return ""
+    try:
+        parsed = urlsplit(candidate)
+    except ValueError:
+        return ""
+    if parsed.scheme.lower() != "s3" or not parsed.netloc:
+        return ""
+    return parsed.path.lstrip("/")
+
+
+def _safe_provenance_source_url(value: str) -> str:
+    """Return a bounded official HTTP(S) URL from a provenance record."""
+    candidate = str(value or "").strip()
+    if not candidate or len(candidate) > 2048:
+        return ""
+    try:
+        parsed = urlsplit(candidate)
+    except ValueError:
+        return ""
+    if (parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname
+            or parsed.username or parsed.password):
+        return ""
+    return candidate
+
+
+def _load_citation_provenance(
+    company_slug: str,
+    citations_by_result: list,
+    dynamo=None,
+) -> dict:
+    """
+    Resolve citation document keys to their original official download URLs.
+
+    PageIndex citations intentionally store the durable S3 URI. The report
+    downloader's provenance table stores the corresponding original
+    ``source_url`` under the composite key ``(company, s3_key)``. Read each
+    unique key once and return only validated HTTP(S) URLs to the API caller.
+    """
+    if dynamo is None:
+        dynamo = get_dynamo()
+
+    s3_keys = {
+        _s3_key_from_uri(citation.get("s3_uri", ""))
+        for citations in citations_by_result
+        for citation in (citations or [])
+        if isinstance(citation, dict)
+    }
+    s3_keys.discard("")
+    if not company_slug or not s3_keys:
+        return {}
+
+    table = dynamo.Table(PROVENANCE_TABLE)
+    provenance = {}
+    for s3_key in s3_keys:
+        try:
+            item = table.get_item(
+                Key={"company": company_slug, "s3_key": s3_key}
+            ).get("Item", {})
+        except Exception as ex:
+            log.warning(
+                "[answering] provenance lookup failed company=%s key=%s: %s",
+                company_slug,
+                s3_key,
+                ex,
+            )
+            continue
+
+        source_url = _safe_provenance_source_url(item.get("source_url", ""))
+        if not source_url:
+            continue
+        provenance[s3_key] = {
+            "source_url": source_url,
+            "source_title": (
+                item.get("report")
+                or item.get("file_name")
+                or PurePosixPath(s3_key).name
+            ),
+        }
+
+    return provenance
+
+
+def _enrich_citations_with_provenance(
+    citations: list,
+    provenance_by_key: dict,
+) -> list:
+    """Attach official source details without replacing citation evidence."""
+    enriched = []
+    for citation in citations or []:
+        if not isinstance(citation, dict):
+            continue
+        row = dict(citation)
+        s3_key = _s3_key_from_uri(row.get("s3_uri", ""))
+        source = provenance_by_key.get(s3_key, {})
+        row["source_url"] = source.get("source_url", "")
+        row["source_title"] = source.get("source_title", "")
+        enriched.append(row)
+    return enriched
+
+
 def _list_questionnaire_md_files() -> list:
     """
     List all .md files under QUESTIONNAIRES_PREFIX in QUESTIONNAIRES_BUCKET.
@@ -3720,26 +3824,32 @@ def get_answering_category(slug, category):
         return jsonify({"error": "Category not found"}), 404
 
     # Parse JSON-stored fields back to objects.
-    results = []
+    parsed_items = []
     for item in items:
         try:
             citations = json.loads(item.get("citations", "[]"))
         except Exception:
             citations = []
+        if not isinstance(citations, list):
+            citations = []
         try:
             confidence_full = json.loads(item.get("confidence_full", "{}"))
         except Exception:
             confidence_full = {}
+        if not isinstance(confidence_full, dict):
+            confidence_full = {}
         try:
             flags = json.loads(item.get("flags", "[]"))
         except Exception:
+            flags = []
+        if not isinstance(flags, list):
             flags = []
         try:
             answer = json.loads(item.get("answer", "{}"))
         except Exception:
             answer = {}
 
-        results.append({
+        parsed_items.append({
             "question_id":     item.get("question_id", ""),
             "question_label":  item.get("question_label", ""),
             "answer":          answer,
@@ -3750,6 +3860,22 @@ def get_answering_category(slug, category):
             "tool_calls_used": item.get("tool_calls_used", 0),
             "error":           item.get("error", "") or None,
         })
+
+    # Resolve every unique cited S3 key against the downloader's provenance
+    # table. This keeps the internal bucket URI out of the UI and gives each
+    # citation the original official document URL.
+    provenance_by_key = _load_citation_provenance(
+        slug,
+        [result["citations"] for result in parsed_items],
+        dynamo,
+    )
+    results = []
+    for result in parsed_items:
+        result["citations"] = _enrich_citations_with_provenance(
+            result["citations"],
+            provenance_by_key,
+        )
+        results.append(result)
 
     results.sort(key=lambda r: r["question_id"])
     category_name = items[0].get("category", "") if items else category

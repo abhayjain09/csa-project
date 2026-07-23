@@ -1979,7 +1979,7 @@ function rpFilterQA() {
   const conf = document.getElementById('rpConfFilter').value;
   rpState.filteredQA = rpState.allQA.filter(r => {
     const matchQ = !q    || (r.question_label||'').toLowerCase().includes(q);
-    const matchC = !conf || r.confidence === conf;
+    const matchC = !conf || rpEffectiveConfidence(r) === conf;
     return matchQ && matchC;
   });
   rpRenderQA();
@@ -2040,6 +2040,45 @@ function rpAnswerScore(result) {
   const fieldScore = rpNormalizeScore(field && field.confidence_score);
   if (fieldScore !== null) return fieldScore;
   return rpNormalizeScore(result && result.answer && result.answer.confidence_score);
+}
+
+function rpConfidenceForScore(score, fallback) {
+  if (score !== null && score > 90) return 'high';
+  if (score !== null && score < 70) return 'low';
+  return fallback || 'insufficient_evidence';
+}
+
+function rpEffectiveConfidence(result) {
+  return rpConfidenceForScore(
+    rpAnswerScore(result),
+    result && result.confidence
+  );
+}
+
+function rpSafeOfficialUrl(value) {
+  if (!value) return '';
+  try {
+    const url = new URL(String(value));
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : '';
+  } catch(e) {
+    return '';
+  }
+}
+
+function rpOfficialSource(result) {
+  const citations = result && Array.isArray(result.citations)
+    ? result.citations
+    : [];
+  for (const citation of citations) {
+    const url = rpSafeOfficialUrl(citation && citation.source_url);
+    if (url) {
+      return {
+        url,
+        title: citation.source_title || citation.doc_name || 'Official document'
+      };
+    }
+  }
+  return null;
 }
 
 function rpHumanLabel(key) {
@@ -2127,6 +2166,7 @@ function rpRenderExtractedFields(result) {
 
   return fields.map((field, index) => {
     const score = rpNormalizeScore(field.confidence_score);
+    const displayConfidence = rpConfidenceForScore(score, result.confidence);
     const title = field.question_label || (fields.length > 1 ? 'Extracted field ' + (index + 1) : 'Answer');
     const criterion = field.met_criteria;
     const hasReviewStatus = Object.prototype.hasOwnProperty.call(field, 'needs_review');
@@ -2150,7 +2190,7 @@ function rpRenderExtractedFields(result) {
         + '</div>'
         + '<div class="rp-answer-field-tags">'
           + (score !== null
-            ? '<span class="rp-confidence-badge ' + escH(result.confidence || 'insufficient_evidence') + '">'
+            ? '<span class="rp-confidence-badge ' + escH(displayConfidence) + '">'
               + rpFormatScore(score) + '</span>'
             : '')
           + (hasReviewStatus
@@ -2203,10 +2243,11 @@ function rpRenderAnswer(result) {
 }
 
 function rpRenderConfidence(result) {
-  const conf = result.confidence || 'insufficient_evidence';
+  const recordedConfidence = result.confidence || 'insufficient_evidence';
+  const score = rpAnswerScore(result);
+  const conf = rpConfidenceForScore(score, recordedConfidence);
   const cClass = rpConfClass(conf);
   const cLabel = rpConfLabel(conf);
-  const score = rpAnswerScore(result);
   const scoreText = rpFormatScore(score);
   const confidence = result.confidence_full && typeof result.confidence_full === 'object'
     ? result.confidence_full
@@ -2222,10 +2263,18 @@ function rpRenderConfidence(result) {
       + '<span class="rp-score-value">' + scoreText + '</span>'
     + '</div>'
     : '')
-    + '<div class="rp-confidence-note">Validated level: <strong class="' + cClass + '">'
+    + '<div class="rp-confidence-note">Confidence level: <strong class="' + cClass + '">'
       + escH(cLabel) + '</strong>'
-      + (confidence.downgraded ? ' · downgraded during evidence validation' : '')
     + '</div>'
+    + (conf !== recordedConfidence
+      ? '<div class="rp-confidence-note">'
+        + (score > 90
+          ? 'A score above 90% is displayed as High. '
+          : 'A score below 70% is displayed as Low. ')
+        + 'Agent evidence validation: ' + escH(rpConfLabel(recordedConfidence)) + '.</div>'
+      : (confidence.downgraded
+        ? '<div class="rp-confidence-note">Downgraded during evidence validation.</div>'
+        : ''))
     + (reasons.length
       ? '<div class="rp-confidence-note">' + reasons.map(reason => escH(reason)).join(' · ') + '</div>'
       : '');
@@ -2249,7 +2298,7 @@ function rpRenderQA() {
 
   tbody.innerHTML = rpState.filteredQA.map((r, idx) => {
     const qNum = 'Q.' + (idx + 1);
-    const conf  = r.confidence || 'insufficient_evidence';
+    const conf  = rpEffectiveConfidence(r);
     const cLabel = rpConfLabel(conf);
     const score = rpAnswerScore(r);
     const scoreText = rpFormatScore(score);
@@ -2262,12 +2311,11 @@ function rpRenderQA() {
       const pages    = c.page_start
         ? 'p.' + c.page_start + (c.page_end && c.page_end !== c.page_start ? '-' + c.page_end : '')
         : '';
-      const keyPath = c.s3_uri
-        ? c.s3_uri.replace('s3://','').split('/').slice(1).join('/')
-        : '';
-      const s3Link = keyPath
-        ? "<a class=\"url-ref\" href=\"#\" onclick=\"downloadFileVerified(decB64('" +
-          escB64(keyPath) + "'),null);return false\">open source</a>"
+      const officialUrl = rpSafeOfficialUrl(c.source_url);
+      const officialLink = officialUrl
+        ? '<a class="url-ref" href="' + escH(officialUrl)
+          + '" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">'
+          + 'official document &#8599;</a>'
         : '';
       return '<div class="rp-citation-box">'
         + (c.quoted_span ? '<div class="rp-citation-quote">&ldquo;' + escH(c.quoted_span) + '&rdquo;</div>' : '')
@@ -2275,7 +2323,9 @@ function rpRenderQA() {
           + (docLabel ? '<span>' + docLabel + '</span>' : '')
           + (pages    ? '<span>' + escH(pages) + '</span>' : '')
           + (c.node_path ? '<span title="' + escH(c.node_path) + '">' + escH(c.node_path.split(' > ').pop()) + '</span>' : '')
-          + (s3Link ? s3Link : '')
+          + (officialLink
+            ? officialLink
+            : '<span title="No official URL was found in the provenance table">Official link unavailable</span>')
         + '</div>'
       + '</div>';
     }).join('');
@@ -2283,9 +2333,14 @@ function rpRenderQA() {
     const hasCitations = (r.citations || []).length > 0;
     const fieldSource = rpPrimaryField(r);
     const hasFieldSource = Boolean(fieldSource && fieldSource.source);
-    const srcLabel = hasCitations || hasFieldSource
-      ? '<span class="url-ref">official</span>'
-      : '<span class="muted" style="font-size:12px">—</span>';
+    const officialSource = rpOfficialSource(r);
+    const srcLabel = officialSource
+      ? '<a class="url-ref" href="' + escH(officialSource.url)
+        + '" target="_blank" rel="noopener noreferrer" title="' + escH(officialSource.title)
+        + '" onclick="event.stopPropagation()">official &#8599;</a>'
+      : (hasCitations || hasFieldSource
+        ? '<span class="muted" style="font-size:12px" title="No official URL was found in the provenance table">Unavailable</span>'
+        : '<span class="muted" style="font-size:12px">—</span>');
     const confidenceBadge = '<span class="rp-confidence-badge ' + escH(conf) + '">'
       + escH(cLabel) + (scoreText ? ' · ' + scoreText : '') + '</span>';
 

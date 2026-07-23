@@ -31,7 +31,7 @@ def lambda_handler(event, context):
 
     # Hardcoded test query
     #sample_query = "What is the latest news regarding the Artemis moon mission?"
-    sample_query = "download link for hsbc bank Code of Conduct report latest pdf"
+    sample_query = "what is the latest news regarding the Artemis moon mission?"
     
     # ---------------------
     try:

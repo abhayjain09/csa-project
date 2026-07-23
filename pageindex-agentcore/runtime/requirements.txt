@@ -1,0 +1,19 @@
+# ---------------------------------------------------------------------------
+# requirements.txt — PageIndex AgentCore Runtime
+# ---------------------------------------------------------------------------
+
+# AWS SDK
+boto3>=1.38.0
+
+# AgentCore runtime SDK — BedrockAgentCoreApp, /ping + /invocations endpoints
+bedrock-agentcore>=0.1.0
+
+# ---------------------------------------------------------------------------
+# PageIndex dependencies (from VectifyAI/PageIndex/requirements.txt)
+# ---------------------------------------------------------------------------
+litellm>=1.40.0
+pymupdf>=1.24.0
+PyPDF2>=3.0.0
+python-dotenv>=1.0.0
+pyyaml>=6.0.0
+

@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
 # --- Configuration ---
 AWS_ACCOUNT_ID="610639371721"
 AWS_REGION="us-east-1"
@@ -29,7 +31,7 @@ echo ""
 echo "=== Step 3: Building Docker image ==="
 docker build --platform linux/amd64 \
   -t "${ECR_REPO_NAME}:${IMAGE_TAG}" \
-  -f dockerfile .
+  -f "${SCRIPT_DIR}/dockerfile" "${SCRIPT_DIR}"
 
 echo ""
 echo "=== Step 4: Tagging image ==="

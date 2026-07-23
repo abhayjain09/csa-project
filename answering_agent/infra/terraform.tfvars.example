@@ -1,0 +1,41 @@
+# Copy to terraform.tfvars and edit for your environment.
+
+project_name = "pageindex-agent"
+environment  = "dev"
+aws_region   = "us-east-1"
+
+image_tag = "latest"
+
+bedrock_model_id = "amazon.nova-pro-v1:0"
+
+tool_call_budget       = 15
+max_page_span          = 15
+max_parallel_questions = 1
+staleness_warn_days    = 30
+
+idle_session_timeout_seconds = 900
+max_session_lifetime_seconds = 3600
+
+create_input_bucket        = true
+existing_input_bucket_name = ""
+
+# ---------------------------------------------------------------------------
+# IAM — choose ONE of the two options below.
+# ---------------------------------------------------------------------------
+
+# Option A (default): Terraform creates a new role.
+# Leave existing_role_arn empty and Terraform handles everything.
+existing_role_arn = ""
+
+# Option B: Use a pre-existing role your security team created.
+# Paste the ARN and Terraform will skip all IAM resource creation.
+# The role must have the trust policy and permissions described in iam.tf.
+# existing_role_arn = "arn:aws:iam::123456789012:role/my-agentcore-role"
+
+network_mode = "PUBLIC"
+
+log_retention_days = 30
+
+additional_tags = {
+  Owner = "esg-team"
+}

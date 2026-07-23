@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Report IQ — Web Search → RAG Portal</title>
+<style>
+/* ============ Base ============ */
+:root{
+  --red:#d6002a; --red-dark:#b80024;
+  --border:#dadde2; --light:#f0f3f7; --highlight:#e0e7ef;
+  --tagblue:#6986b0; --muted:#666; --beige:#ebe7e1;
+  --ok:#2bde3f; --err:#e7431a; --info:#1d72f3; --warn:#ffc007;
+  --mono:"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+}
+*{box-sizing:border-box;font-family:"Akkurat Pro",Helvetica,Arial,sans-serif;margin:0;padding:0}
+html{font-size:14px}
+@media(min-width:768px){html{font-size:16px}}
+body{min-height:100vh;width:100%;background:#fff;display:flex;flex-direction:column}
+a{text-decoration:none;color:inherit}
+button{cursor:pointer}
+
+/* ============ Header ============ */
+.header{position:fixed;width:100%;z-index:100;top:0}
+.header-container{background:#000;box-shadow:0 2px 12px 0 rgba(0,0,0,.12);display:flex;height:60px;justify-content:space-between;align-items:center;padding:0 40px 0 27px}
+.header-logo{display:flex;align-items:center;gap:14px}
+.logo-mark{color:#fff;font-size:22px;font-weight:700;letter-spacing:.5px}
+.logo-mark .red{color:var(--red)}
+.logo-divider{width:1px;height:28px;background:#464646}
+.logo-sub{color:#fff;font-size:13px;font-weight:300}
+.main-menu{display:flex;gap:26px;height:60px}
+.menu-item{display:flex;align-items:center;color:#fff;font-size:15px;font-weight:400;padding:0 4px;border-bottom:3px solid transparent;border-top:3px solid transparent;background:none;border-left:none;border-right:none;white-space:nowrap}
+.menu-item:hover{background:#464646}
+.menu-item.active{border-bottom-color:var(--red)}
+.header-user{display:flex;align-items:center;gap:10px}
+.user-icon{width:36px;height:36px;border-radius:50%;background:#fff;color:#000;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}
+
+/* ============ Layout ============ */
+.main-wrapper{flex:1;padding-top:60px;display:flex;flex-direction:column}
+.page{display:none;animation:fadein .15s ease}
+.page.active{display:block}
+@keyframes fadein{from{opacity:0}to{opacity:1}}
+.page-body{padding:32px 48px 60px;max-width:1480px;margin:0 auto;width:100%}
+@media(max-width:768px){.page-body{padding:24px 16px 40px}}
+.breadcrumbs{font-size:13px;color:var(--muted);margin-bottom:18px}
+.breadcrumbs a{color:var(--red)}
+.page-title{font-size:34px;font-weight:700;color:#000}
+.page-title .red{color:var(--red)}
+.page-subtitle{font-size:18px;font-weight:300;line-height:30px;color:#000;margin-top:10px;max-width:900px}
+.section-title{font-size:24px;font-weight:700;margin:40px 0 16px}
+
+/* ============ Buttons ============ */
+.btn{align-items:center;background:#fff;border:1px solid var(--border);display:inline-flex;gap:8px;height:48px;justify-content:center;padding:0 22px;font-size:16px;font-weight:700;color:#000;transition:border-color .2s}
+.btn:hover{border-color:#000}
+.btn-sm{height:36px;padding:0 14px;font-size:14px}
+.btn-primary{background:var(--red);border:none;color:#fff;border-radius:0}
+.btn-primary:hover{background:var(--red-dark)}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed}
+.btn-link{background:none;border:none;color:var(--red);font-size:14px;font-weight:400;padding:0;height:auto}
+.btn-link:hover{text-decoration:underline}
+
+/* ============ Cards & stats ============ */
+.stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px;margin-top:28px}
+.stat-card{background:var(--light);border:1px solid var(--border);padding:20px}
+.stat-card .label{font-size:14px;font-weight:400;color:var(--muted);margin-bottom:8px}
+.stat-card .value{font-size:34px;font-weight:700;color:#000}
+.stat-card .value .red{color:var(--red)}
+.stat-card .value .unit{font-size:14px;font-weight:400;color:var(--muted)}
+.card-container{display:flex;flex-wrap:wrap;gap:24px;margin-top:20px}
+.card-box{background:#fff;border:1px solid var(--border);border-radius:1px;width:350px;transition:.2s ease-in-out;display:flex;flex-direction:column}
+.card-box.click:hover{border-color:#000;cursor:pointer}
+.card-header{display:flex;align-items:center;gap:14px;padding:15px 21px;border-bottom:1px solid var(--border)}
+.card-title{font-size:16px;font-weight:700;color:#000}
+.card-content{padding:16px 21px;flex:1}
+.card-footer{display:flex;align-items:center;gap:11px;border-top:1px solid var(--border);padding:14px 21px}
+.link-text{color:var(--red);font-size:12px;font-weight:400;cursor:pointer}
+.link-seperator{color:#c9c9c9;font-size:16px}
+.short-desc{font-size:14px;font-weight:300;line-height:22px;color:#000;margin-top:12px}
+
+/* ============ Tags & badges ============ */
+.card-tags{display:flex;flex-wrap:wrap;gap:10px}
+.category-tag{align-items:center;background:var(--light);border:1px solid var(--tagblue);border-radius:14px;display:inline-flex;height:23px;justify-content:center;padding:2px 16px;font-size:12px;color:var(--tagblue);white-space:nowrap}
+.tag{align-items:center;background:#fff;border:1px solid #e0e7ef;border-radius:14px;display:inline-flex;height:23px;padding:2px 16px;font-size:12px;color:var(--tagblue);white-space:nowrap}
+.badge{display:inline-flex;align-items:center;border-radius:14px;padding:3px 14px;font-size:12px;font-weight:700;white-space:nowrap}
+.badge.high{background:#e7f8e9;color:#147327;border:1px solid #2bde3f}
+.badge.medium{background:#fff6dd;color:#8a6403;border:1px solid var(--warn)}
+.badge.low{background:#fdebe6;color:#a33012;border:1px solid var(--err)}
+.badge.pending{background:var(--light);color:var(--muted);border:1px solid var(--border)}
+.badge.running{background:#e6efff;color:#0d4ea6;border:1px solid var(--info)}
+.badge.indexed{background:#e7f8e9;color:#147327;border:1px solid #2bde3f}
+.status-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:7px}
+.status-dot.ok{background:var(--ok)}
+.status-dot.busy{background:var(--warn);animation:blink 1s step-start infinite}
+@keyframes blink{50%{opacity:0}}
+
+/* ============ Tables ============ */
+.table-wrapper{border:1px solid var(--border);overflow:auto;margin-top:16px}
+table{border-collapse:collapse;width:100%}
+th{background-color:#000;color:#fff;font-size:14px;font-weight:700;text-align:left;padding:12px 16px;position:sticky;top:0}
+td{padding:12px 16px;font-size:14px;border-bottom:1px solid var(--border);vertical-align:middle}
+tbody tr:hover{background:var(--light)}
+tbody tr.expandable{cursor:pointer}
+tr.detail-row{background:#fafbfc}
+tr.detail-row:hover{background:#fafbfc}
+tr.detail-row td{padding:0}
+.highlighRow{background-color:var(--highlight)!important}
+.mono{font-family:var(--mono);font-size:13px}
+.url-ref{color:var(--red);font-size:13px;display:inline-flex;align-items:center;gap:5px}
+.url-ref:hover{text-decoration:underline}
+
+/* ============ Forms ============ */
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:20px}
+@media(max-width:900px){.form-grid{grid-template-columns:1fr}}
+.form-field{display:flex;flex-direction:column;gap:6px}
+.form-field.full{grid-column:1/-1}
+.form-label{font-size:16px;font-weight:400;color:#000}
+.form-hint{font-size:12px;color:var(--muted)}
+.form-input,.form-select,.form-textarea{border:1px solid var(--border);font-size:16px;height:48px;outline:none;padding:0 14px;color:#000;background:#fff;width:100%}
+.form-textarea{height:auto;min-height:110px;padding:12px 14px;resize:vertical;line-height:1.5;font-family:var(--mono);font-size:14px}
+.form-input:focus,.form-textarea:focus,.form-select:focus{border-color:#000}
+.form-input::placeholder,.form-textarea::placeholder{color:#c9c9c9}
+
+/* ============ Upload zone ============ */
+.import-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:14px;align-items:stretch}
+@media(max-width:900px){.import-grid{grid-template-columns:1fr}}
+.dropzone{border:2px dashed var(--border);background:var(--light);padding:30px;text-align:center;transition:border-color .2s;display:flex;flex-direction:column;justify-content:center}
+.dropzone:hover,.dropzone.drag{border-color:#000;cursor:pointer}
+.dropzone.drag{background:var(--highlight)}
+.dropzone .dz-title{font-size:18px;font-weight:700}
+.dropzone .dz-sub{font-size:14px;font-weight:300;color:var(--muted);margin-top:6px}
+.wq-row{display:flex;gap:8px;margin-bottom:8px;align-items:center}
+.wq-row .form-input{flex:1}
+.wq-del{border:1px solid var(--border);background:#fff;width:40px;height:48px;flex:none;font-size:18px;color:var(--muted);display:flex;align-items:center;justify-content:center}
+.wq-del:hover{border-color:var(--err);color:var(--err)}
+
+/* ============ Code / JSON ============ */
+.code-block{background:#1d1f23;color:#e6e6e6;font-family:var(--mono);font-size:13px;line-height:1.6;padding:18px 20px;overflow:auto;white-space:pre;border-radius:1px}
+.code-block .k{color:#9cdcfe}
+.code-block .s{color:#ce9178}
+.code-block .p{color:#808080}
+
+/* ============ Pipeline strip ============ */
+.pipeline{display:flex;flex-wrap:wrap;gap:0;margin-top:24px;border:1px solid var(--border)}
+.pl-stage{flex:1;min-width:150px;padding:16px 18px;border-right:1px solid var(--border);position:relative}
+.pl-stage:last-child{border-right:none}
+.pl-stage .pl-num{font-size:12px;color:var(--tagblue);font-weight:700;letter-spacing:.5px}
+.pl-stage .pl-name{font-size:15px;font-weight:700;margin-top:6px}
+.pl-stage .pl-svc{font-size:12px;color:var(--muted);margin-top:4px;font-family:var(--mono)}
+.pl-stage .pl-state{position:absolute;top:16px;right:16px}
+
+/* ============ Sorting + multi-select ============ */
+th.sortable{cursor:pointer;user-select:none}
+th.sortable:hover{background:#222}
+.sort-ind{font-size:11px;color:#999;margin-left:4px}
+.multi-select{position:relative;display:inline-block}
+.ms-toggle{display:inline-flex;align-items:center;gap:8px;height:48px;padding:0 16px;border:1px solid var(--border);background:#fff;font-size:15px;color:#000}
+.ms-toggle:hover{border-color:#000}
+.ms-count{background:var(--light);border:1px solid var(--border);border-radius:12px;padding:1px 10px;font-size:12px;color:var(--tagblue)}
+.ms-panel{position:absolute;top:52px;left:0;min-width:240px;max-height:280px;overflow:auto;background:#fff;border:1px solid var(--border);box-shadow:1px 7px 14px -5px rgba(0,0,0,.2);z-index:50;display:none;padding:6px}
+.ms-panel.open{display:block}
+.ms-opt{display:flex;align-items:center;gap:10px;padding:9px 12px;font-size:14px;cursor:pointer}
+.ms-opt:hover{background:var(--light)}
+.ms-opt input{width:16px;height:16px;accent-color:var(--red)}
+.ms-actions{display:flex;justify-content:space-between;padding:8px 12px;border-top:1px solid var(--border);margin-top:4px}
+
+/* ============ Detail panel ============ */
+.detail-panel{padding:20px 24px;border-left:3px solid var(--red)}
+.detail-panel .answer-text{font-size:15px;line-height:24px;margin-bottom:14px;max-width:920px}
+.evidence-box{background:var(--light);border:1px solid var(--border);padding:14px 16px;font-size:14px;font-weight:300;line-height:22px;margin-bottom:14px;max-width:920px}
+.evidence-box .ev-source{font-size:12px;color:var(--muted);margin-top:8px;font-family:var(--mono)}
+.score-grid{display:grid;grid-template-columns:130px 220px 50px;gap:8px 12px;align-items:center;margin:14px 0}
+.score-label{font-size:13px;color:var(--muted)}
+.score-bar{background:var(--highlight);height:6px}
+.score-fill{height:6px;background:var(--tagblue)}
+.score-fill.fail{background:var(--err)}
+.score-val{font-size:13px;text-align:right}
+.detail-actions{display:flex;gap:12px;margin-top:14px;flex-wrap:wrap}
+
+/* ============ Architecture ============ */
+.arch-wrap{border:1px solid var(--border);background:var(--light);padding:28px;margin-top:20px;overflow:auto}
+.arch-legend{display:flex;gap:22px;flex-wrap:wrap;margin-top:18px;font-size:13px;color:var(--muted)}
+.arch-legend span{display:inline-flex;align-items:center;gap:7px}
+.swatch{width:13px;height:13px;border-radius:2px;display:inline-block}
+.decision{border:1px solid var(--border);border-left:3px solid var(--tagblue);padding:18px 22px;margin-top:18px}
+.decision h4{font-size:16px;margin-bottom:8px}
+.decision p{font-size:14px;line-height:23px;color:#000;font-weight:300}
+.decision .pick{color:var(--red);font-weight:700}
+
+/* ============ Notifications ============ */
+.notifications{align-items:flex-end;bottom:2em;display:flex;flex-direction:column;position:fixed;right:2em;z-index:9999}
+.notification-toast{align-items:center;background-color:#fff;box-shadow:1px 7px 14px -5px rgba(0,0,0,.2);display:flex;max-width:500px;padding:.8em 1em;position:relative;text-align:left}
+.notification-toast+.notification-toast{margin-top:1em}
+.notification-toast:before{content:"";height:2px;left:0;position:absolute;top:0;width:100%}
+.notification-toast.success:before{background-color:var(--ok)}
+.notification-toast.error:before{background-color:var(--err)}
+.notification-toast.info:before{background-color:var(--info)}
+.notification-toast.warning:before{background-color:var(--warn)}
+.notification-toast-title{color:#3e3e3e;font-weight:700;margin-bottom:4px;font-size:14px}
+.notification-toast-description{color:#878787;font-size:13px}
+.notification-toast-close{cursor:pointer;margin-left:1.2em;border:none;background:none;font-size:16px;color:#878787}
+
+/* ============ Footer ============ */
+.footer{background:#000;display:grid;grid-template-columns:repeat(3,1fr);padding:32px 50px;width:100%;margin-top:auto}
+.footer .quick-link{color:#fff;font-size:20px;font-weight:700;margin-bottom:8px}
+.footer .link-text-f{color:#fff;font-size:14px;font-weight:400;margin-bottom:8px;display:block;cursor:pointer}
+.footer .link-text-f:hover{color:var(--red)}
+.footer .footer-brand{color:#fff;font-size:26px;font-weight:700;display:flex;align-items:center}
+.footer .footer-brand .red{color:var(--red)}
+.footer .footer-note{color:#878787;font-size:12px;display:flex;align-items:flex-end;justify-content:flex-end}
+@media(max-width:990px){.footer{grid-template-columns:1fr;gap:20px;text-align:center}.footer .footer-note{justify-content:center}}
+
+/* misc */
+.toolbar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;margin-top:28px}
+.hidden{display:none!important}
+.muted{color:var(--muted)}
+.mt-8{margin-top:8px}.mt-16{margin-top:16px}.mt-24{margin-top:24px}.mt-40{margin-top:40px}
+.two-col{display:grid;grid-template-columns:1.1fr .9fr;gap:32px;margin-top:20px;align-items:start}
+@media(max-width:980px){.two-col{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<!-- ================= HEADER ================= -->
+<header class="header">
+  <div class="header-container">
+    <div class="header-logo">
+      <span class="logo-mark">Report <span class="red">IQ</span></span>
+      <span class="logo-divider"></span>
+      <span class="logo-sub">Web Search → RAG</span>
+    </div>
+    <nav class="main-menu">
+      <button class="menu-item active" data-nav="dashboard" onclick="nav('dashboard',this)">Dashboard</button>
+      <button class="menu-item" data-nav="queries" onclick="nav('queries',this)">Web Queries</button>
+      <button class="menu-item" data-nav="sources" onclick="nav('sources',this)">Sources</button>
+      <button class="menu-item" data-nav="questions" onclick="nav('questions',this)">Questions</button>
+      <button class="menu-item" data-nav="run" onclick="nav('run',this)">Run &amp; Answers</button>
+      <button class="menu-item" data-nav="arch" onclick="nav('arch',this)">Architecture</button>
+    </nav>
+    <div class="header-user"><div class="user-icon">AN</div></div>
+  </div>
+</header>
+
+<div class="main-wrapper">
+
+<!-- ================= PAGE: DASHBOARD ================= -->
+<section class="page active" id="page-dashboard">
+  <div class="page-body">
+    <h1 class="page-title">Welcome to Report <span class="red">IQ</span></h1>
+    <p class="page-subtitle">Save a web search query, and a chain of agents finds the official reports, downloads them, builds a knowledge base, answers your question set with source-URL references, and scores every answer for quality.</p>
+
+    <div class="stat-row">
+      <div class="stat-card"><div class="label">Saved web queries</div><div class="value">12</div></div>
+      <div class="stat-card"><div class="label">Reports in store</div><div class="value">148 <span class="unit">in S3</span></div></div>
+      <div class="stat-card"><div class="label">Documents indexed</div><div class="value">148 <span class="unit">in KB</span></div></div>
+      <div class="stat-card"><div class="label">Runs completed</div><div class="value">42</div></div>
+      <div class="stat-card"><div class="label">Avg eval score</div><div class="value"><span class="red">0.84</span></div></div>
+    </div>
+
+    <h2 class="section-title">The pipeline</h2>
+    <div class="pipeline">
+      <div class="pl-stage"><div class="pl-num">01</div><div class="pl-name">Search</div><div class="pl-svc">Gateway · web search</div></div>
+      <div class="pl-stage"><div class="pl-num">02</div><div class="pl-name">Download</div><div class="pl-svc">→ S3 + DynamoDB</div></div>
+      <div class="pl-stage"><div class="pl-num">03</div><div class="pl-name">Index</div><div class="pl-svc">Bedrock KB</div></div>
+      <div class="pl-stage"><div class="pl-num">04</div><div class="pl-name">Answer</div><div class="pl-svc">retrieve + cite URL</div></div>
+      <div class="pl-stage"><div class="pl-num">05</div><div class="pl-name">Verify</div><div class="pl-svc">Browser Tool</div></div>
+      <div class="pl-stage"><div class="pl-num">06</div><div class="pl-name">Evaluate</div><div class="pl-svc">AgentCore Evals</div></div>
+    </div>
+
+    <h2 class="section-title">Recent runs</h2>
+    <div class="table-wrapper">
+      <table>
+        <thead><tr><th>Run</th><th>Company</th><th>Started</th><th>Answered</th><th>Avg eval</th><th>Sent to verifier</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          <tr><td>#0042</td><td>Nestlé S.A.</td><td>11 Jun 2026, 14:02</td><td>29 / 29</td><td>0.87</td><td>2</td><td><span class="status-dot ok"></span>Complete</td><td><button class="btn-link" onclick="nav('run',menuEl('run'))">View</button></td></tr>
+          <tr><td>#0041</td><td>Unilever PLC</td><td>11 Jun 2026, 11:40</td><td>29 / 29</td><td>0.79</td><td>5</td><td><span class="status-dot ok"></span>Complete</td><td><button class="btn-link" onclick="toast('info','Read-only','Open from the run history of Unilever PLC.')">View</button></td></tr>
+          <tr><td>#0040</td><td>Danone S.A.</td><td>10 Jun 2026, 16:21</td><td>27 / 29</td><td>0.81</td><td>4</td><td><span class="status-dot ok"></span>Complete</td><td><button class="btn-link" onclick="toast('info','Read-only','Open from the run history of Danone S.A.')">View</button></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2 class="section-title">Quick actions</h2>
+    <div style="display:flex;gap:20px;flex-wrap:wrap">
+      <button class="btn" onclick="nav('queries',menuEl('queries'))">+ Add web query</button>
+      <button class="btn" onclick="nav('sources',menuEl('sources'))">View downloaded reports</button>
+      <button class="btn" onclick="nav('run',menuEl('run'))">Run answer set</button>
+      <button class="btn" onclick="nav('arch',menuEl('arch'))">See architecture</button>
+    </div>
+  </div>
+</section>
+
+<!-- ================= PAGE: WEB QUERIES ================= -->
+<section class="page" id="page-queries">
+  <div class="page-body">
+    <div class="breadcrumbs"><a onclick="nav('dashboard',menuEl('dashboard'))" href="#">Home</a> / Web queries</div>
+    <h1 class="page-title">Web queries</h1>
+    <p class="page-subtitle">Define the search the agents run to find official reports. Each saved query is written to the <span class="mono">web_queries</span> table in DynamoDB, where the search agent picks it up and starts a run. Use <span class="mono">site:</span> filters to keep results on the official domain.</p>
+
+    <h2 class="section-title" style="margin-top:24px">Import JSON</h2>
+    <p class="form-hint" style="margin-top:-8px">Upload a file or paste JSON directly — either is parsed and written to <span class="mono">web_queries</span>. Accepts one query object or an array of them.</p>
+    <div class="import-grid">
+      <div class="dropzone" id="jsonDrop" onclick="document.getElementById('jsonFile').click()"
+           ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')"
+           ondrop="handleJsonDrop(event)">
+        <div class="dz-title">Upload a query JSON file</div>
+        <div class="dz-sub">Drop a <span class="mono">.json</span> file here, or click to browse.</div>
+        <button class="btn btn-sm" style="margin-top:14px" onclick="event.stopPropagation();document.getElementById('jsonFile').click()">Choose file</button>
+        <input type="file" id="jsonFile" accept=".json,application/json" class="hidden" onchange="handleJsonFile(this.files[0])">
+      </div>
+      <div class="paste-box">
+        <textarea class="form-textarea" id="jsonPaste" style="min-height:150px" placeholder='{
+  "web_query1": "site:nestle.com tax strategy",
+  "web_query2": "site:nestle-group.com tax policy",
+  "search_query": "Does the policy address transfer pricing?",
+  "company": "Nestlé S.A."
+}'></textarea>
+        <div class="detail-actions" style="margin-top:12px">
+          <button class="btn btn-primary btn-sm" onclick="loadPastedJson()">Load pasted JSON</button>
+          <button class="btn btn-sm" onclick="document.getElementById('jsonPaste').value=''">Clear</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <div>
+        <h2 class="section-title" style="margin-top:24px">New query</h2>
+        <div class="form-grid">
+          <div class="form-field"><label class="form-label">Company</label><input class="form-input" id="q_company" value="Nestlé S.A." oninput="syncJson()"></div>
+          <div class="form-field"><label class="form-label">Run after saving</label>
+            <select class="form-select" id="q_run"><option>Yes — trigger immediately</option><option>No — save only</option></select>
+          </div>
+          <div class="form-field full">
+            <label class="form-label">Web queries <span class="form-hint">add as many as you need</span></label>
+            <div id="webQueryList"></div>
+            <button class="btn btn-sm" style="align-self:flex-start;margin-top:4px" onclick="addWebQuery()">+ Add web query</button>
+          </div>
+          <div class="form-field full"><label class="form-label">Search query <span class="form-hint">what the answer must address</span></label>
+            <textarea class="form-textarea" id="q_search" style="min-height:80px" oninput="syncJson()">Check if group-level tax strategy and governance policy addresses transfer pricing using the arm’s length principle.</textarea>
+          </div>
+        </div>
+        <div class="detail-actions mt-24">
+          <button class="btn btn-primary" onclick="saveQuery()">Save query</button>
+          <button class="btn" onclick="toast('info','Validated','site: filters present · search query length ok · ready to save.')">Validate</button>
+        </div>
+      </div>
+
+      <div>
+        <h2 class="section-title" style="margin-top:24px">Saved as</h2>
+        <p class="form-hint" style="margin-bottom:10px">This is the exact item written to DynamoDB.</p>
+        <div class="code-block" id="jsonPreview"></div>
+        <div class="decision" style="margin-top:20px">
+          <h4>Where this is stored</h4>
+          <p><span class="pick">DynamoDB</span> table <span class="mono">web_queries</span> — queryable, versioned, and read directly by the search agent. Saving also drops a message on SQS that triggers the run. (S3 is for the downloaded reports, not the query config.)</p>
+        </div>
+      </div>
+    </div>
+
+    <h2 class="section-title">Saved queries</h2>
+    <div class="table-wrapper">
+      <table>
+        <thead><tr><th style="width:120px">Query ID</th><th>Company</th><th>Search query</th><th style="width:120px">Created</th><th style="width:130px">Status</th></tr></thead>
+        <tbody id="queryTable"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ================= PAGE: SOURCES ================= -->
+<section class="page" id="page-sources">
+  <div class="page-body">
+    <div class="breadcrumbs"><a onclick="nav('dashboard',menuEl('dashboard'))" href="#">Home</a> / Sources</div>
+    <h1 class="page-title">Sources</h1>
+    <p class="page-subtitle">Every report the download agent fetches is frozen in S3 and recorded in the <span class="mono">report_provenance</span> table — the official URL it came from, the S3 key, a content hash, and the date. This is the chain that lets each answer reference the exact source it was extracted from.</p>
+
+    <div class="toolbar">
+      <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center">
+        <input class="form-input" style="max-width:340px" placeholder="Search reports or companies…" oninput="filterSources()" id="srcSearch">
+        <div class="multi-select" id="srcCompanyMS">
+          <button class="ms-toggle" onclick="toggleMS('srcCompanyMS')">Company <span class="ms-count" id="srcMsCount">All</span> <span style="color:var(--muted)">▾</span></button>
+          <div class="ms-panel" id="srcCompanyPanel"></div>
+        </div>
+      </div>
+      <span class="muted" style="font-size:13px">148 reports · partitioned by company in <span class="mono">s3://reportiq-reports/</span></span>
+    </div>
+
+    <div class="table-wrapper" style="max-height:620px">
+      <table>
+        <thead><tr>
+          <th class="sortable" onclick="sortSources(0)">Report <span class="sort-ind" data-col="0"></span></th>
+          <th class="sortable" onclick="sortSources(1)">Company <span class="sort-ind" data-col="1"></span></th>
+          <th>Official source URL</th>
+          <th>S3 key</th>
+          <th class="sortable" style="width:130px" onclick="sortSources(4)">Downloaded <span class="sort-ind" data-col="4"></span></th>
+          <th class="sortable" style="width:120px" onclick="sortSources(5)">RAG status <span class="sort-ind" data-col="5"></span></th>
+        </tr></thead>
+        <tbody id="sourceTable"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ================= PAGE: RUN & ANSWERS ================= -->
+<section class="page" id="page-run">
+  <div class="page-body">
+    <div class="breadcrumbs"><a onclick="nav('dashboard',menuEl('dashboard'))" href="#">Home</a> / Run &amp; answers</div>
+    <h1 class="page-title">Run #0042 — latest batch</h1>
+    <p class="page-subtitle">Each question is answered from the knowledge base, with the official source URL attached. Low-confidence and failed-evaluation answers are routed to the verifier agent, which re-checks the live official site before the final report.</p>
+    <p class="muted mt-8" style="font-size:14px">Report generated <span id="genTimestamp"></span></p>
+
+    <div class="toolbar">
+      <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+        <div class="multi-select" id="runCompanyMS">
+          <button class="ms-toggle" onclick="toggleMS('runCompanyMS')">Company <span class="ms-count" id="runMsCount">All</span> <span style="color:var(--muted)">▾</span></button>
+          <div class="ms-panel" id="runCompanyPanel"></div>
+        </div>
+        <span class="badge high">29 / 29 answered</span>
+        <span class="badge medium">2 sent to verifier</span>
+        <span class="muted" style="font-size:13px">avg eval 0.87</span>
+      </div>
+      <button class="btn" id="exportBtn" onclick="toast('success','Export ready','Final report exported with answers, eval scores and official source URLs.')">Export final report</button>
+    </div>
+
+    <div class="table-wrapper" style="max-height:640px;overflow-y:auto">
+      <table>
+        <thead><tr><th style="width:60px">#</th><th>Question</th><th style="width:150px">Source</th><th style="width:160px">Eval</th></tr></thead>
+        <tbody id="runTable"></tbody>
+      </table>
+    </div>
+    <p class="muted mt-16" style="font-size:13px">Click a row to see the answer, the cited evidence, the official URL it was extracted from, and the per-answer evaluation scores.</p>
+  </div>
+</section>
+
+<!-- ================= PAGE: QUESTIONS ================= -->
+<section class="page" id="page-questions">
+  <div class="page-body">
+    <div class="breadcrumbs"><a onclick="nav('dashboard',menuEl('dashboard'))" href="#">Home</a> / Questions</div>
+    <h1 class="page-title">Question set</h1>
+    <p class="page-subtitle">The questions the answering agent runs against each company's knowledge base. Every answer carries an evaluation and a source-URL reference.</p>
+
+    <div class="toolbar">
+      <input class="form-input" style="max-width:420px" placeholder="Search questions…">
+      <button class="btn" onclick="toast('info','New question','Opens the structured question editor in the full build.')">+ New question</button>
+    </div>
+
+    <div class="table-wrapper">
+      <table>
+        <thead><tr><th style="width:70px">ID</th><th>Question</th><th>Answer type</th><th>Keywords</th><th>Version</th></tr></thead>
+        <tbody id="questionTable"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ================= PAGE: ARCHITECTURE ================= -->
+<section class="page" id="page-arch">
+  <div class="page-body">
+    <div class="breadcrumbs"><a onclick="nav('dashboard',menuEl('dashboard'))" href="#">Home</a> / Architecture</div>
+    <h1 class="page-title">Architecture</h1>
+    <p class="page-subtitle">A multi-agent system on Amazon Bedrock AgentCore. Agents run on AgentCore Runtime and coordinate over A2A; tools (web search, S3, DynamoDB, the knowledge base, the browser) are reached through AgentCore Gateway.</p>
+
+    <div class="arch-wrap">
+      <svg width="100%" viewBox="0 0 680 770" role="img" style="max-width:760px;display:block;margin:0 auto" font-family="Akkurat Pro,Helvetica,Arial,sans-serif">
+        <defs>
+          <marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="#666" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+        </defs>
+        <!-- queries -->
+        <rect x="160" y="30" width="210" height="52" rx="4" fill="#e0e7ef" stroke="#6986b0"/>
+        <text x="265" y="52" text-anchor="middle" font-size="15" font-weight="700" fill="#2c3a52">Web queries</text>
+        <text x="265" y="70" text-anchor="middle" font-size="12" fill="#5a6a85">DynamoDB · query store</text>
+        <line x1="265" y1="82" x2="265" y2="106" stroke="#666" stroke-width="1.2" marker-end="url(#ar)"/>
+        <text x="382" y="98" font-size="12" fill="#666">SQS / EventBridge trigger</text>
+        <!-- orchestrator -->
+        <rect x="160" y="108" width="210" height="56" rx="4" fill="#fdebe6" stroke="#d6002a"/>
+        <text x="265" y="130" text-anchor="middle" font-size="15" font-weight="700" fill="#8c0a22">Orchestrator</text>
+        <text x="265" y="150" text-anchor="middle" font-size="12" fill="#a33012">reads query, writes report</text>
+        <line x1="265" y1="164" x2="265" y2="188" stroke="#666" stroke-width="1.2" marker-end="url(#ar)"/>
+        <!-- search -->
+        <rect x="160" y="190" width="210" height="56" rx="4" fill="#fdebe6" stroke="#d6002a"/>
+        <text x="265" y="212" text-anchor="middle" font-size="15" font-weight="700" fill="#8c0a22">Search agent</text>
+        <text x="265" y="232" text-anchor="middle" font-size="12" fill="#a33012">Gateway web search</text>
+        <line x1="265" y1="246" x2="265" y2="270" stroke="#666" stroke-width="1.2" marker-end="url(#ar)"/>
+        <!-- download -->
+        <rect x="160" y="272" width="210" height="56" rx="4" fill="#fdebe6" stroke="#d6002a"/>
+        <text x="265" y="294" text-anchor="middle" font-size="15" font-weight="700" fill="#8c0a22">Download agent</text>
+        <text x="265" y="314" text-anchor="middle" font-size="12" fill="#a33012">fetch official reports</text>
+        <line x1="265" y1="328" x2="265" y2="352" stroke="#666" stroke-width="1.2" marker-end="url(#ar)"/>
+        <line x1="370" y1="300" x2="428" y2="300" stroke="#666" stroke-width="1.2" marker-end="url(#ar)"/>
+        <!-- indexer -->
+        <rect x="160" y="354" width="210" height="56" rx="4" fill="#fdebe6" stroke="#d6002a"/>
+        <text x="265" y="376" text-anchor="middle" font-size="15" font-weight="700" fill="#8c0a22">Indexer</text>
+        <text x="265" y="396" text-anchor="middle" font-size="12" fill="#a33012">ingest to knowledge base</text>
+        <line x1="265" y1="410" x2="265" y2="434" stroke="#666" stroke-width="1.2" marker-end="url(#ar)"/>
+        <line x1="370" y1="388" x2="428" y2="408" stroke="#666" stroke-width="1.2" marker-end="url(#ar)"/>
+        <!-- answer -->
+        <rect x="160" y="436" width="210" height="56" rx="4" fill="#fdebe6" stroke="#d6002a"/>
+        <text x="265" y="458" text-anchor="middle" font-size="15" font-weight="700" fill="#8c0a22">Answering agent</text>
+        <text x="265" y="478" text-anchor="middle" font-size="12" fill="#a33012">retrieve + cite URL</text>
+        <line x1="428" y1="448" x2="370" y2="464" stroke="#666" stroke-width="1.2" marker-end="url(#ar)"/>
+        <line x1="265" y1="492" x2="265" y2="516" stroke="#666" stroke-width="1.2" marker-end="url(#ar)"/>
+        <text x="382" y="508" font-size="12" fill="#666">low-confidence only</text>
+        <!-- verifier -->
+        <rect x="160" y="518" width="210" height="56" rx="4" fill="#fdebe6" stroke="#d6002a"/>
+        <text x="265" y="540" text-anchor="middle" font-size="15" font-weight="700" fill="#8c0a22">Verifier agent</text>
+        <text x="265" y="560" text-anchor="middle" font-size="12" fill="#a33012">Browser Tool re-check</text>
+        <line x1="265" y1="574" x2="265" y2="598" stroke="#666" stroke-width="1.2" marker-end="url(#ar)"/>
+        <!-- evaluator -->
+        <rect x="160" y="600" width="210" height="56" rx="4" fill="#fff6dd" stroke="#caa000"/>
+        <text x="265" y="622" text-anchor="middle" font-size="15" font-weight="700" fill="#7a5e00">Evaluator</text>
+        <text x="265" y="642" text-anchor="middle" font-size="12" fill="#8a6403">score each answer</text>
+        <line x1="265" y1="656" x2="265" y2="680" stroke="#666" stroke-width="1.2" marker-end="url(#ar)"/>
+        <!-- report -->
+        <rect x="160" y="682" width="210" height="52" rx="4" fill="#eceae4" stroke="#888780"/>
+        <text x="265" y="704" text-anchor="middle" font-size="15" font-weight="700" fill="#2c2c2a">Final report</text>
+        <text x="265" y="722" text-anchor="middle" font-size="12" fill="#5f5e5a">answers + source URLs</text>
+        <!-- stores -->
+        <rect x="430" y="272" width="200" height="56" rx="4" fill="#e1f5ee" stroke="#0f6e56"/>
+        <text x="530" y="294" text-anchor="middle" font-size="14" font-weight="700" fill="#085041">S3 + DynamoDB</text>
+        <text x="530" y="314" text-anchor="middle" font-size="12" fill="#0f6e56">reports + provenance</text>
+        <rect x="430" y="382" width="200" height="80" rx="4" fill="#e1f5ee" stroke="#0f6e56"/>
+        <text x="530" y="414" text-anchor="middle" font-size="14" font-weight="700" fill="#085041">Bedrock Knowledge Base</text>
+        <text x="530" y="434" text-anchor="middle" font-size="12" fill="#0f6e56">vector RAG store</text>
+      </svg>
+      <div class="arch-legend">
+        <span><span class="swatch" style="background:#fdebe6;border:1px solid #d6002a"></span>AgentCore Runtime agents</span>
+        <span><span class="swatch" style="background:#e1f5ee;border:1px solid #0f6e56"></span>AWS data stores</span>
+        <span><span class="swatch" style="background:#fff6dd;border:1px solid #caa000"></span>Evaluation</span>
+        <span><span class="swatch" style="background:#eceae4;border:1px solid #888780"></span>Output</span>
+      </div>
+    </div>
+
+    <h2 class="section-title">Key decisions</h2>
+    <div class="decision">
+      <h4>Direct RAG, or store files in S3 first?</h4>
+      <p>Bedrock Knowledge Bases support three ingestion paths: a <strong>Web Crawler data source</strong> that points straight at official URLs (true "direct RAG", no file in your bucket); a <strong>custom data source</strong> that ingests document bytes inline via the KnowledgeBaseDocuments API (no S3); or an <strong>S3 data source</strong>. Recommendation: <span class="pick">keep S3 as the system of record and ingest from it</span> — the frozen original gives you an audit trail, reproducible re-chunking when you tune the pipeline, and a stable target for the provenance record. Use the Web Crawler path as a fallback for HTML-only pages with no downloadable file.</p>
+    </div>
+    <div class="decision">
+      <h4>Where the web query is saved</h4>
+      <p><span class="pick">DynamoDB</span> <span class="mono">web_queries</span> table — structured, queryable run config the search agent reads directly. A write fires an SQS message (or EventBridge rule) that starts the pipeline. S3 is reserved for report blobs; Parameter Store / AppConfig are viable but keep query, status, and results split across services.</p>
+    </div>
+    <div class="decision">
+      <h4>Quality gate on every answer</h4>
+      <p>The <span class="pick">Evaluator</span> uses AgentCore Evaluations to score each answer on retrieval, groundedness, and completeness. Anything below threshold is routed back to the Verifier agent, which re-checks the live official site with the Browser Tool before the answer is allowed into the final report.</p>
+    </div>
+
+    <h2 class="section-title">Agent roster</h2>
+    <div class="card-container">
+      <div class="card-box"><div class="card-header"><span class="card-title">Orchestrator</span></div><div class="card-content"><div class="card-tags"><span class="category-tag">Runtime</span><span class="tag">A2A</span></div><p class="short-desc">Reads the query from DynamoDB, drives the agents in sequence, assembles the final report.</p></div></div>
+      <div class="card-box"><div class="card-header"><span class="card-title">Search agent</span></div><div class="card-content"><div class="card-tags"><span class="category-tag">Gateway</span><span class="tag">web search</span></div><p class="short-desc">Runs each web query, keeps official-domain hits, ranks them against the search query.</p></div></div>
+      <div class="card-box"><div class="card-header"><span class="card-title">Download agent</span></div><div class="card-content"><div class="card-tags"><span class="category-tag">Gateway</span><span class="tag">S3</span><span class="tag">DynamoDB</span></div><p class="short-desc">Fetches reports to S3 by company, writes provenance (URL, key, hash, date).</p></div></div>
+      <div class="card-box"><div class="card-header"><span class="card-title">Indexer</span></div><div class="card-content"><div class="card-tags"><span class="category-tag">Bedrock KB</span></div><p class="short-desc">Triggers ingestion from S3; uses direct ingest for HTML-only pages.</p></div></div>
+      <div class="card-box"><div class="card-header"><span class="card-title">Answering agent</span></div><div class="card-content"><div class="card-tags"><span class="category-tag">Bedrock KB</span><span class="tag">retrieval</span></div><p class="short-desc">Answers each question from the KB and attaches the official source URL + S3 key.</p></div></div>
+      <div class="card-box"><div class="card-header"><span class="card-title">Verifier agent</span></div><div class="card-content"><div class="card-tags"><span class="category-tag">Browser Tool</span></div><p class="short-desc">Re-checks low-confidence and failed answers against the live official website.</p></div></div>
+      <div class="card-box"><div class="card-header"><span class="card-title">Evaluator</span></div><div class="card-content"><div class="card-tags"><span class="category-tag">Evaluations</span></div><p class="short-desc">Scores every answer; routes failures back to the verifier before export.</p></div></div>
+    </div>
+  </div>
+</section>
+
+</div><!-- /main-wrapper -->
+
+<!-- ================= FOOTER ================= -->
+<footer class="footer">
+  <div>
+    <div class="quick-link">Product</div>
+    <span class="link-text-f" onclick="nav('queries',menuEl('queries'))">Web queries</span>
+    <span class="link-text-f" onclick="nav('sources',menuEl('sources'))">Sources</span>
+    <span class="link-text-f" onclick="nav('run',menuEl('run'))">Run &amp; answers</span>
+    <span class="link-text-f" onclick="nav('arch',menuEl('arch'))">Architecture</span>
+  </div>
+  <div class="footer-brand">Report <span class="red">IQ</span></div>
+  <div class="footer-note">UI preview · backend wiring to AgentCore comes next</div>
+</footer>
+
+<div class="notifications" id="toasts"></div>
+
+<script>
+/* ================= Navigation ================= */
+function nav(id, el){
+  document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active')});
+  document.getElementById('page-'+id).classList.add('active');
+  document.querySelectorAll('.menu-item').forEach(function(m){m.classList.remove('active')});
+  (el || menuEl(id)).classList.add('active');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function menuEl(id){ return document.querySelector('.menu-item[data-nav="'+id+'"]'); }
+
+/* ================= Data ================= */
+var QUESTIONS = [
+  'Does the group-level tax strategy address transfer pricing using the arm\u2019s length principle?',
+  'Is the tax strategy approved and owned at board level?',
+  'Does the company publish its total tax contribution by region?',
+  'Are uncertain tax positions disclosed with provisions?',
+  'Does the policy commit to the OECD BEPS framework?',
+  'Is there a stated approach to tax havens and low-tax jurisdictions?',
+  'Does the company disclose effective tax rate reconciliation?',
+  'Is country-by-country reporting referenced or published?',
+  'Does the strategy describe the tax governance and risk framework?',
+  'Are relationships with tax authorities described as cooperative/transparent?'
+];
+var PATTERN = ['h','h','m','h','l','m','h','m','h','l'];
+var PAGES   = ['p.4','p.7','p.12','p.9','\u2014','p.3','p.18','p.15','p.6','\u2014'];
+
+var SOURCES = [
+  ['Tax Strategy & Governance 2025','Nestl\u00e9 S.A.','https://www.nestle.com/sites/default/files/tax-strategy-2025.pdf','nestle-sa/2025-06-11/tax-strategy-2025.pdf','11 Jun 2026','Indexed'],
+  ['Annual Review 2025','Nestl\u00e9 S.A.','https://www.nestle.com/investors/annual-report','nestle-sa/2025-06-11/annual-review-2025.pdf','11 Jun 2026','Indexed'],
+  ['Tax Transparency Report 2025','Unilever PLC','https://www.unilever.com/files/tax-transparency-2025.pdf','unilever-plc/2026-06-11/tax-transparency-2025.pdf','11 Jun 2026','Indexed'],
+  ['ESG & Governance Report 2025','Danone S.A.','https://www.danone.com/content/esg-governance-2025.pdf','danone-sa/2026-06-10/esg-governance-2025.pdf','10 Jun 2026','Indexing'],
+  ['Group Tax Policy 2024','Nestl\u00e9 S.A.','https://www.nestle-group.com/policies/group-tax-policy','nestle-sa/2025-06-11/group-tax-policy-2024.pdf','11 Jun 2026','Indexed']
+];
+
+var QUERIES = [
+  ['Q-1042','Nestl\u00e9 S.A.','Check if group-level tax strategy and governance policy addresses transfer pricing using the arm\u2019s length principle.','11 Jun 2026','Complete'],
+  ['Q-1041','Unilever PLC','Assess whether the tax transparency report commits to OECD BEPS and country-by-country reporting.','11 Jun 2026','Complete'],
+  ['Q-1040','Danone S.A.','Determine if the ESG report discloses total tax contribution by region.','10 Jun 2026','Indexing']
+];
+
+/* ================= Web query builder ================= */
+var WQ_SEED = [
+  'site:nestle.com Group-level tax strategy and governance policy',
+  'site:nestle-group.com Group-level tax strategy and governance policy'
+];
+function renderWebQueries(values){
+  var host = document.getElementById('webQueryList'); host.innerHTML='';
+  (values && values.length ? values : ['']).forEach(function(v){ addWebQuery(v, true); });
+  syncJson();
+}
+function addWebQuery(val, silent){
+  var host = document.getElementById('webQueryList');
+  var n = host.children.length + 1;
+  var row = document.createElement('div'); row.className='wq-row';
+  row.innerHTML = '<input class="form-input" placeholder="Web query '+n+' — e.g. site:company.com policy" oninput="syncJson()" value="'+(typeof val==='string'?esc(val):'')+'">'+
+    '<button class="wq-del" title="Remove" onclick="this.parentNode.remove();renumberWQ();syncJson()">\u2715</button>';
+  host.appendChild(row);
+  renumberWQ();
+  if(!silent) syncJson();
+}
+function renumberWQ(){
+  var rows = document.querySelectorAll('#webQueryList .wq-row');
+  rows.forEach(function(r,i){ r.querySelector('input').setAttribute('placeholder','Web query '+(i+1)+' — e.g. site:company.com policy'); });
+}
+function getWebQueries(){
+  return Array.prototype.map.call(document.querySelectorAll('#webQueryList .wq-row input'), function(i){return i.value;});
+}
+
+/* ================= JSON preview ================= */
+function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function syncJson(){
+  var wq = getWebQueries();
+  var lines = [];
+  wq.forEach(function(v,i){ lines.push('  <span class="k">"web_query'+(i+1)+'"</span><span class="p">:</span> <span class="s">"'+esc(v)+'"</span>,'); });
+  lines.push('  <span class="k">"search_query"</span><span class="p">:</span> <span class="s">"'+esc(document.getElementById('q_search').value)+'"</span>,');
+  lines.push('  <span class="k">"company"</span><span class="p">:</span> <span class="s">"'+esc(document.getElementById('q_company').value)+'"</span>');
+  document.getElementById('jsonPreview').innerHTML = '{\n'+lines.join('\n')+'\n}';
+}
+function saveQuery(){
+  var company = document.getElementById('q_company').value.trim();
+  var search  = document.getElementById('q_search').value.trim();
+  if(!company || !search){ toast('warning','Add the basics','A company and a search query are required before saving.'); return; }
+  var id = 'Q-'+(1043 + QUERY_SEQ++);
+  QUERIES.unshift([id, company, search, todayStr(), 'Queued']);
+  renderQueries(); rebuildCompanyFilters();
+  var willRun = document.getElementById('q_run').value.indexOf('Yes') === 0;
+  toast('success','Saved to web_queries', id+' written to DynamoDB'+(willRun?' \u00b7 SQS message sent, run starting.':' \u00b7 saved without triggering a run.'));
+}
+var QUERY_SEQ = 0;
+
+/* ================= JSON file upload ================= */
+function loadPastedJson(){
+  var raw = (document.getElementById('jsonPaste').value || '').trim();
+  if(!raw){ toast('warning','Nothing pasted','Paste a query object or an array of them into the box first.'); return; }
+  var data;
+  try{ data = JSON.parse(raw); }
+  catch(err){ toast('error','Could not parse JSON','That isn\u2019t valid JSON \u2014 '+err.message); return; }
+  var items = Array.isArray(data) ? data : [data];
+  var added = 0;
+  items.forEach(function(obj){ if(ingestQueryObject(obj)) added++; });
+  if(added){
+    renderQueries(); rebuildCompanyFilters();
+    toast('success','Loaded into web_queries', added+' quer'+(added>1?'ies':'y')+' written to DynamoDB.');
+    if(items.length===1) loadIntoForm(items[0]);
+    document.getElementById('jsonPaste').value='';
+  } else {
+    toast('warning','Nothing to add','No usable query objects found. Each item needs at least a search_query.');
+  }
+}
+function handleJsonDrop(e){
+  e.preventDefault();
+  document.getElementById('jsonDrop').classList.remove('drag');
+  if(e.dataTransfer.files && e.dataTransfer.files[0]) handleJsonFile(e.dataTransfer.files[0]);
+}
+function handleJsonFile(file){
+  if(!file){ return; }
+  if(!/\.json$/i.test(file.name) && file.type.indexOf('json')<0){ toast('error','Wrong file type','Upload a .json file containing a query object or an array of them.'); return; }
+  var reader = new FileReader();
+  reader.onload = function(ev){
+    var data;
+    try{ data = JSON.parse(ev.target.result); }
+    catch(err){ toast('error','Could not parse JSON',file.name+' is not valid JSON — '+err.message); return; }
+    var items = Array.isArray(data) ? data : [data];
+    var added = 0;
+    items.forEach(function(obj){ if(ingestQueryObject(obj)) added++; });
+    if(added){
+      renderQueries(); rebuildCompanyFilters();
+      toast('success','Loaded into web_queries', added+' quer'+(added>1?'ies':'y')+' from '+file.name+' written to DynamoDB.');
+      if(items.length===1) loadIntoForm(items[0]);
+    } else {
+      toast('warning','Nothing to add','No usable query objects found. Each item needs at least a search_query.');
+    }
+  };
+  reader.readAsText(file);
+  document.getElementById('jsonFile').value='';
+}
+function ingestQueryObject(obj){
+  if(!obj || typeof obj!=='object') return false;
+  var search = obj.search_query || obj.searchQuery || '';
+  if(!search) return false;
+  var company = obj.company || 'Unspecified';
+  var id = 'Q-'+(1043 + QUERY_SEQ++);
+  QUERIES.unshift([id, company, search, todayStr(), 'Queued']);
+  return true;
+}
+function loadIntoForm(obj){
+  if(obj.company) document.getElementById('q_company').value = obj.company;
+  if(obj.search_query) document.getElementById('q_search').value = obj.search_query;
+  var wq = Object.keys(obj).filter(function(k){return /^web_query\d+$/i.test(k);})
+    .sort(function(a,b){return parseInt(a.replace(/\D/g,''))-parseInt(b.replace(/\D/g,''));})
+    .map(function(k){return obj[k];}).filter(function(v){return v;});
+  renderWebQueries(wq.length?wq:['']);
+}
+function todayStr(){
+  var d = new Date();
+  return d.getDate()+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()]+' '+d.getFullYear();
+}
+
+/* ================= Renderers ================= */
+function renderQueries(){
+  var tb = document.getElementById('queryTable'); tb.innerHTML='';
+  QUERIES.forEach(function(q){
+    var cls = q[4]==='Complete'?'high':q[4]==='Indexing'?'running':q[4]==='Queued'?'pending':'pending';
+    var tr = document.createElement('tr');
+    tr.innerHTML = '<td class="mono">'+q[0]+'</td><td><strong>'+q[1]+'</strong></td>'+
+      '<td class="muted">'+q[2]+'</td><td class="muted">'+q[3]+'</td>'+
+      '<td><span class="badge '+cls+'">'+q[4]+'</span></td>';
+    tb.appendChild(tr);
+  });
+}
+/* ================= Sources: filter + sort ================= */
+var srcSort = {col:-1, dir:1};
+var srcCompanyFilter = [];   // empty = all
+function renderSources(){
+  var tb = document.getElementById('sourceTable'); tb.innerHTML='';
+  var q = (document.getElementById('srcSearch')||{}).value || '';
+  var f = q.toLowerCase();
+  var rows = SOURCES.filter(function(s){
+    var matchText = !f || s[0].toLowerCase().indexOf(f)>-1 || s[1].toLowerCase().indexOf(f)>-1;
+    var matchCo = !srcCompanyFilter.length || srcCompanyFilter.indexOf(s[1])>-1;
+    return matchText && matchCo;
+  });
+  if(srcSort.col>=0){
+    rows = rows.slice().sort(function(a,b){
+      var x=(a[srcSort.col]||'').toString().toLowerCase(), y=(b[srcSort.col]||'').toString().toLowerCase();
+      return x<y?-srcSort.dir:x>y?srcSort.dir:0;
+    });
+  }
+  if(!rows.length){ tb.innerHTML='<tr><td colspan="6" class="muted" style="padding:24px">No reports match the current filters.</td></tr>'; return; }
+  rows.forEach(function(s){
+    var ragCls = s[5]==='Indexed'?'indexed':s[5]==='Indexing'?'running':'pending';
+    var tr = document.createElement('tr');
+    tr.innerHTML = '<td><strong>'+s[0]+'</strong></td><td>'+s[1]+'</td>'+
+      '<td><a class="url-ref" href="'+s[2]+'" target="_blank" rel="noopener">'+shortUrl(s[2])+' \u2197</a></td>'+
+      '<td class="mono muted">'+s[3]+'</td><td class="muted">'+s[4]+'</td>'+
+      '<td><span class="badge '+ragCls+'">'+s[5]+'</span></td>';
+    tb.appendChild(tr);
+  });
+}
+function filterSources(){ renderSources(); }
+function sortSources(col){
+  if(srcSort.col===col){ srcSort.dir*=-1; } else { srcSort.col=col; srcSort.dir=1; }
+  document.querySelectorAll('#page-sources .sort-ind').forEach(function(s){ s.textContent=''; });
+  var ind = document.querySelector('#page-sources .sort-ind[data-col="'+col+'"]');
+  if(ind) ind.textContent = srcSort.dir>0?'\u25b2':'\u25bc';
+  renderSources();
+}
+function shortUrl(u){ return u.replace(/^https?:\/\//,'').slice(0,38)+(u.length>45?'\u2026':''); }
+
+/* ================= Multi-select dropdowns ================= */
+function toggleMS(id){
+  var panel = document.querySelector('#'+id+' .ms-panel');
+  var wasOpen = panel.classList.contains('open');
+  document.querySelectorAll('.ms-panel').forEach(function(p){p.classList.remove('open');});
+  if(!wasOpen) panel.classList.add('open');
+}
+document.addEventListener('click', function(e){
+  if(!e.target.closest('.multi-select')) document.querySelectorAll('.ms-panel').forEach(function(p){p.classList.remove('open');});
+});
+function companyList(){
+  var set={}; SOURCES.forEach(function(s){set[s[1]]=1;}); QUERIES.forEach(function(q){set[q[1]]=1;});
+  return Object.keys(set).sort();
+}
+function buildMS(panelId, selected, onchange){
+  var panel = document.getElementById(panelId); panel.innerHTML='';
+  companyList().forEach(function(co){
+    var lab = document.createElement('label'); lab.className='ms-opt';
+    var checked = selected.indexOf(co)>-1 ? 'checked':'';
+    lab.innerHTML = '<input type="checkbox" value="'+esc(co)+'" '+checked+'> '+co;
+    lab.querySelector('input').addEventListener('change', onchange);
+    panel.appendChild(lab);
+  });
+  var act = document.createElement('div'); act.className='ms-actions';
+  act.innerHTML = '<button class="btn-link" data-act="clear">Clear</button>';
+  act.querySelector('button').addEventListener('click', function(){
+    panel.querySelectorAll('input').forEach(function(i){i.checked=false;}); onchange();
+  });
+  panel.appendChild(act);
+}
+function readMS(panelId){
+  return Array.prototype.filter.call(document.querySelectorAll('#'+panelId+' input'), function(i){return i.checked;}).map(function(i){return i.value;});
+}
+function rebuildCompanyFilters(){
+  buildMS('srcCompanyPanel', srcCompanyFilter, function(){
+    srcCompanyFilter = readMS('srcCompanyPanel');
+    document.getElementById('srcMsCount').textContent = srcCompanyFilter.length?srcCompanyFilter.length+' selected':'All';
+    renderSources();
+  });
+  buildMS('runCompanyPanel', runCompanyFilter, function(){
+    runCompanyFilter = readMS('runCompanyPanel');
+    document.getElementById('runMsCount').textContent = runCompanyFilter.length?runCompanyFilter.length+' selected':'All';
+    buildRunTable();
+  });
+}
+
+function renderQuestions(){
+  var tb = document.getElementById('questionTable'); tb.innerHTML='';
+  QUESTIONS.forEach(function(q,i){
+    var type = (i%4===2) ? 'Checklist' : (i%4===0) ? 'Yes / No + evidence' : (i%4===1) ? 'Yes / No + evidence' : 'Free text + evidence';
+    var tr = document.createElement('tr');
+    tr.innerHTML = '<td class="mono">Q.'+(i+1)+'</td><td><strong>'+q+'</strong></td>'+
+      '<td><span class="category-tag">'+type+'</span></td>'+
+      '<td class="muted">'+(8+(i*3)%7)+' keywords</td>'+
+      '<td class="muted">v'+(1+(i%3))+'</td>';
+    tb.appendChild(tr);
+  });
+}
+
+/* ================= Run table + detail ================= */
+var runCompanyFilter = [];   // empty = all
+function runCompanyFor(i){ return SOURCES[i%5][1]; }
+function buildRunTable(){
+  var tb = document.getElementById('runTable'); tb.innerHTML='';
+  var any = false;
+  QUESTIONS.forEach(function(q,i){
+    if(runCompanyFilter.length && runCompanyFilter.indexOf(runCompanyFor(i))<0) return;
+    any = true;
+    var kind = PATTERN[i];
+    var badge = kind==='h' ? '<span class="badge high">High \u00b7 0.9'+(2+i%4)+'</span>'
+              : kind==='m' ? '<span class="badge medium">Med \u00b7 0.7'+(1+i%5)+'</span>'
+              : '<span class="badge low">Low \u00b7 verifier</span>';
+    var src = kind==='l' ? '<span class="muted">live re-check</span>'
+            : '<a class="url-ref" href="'+SOURCES[i%5][2]+'" target="_blank" rel="noopener">official \u2197</a>';
+    var tr = document.createElement('tr');
+    tr.id = 'qrow-'+i; tr.className='expandable';
+    tr.onclick = (function(idx){ return function(){ toggleDetail(idx); }; })(i);
+    tr.innerHTML = '<td class="mono">Q.'+(i+1)+'</td><td><strong>'+q+'</strong><div class="muted" style="font-size:12px;margin-top:3px">'+runCompanyFor(i)+'</div></td><td>'+src+'</td><td>'+badge+'</td>';
+    tb.appendChild(tr);
+    var dr = document.createElement('tr');
+    dr.className='detail-row hidden'; dr.id='qdetail-'+i;
+    dr.innerHTML = '<td colspan="4"></td>';
+    tb.appendChild(dr);
+  });
+  if(!any) tb.innerHTML='<tr><td colspan="4" class="muted" style="padding:24px">No answers match the selected companies.</td></tr>';
+}
+function detailHTML(i){
+  var kind = PATTERN[i];
+  var src = SOURCES[i%5];
+  if(kind==='l'){
+    return '<div class="detail-panel">'+
+      '<p class="answer-text"><strong>Below the evaluation threshold.</strong> Retrieval found no qualifying passage in the indexed reports. This answer was routed to the verifier agent to re-check the live official site before it can enter the final report.</p>'+
+      '<div class="score-grid">'+
+      '<span class="score-label">Retrieval</span><div class="score-bar"><div class="score-fill fail" style="width:31%"></div></div><span class="score-val">0.31</span>'+
+      '<span class="score-label">Groundedness</span><div class="score-bar"><div class="score-fill fail" style="width:28%"></div></div><span class="score-val">0.28</span>'+
+      '<span class="score-label">Completeness</span><div class="score-bar"><div class="score-fill fail" style="width:22%"></div></div><span class="score-val">0.22</span>'+
+      '</div>'+
+      '<div class="detail-actions">'+
+      '<button class="btn btn-sm" onclick="event.stopPropagation();toast(\'info\',\'Verifier running\',\'Browser Tool opening the official site to re-check this question.\')">Send to verifier now</button>'+
+      '<button class="btn btn-sm" onclick="event.stopPropagation();toast(\'success\',\'Marked\',\'Q.'+(i+1)+' marked as Not reported, saved with your name and date.\')">Mark \u201cNot reported\u201d</button>'+
+      '</div></div>';
+  }
+  var sc = kind==='h' ? [91,95,92] : [74,69,66];
+  return '<div class="detail-panel">'+
+    '<p class="answer-text">The group-level tax strategy states transfer pricing follows the arm\u2019s length principle in line with OECD guidelines, with intra-group transactions priced as between independent parties. Assessed as <strong>addressed</strong>.</p>'+
+    '<div class="evidence-box">\u201cThe Group applies the arm\u2019s length principle to all intra-group transactions, consistent with OECD Transfer Pricing Guidelines\u2026\u201d'+
+    '<div class="ev-source">'+src[0]+' \u00b7 '+PAGES[i]+' \u00b7 <a class="url-ref" href="'+src[2]+'" target="_blank" rel="noopener">'+shortUrl(src[2])+' \u2197</a></div></div>'+
+    '<div class="score-grid">'+
+    '<span class="score-label">Retrieval</span><div class="score-bar"><div class="score-fill" style="width:'+sc[0]+'%"></div></div><span class="score-val">0.'+sc[0]+'</span>'+
+    '<span class="score-label">Groundedness</span><div class="score-bar"><div class="score-fill" style="width:'+sc[1]+'%"></div></div><span class="score-val">0.'+sc[1]+'</span>'+
+    '<span class="score-label">Completeness</span><div class="score-bar"><div class="score-fill" style="width:'+sc[2]+'%"></div></div><span class="score-val">0.'+sc[2]+'</span>'+
+    '</div>'+
+    '<div class="detail-actions">'+
+    '<button class="btn btn-sm" onclick="event.stopPropagation();toast(\'success\',\'Confirmed\',\'Q.'+(i+1)+' confirmed, saved with your name and date.\')">Confirm</button>'+
+    '<button class="btn btn-sm" onclick="event.stopPropagation();toast(\'info\',\'Source\',\'Opening the official report at '+PAGES[i]+'.\')">Open source</button>'+
+    '</div></div>';
+}
+function toggleDetail(i){
+  var d = document.getElementById('qdetail-'+i);
+  var open = !d.classList.contains('hidden');
+  document.querySelectorAll('.detail-row').forEach(function(r){r.classList.add('hidden')});
+  document.querySelectorAll('#runTable tr').forEach(function(r){r.classList.remove('highlighRow')});
+  if(!open){
+    d.cells[0].innerHTML = detailHTML(i);
+    d.classList.remove('hidden');
+    document.getElementById('qrow-'+i).classList.add('highlighRow');
+  }
+}
+
+/* ================= Toasts ================= */
+function toast(type, title, msg){
+  var host = document.getElementById('toasts');
+  var t = document.createElement('div');
+  t.className = 'notification-toast '+type;
+  t.innerHTML = '<div class="notification-toast-details">'+
+    '<div class="notification-toast-title">'+title+'</div>'+
+    '<div class="notification-toast-description">'+msg+'</div></div>'+
+    '<button class="notification-toast-close" onclick="this.parentNode.remove()">\u2715</button>';
+  host.appendChild(t);
+  setTimeout(function(){ if(t.parentNode) t.remove(); }, 5200);
+}
+
+/* ================= Init ================= */
+renderWebQueries(WQ_SEED);
+renderQueries();
+rebuildCompanyFilters();
+renderSources();
+renderQuestions();
+buildRunTable();
+document.getElementById('genTimestamp').textContent = new Date().toLocaleString('en-GB',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+</script>
+</body>
+</html>

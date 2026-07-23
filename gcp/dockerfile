@@ -2,10 +2,10 @@
 FROM public.ecr.aws/lambda/python:3.12
 
 # Copy requirements first so Docker can cache this layer when only code changes
-COPY requirement.txt ${LAMBDA_TASK_ROOT}/requirements.txt
+COPY requirements.txt ${LAMBDA_TASK_ROOT}/requirement.txt
 
 # Install dependencies into the Lambda task root
-RUN pip install --no-cache-dir -r requirements.txt --target "${LAMBDA_TASK_ROOT}"
+RUN pip install --no-cache-dir -r ${LAMBDA_TASK_ROOT}/requirement.txt --target "${LAMBDA_TASK_ROOT}"
 
 # Copy function code
 COPY lambda.py ${LAMBDA_TASK_ROOT}/lambda.py

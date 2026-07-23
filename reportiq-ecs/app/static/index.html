@@ -226,7 +226,23 @@ tr.detail-row td{padding:0}
 .rp-cat-card:hover{border-color:var(--red)}
 .rp-cat-card .rp-cat-name{font-size:16px;font-weight:700;margin-bottom:6px}
 .rp-cat-card .rp-cat-count{font-size:13px;color:var(--muted)}
-.rp-answer-text{font-size:14px;line-height:1.6;margin-bottom:10px}
+.rp-answer-text{font-size:15px;line-height:1.65;margin-bottom:14px;max-width:980px}
+.rp-answer-value{font-size:18px;font-weight:700;line-height:1.45;margin-bottom:8px}
+.rp-answer-field{border:1px solid var(--border);background:#fff;padding:16px 18px;margin-bottom:12px;max-width:980px}
+.rp-answer-field-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.rp-answer-field-title{font-size:14px;font-weight:700}
+.rp-answer-field-tags{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.rp-answer-justification{font-size:14px;line-height:1.65;color:#272727}
+.rp-review-pill{display:inline-flex;align-items:center;border-radius:14px;padding:3px 10px;font-size:11px;font-weight:700;white-space:nowrap}
+.rp-review-pill.ok{background:#e7f8e9;color:#147327;border:1px solid #2bde3f}
+.rp-review-pill.review{background:#fff6dd;color:#7a5800;border:1px solid var(--warn)}
+.rp-metadata{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px 18px;background:var(--light);border:1px solid var(--border);padding:14px 16px;margin:12px 0;max-width:980px}
+.rp-meta-item{min-width:0}
+.rp-meta-label{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:4px}
+.rp-meta-value{font-size:13px;line-height:1.45;overflow-wrap:anywhere}
+.rp-generic-grid{display:grid;grid-template-columns:minmax(150px,220px) minmax(0,1fr);gap:8px 16px;max-width:980px;margin-bottom:14px}
+.rp-generic-key{font-size:12px;color:var(--muted);font-weight:700}
+.rp-generic-value{font-size:14px;line-height:1.5;overflow-wrap:anywhere}
 .rp-citation-box{background:#f8f9fb;border-left:3px solid var(--red);padding:12px 16px;margin-top:8px;font-size:13px}
 .rp-citation-quote{font-style:italic;color:#333;line-height:1.6;margin-bottom:6px}
 .rp-citation-meta{font-size:11px;color:var(--muted);display:flex;gap:14px;flex-wrap:wrap}
@@ -234,10 +250,31 @@ tr.detail-row td{padding:0}
 .conf-medium{color:#7a5800;font-weight:700}
 .conf-low{color:#a33012;font-weight:700}
 .conf-insufficient{color:var(--muted);font-weight:700}
+.rp-confidence-badge{display:inline-flex;align-items:center;border-radius:14px;padding:4px 12px;font-size:12px;font-weight:700;white-space:nowrap}
+.rp-confidence-badge.high{background:#e7f8e9;color:#147327;border:1px solid #2bde3f}
+.rp-confidence-badge.medium{background:#fff6dd;color:#7a5800;border:1px solid var(--warn)}
+.rp-confidence-badge.low{background:#fdebe6;color:#a33012;border:1px solid var(--err)}
+.rp-confidence-badge.insufficient_evidence{background:var(--light);color:var(--muted);border:1px solid var(--border)}
+.rp-score-grid{display:grid;grid-template-columns:150px minmax(160px,300px) 60px;gap:8px 12px;align-items:center;margin:16px 0;max-width:540px}
+.rp-score-label{font-size:13px;color:var(--muted)}
+.rp-score-bar{height:7px;background:var(--highlight);overflow:hidden}
+.rp-score-fill{height:100%;background:var(--tagblue)}
+.rp-score-fill.high{background:#2b9b43}
+.rp-score-fill.medium{background:#d6a900}
+.rp-score-fill.low{background:var(--err)}
+.rp-score-value{font-family:var(--mono);font-size:13px;font-weight:700;text-align:right}
+.rp-confidence-note{font-size:13px;line-height:1.55;color:var(--muted);max-width:980px;margin-top:8px}
+.rp-section-label{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:18px 0 8px}
 .rp-run-btn{display:inline-flex;align-items:center;gap:6px;background:var(--red);color:#fff;border:none;padding:8px 18px;font-size:14px;font-weight:700;cursor:pointer;height:36px}
 .rp-run-btn:hover{background:var(--red-dark)}
 .rp-run-btn:disabled{opacity:.5;cursor:not-allowed}
 .rp-empty{padding:60px 20px;text-align:center;color:var(--muted);font-size:14px}
+@media(max-width:640px){
+  .rp-generic-grid{grid-template-columns:1fr;gap:3px}
+  .rp-generic-value{margin-bottom:8px}
+  .rp-score-grid{grid-template-columns:1fr 54px}
+  .rp-score-label{grid-column:1/-1}
+}
 </style>
 </head>
 <body>
@@ -579,12 +616,13 @@ tr.detail-row td{padding:0}
               <th style="width:56px">#</th>
               <th>Question</th>
               <th style="width:120px">Source</th>
-              <th style="width:130px">Confidence</th>
+              <th style="width:170px">Confidence score</th>
             </tr>
           </thead>
           <tbody id="rpQABody"></tbody>
         </table>
       </div>
+      <p class="muted mt-16" style="font-size:13px">Click a row to see the structured answer, justification, cited evidence, source details, and confidence validation.</p>
     </div>
   </div>
 </section>
@@ -1917,7 +1955,8 @@ async function rpLoadQA(slug, mdFile, category) {
     {label: category},
   ]);
   document.getElementById('rpPageTitle').innerHTML = escH(category);
-  document.getElementById('rpPageSubtitle').textContent = rpState.currentCompany;
+  document.getElementById('rpPageSubtitle').textContent =
+    rpState.currentCompany + ' — answers, source evidence, and confidence validation.';
   document.getElementById('rpQASearch').value = '';
   document.getElementById('rpConfFilter').value = '';
 
@@ -1962,10 +2001,246 @@ function rpConfClass(conf) {
   return 'conf-' + (conf || 'insufficient');
 }
 
+function rpNormalizeScore(raw) {
+  if (raw === null || raw === undefined || raw === '') return null;
+  let score = Number(String(raw).replace('%', '').trim());
+  if (!Number.isFinite(score)) return null;
+  if (score >= 0 && score <= 1) score *= 100;
+  return Math.max(0, Math.min(100, score));
+}
+
+function rpFormatScore(score) {
+  if (score === null || score === undefined) return '';
+  const rounded = Math.round(score * 10) / 10;
+  return (Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toFixed(1)) + '%';
+}
+
+function rpAnswerFields(answer) {
+  if (!answer || typeof answer !== 'object') return [];
+  if (Array.isArray(answer.extracted_fields)) {
+    return answer.extracted_fields.filter(field => field && typeof field === 'object');
+  }
+  if (answer.extracted_fields && typeof answer.extracted_fields === 'object') {
+    return [answer.extracted_fields];
+  }
+  return [];
+}
+
+function rpPrimaryField(result) {
+  const fields = rpAnswerFields(result && result.answer);
+  if (!fields.length) return null;
+  return fields.find(field =>
+    String(field.question_id || '').toLowerCase() ===
+    String(result.question_id || '').toLowerCase()
+  ) || fields[0];
+}
+
+function rpAnswerScore(result) {
+  const field = rpPrimaryField(result);
+  const fieldScore = rpNormalizeScore(field && field.confidence_score);
+  if (fieldScore !== null) return fieldScore;
+  return rpNormalizeScore(result && result.answer && result.answer.confidence_score);
+}
+
+function rpHumanLabel(key) {
+  return String(key || '')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, char => char.toUpperCase());
+}
+
+function rpScalarText(value) {
+  if (value === null || value === undefined || value === '') return 'Not provided';
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  if (Array.isArray(value)) {
+    const scalarValues = value.filter(item => item === null || typeof item !== 'object');
+    return scalarValues.length === value.length
+      ? scalarValues.map(rpScalarText).join(', ')
+      : value.length + ' item' + (value.length === 1 ? '' : 's');
+  }
+  return String(value);
+}
+
+function rpRenderMetadata(metadata) {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return '';
+  const entries = Object.entries(metadata).filter(([, value]) =>
+    value !== null && value !== undefined && value !== ''
+  );
+  if (!entries.length) return '';
+  return '<div class="rp-section-label">Document details</div>'
+    + '<div class="rp-metadata">'
+    + entries.map(([key, value]) =>
+      '<div class="rp-meta-item">'
+        + '<div class="rp-meta-label">' + escH(rpHumanLabel(key)) + '</div>'
+        + '<div class="rp-meta-value">' + escH(rpScalarText(value)) + '</div>'
+      + '</div>'
+    ).join('')
+    + '</div>';
+}
+
+function rpRenderGenericObject(obj, excludedKeys) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return '';
+  const excluded = new Set(excludedKeys || []);
+  const rows = [];
+
+  function appendRows(value, prefix, depth) {
+    if (value === null || typeof value !== 'object') {
+      rows.push([prefix, rpScalarText(value)]);
+      return;
+    }
+    if (depth > 4) {
+      rows.push([
+        prefix,
+        Array.isArray(value)
+          ? value.length + ' item' + (value.length === 1 ? '' : 's')
+          : 'Additional structured details'
+      ]);
+      return;
+    }
+    if (Array.isArray(value)) {
+      if (!value.length) rows.push([prefix, 'None']);
+      else value.forEach((item, index) => appendRows(item, prefix + ' ' + (index + 1), depth + 1));
+      return;
+    }
+    const entries = Object.entries(value);
+    if (!entries.length) rows.push([prefix, 'None']);
+    entries.forEach(([key, child]) => {
+      const label = prefix ? prefix + ' · ' + rpHumanLabel(key) : rpHumanLabel(key);
+      appendRows(child, label, depth + 1);
+    });
+  }
+
+  Object.entries(obj).forEach(([key, value]) => {
+    if (!excluded.has(key)) appendRows(value, rpHumanLabel(key), 0);
+  });
+  if (!rows.length) return '';
+  return '<div class="rp-generic-grid">'
+    + rows.map(([key, value]) =>
+      '<div class="rp-generic-key">' + escH(key) + '</div>'
+      + '<div class="rp-generic-value">' + escH(value) + '</div>'
+    ).join('')
+    + '</div>';
+}
+
+function rpRenderExtractedFields(result) {
+  const fields = rpAnswerFields(result.answer);
+  if (!fields.length) return '';
+
+  return fields.map((field, index) => {
+    const score = rpNormalizeScore(field.confidence_score);
+    const title = field.question_label || (fields.length > 1 ? 'Extracted field ' + (index + 1) : 'Answer');
+    const criterion = field.met_criteria;
+    const hasReviewStatus = Object.prototype.hasOwnProperty.call(field, 'needs_review');
+    const needsReview = field.needs_review === true
+      || String(field.needs_review || '').toLowerCase() === 'true';
+    const source = field.source && typeof field.source === 'object' ? field.source : null;
+    const evidence = source && (source.evidence_snippet || source.quote || source.excerpt);
+    const page = source && (source.page_number || source.page || source.pages);
+    const generic = rpRenderGenericObject(field, [
+      'question_id', 'question_label', 'confidence_score', 'justification',
+      'met_criteria', 'needs_review', 'source'
+    ]);
+
+    return '<div class="rp-answer-field">'
+      + '<div class="rp-answer-field-head">'
+        + '<div>'
+          + '<div class="rp-answer-field-title">' + escH(title) + '</div>'
+          + (criterion !== null && criterion !== undefined && criterion !== ''
+            ? '<div class="rp-answer-value">' + escH(rpScalarText(criterion)) + '</div>'
+            : '')
+        + '</div>'
+        + '<div class="rp-answer-field-tags">'
+          + (score !== null
+            ? '<span class="rp-confidence-badge ' + escH(result.confidence || 'insufficient_evidence') + '">'
+              + rpFormatScore(score) + '</span>'
+            : '')
+          + (hasReviewStatus
+            ? '<span class="rp-review-pill ' + (needsReview ? 'review' : 'ok') + '">'
+              + (needsReview ? 'Needs review' : 'Review not required') + '</span>'
+            : '')
+        + '</div>'
+      + '</div>'
+      + (field.justification
+        ? '<div class="rp-answer-justification">' + escH(field.justification) + '</div>'
+        : '')
+      + generic
+      + (evidence
+        ? '<div class="rp-citation-box">'
+          + '<div class="rp-citation-quote">&ldquo;' + escH(evidence) + '&rdquo;</div>'
+          + (page ? '<div class="rp-citation-meta"><span>' + escH(page) + '</span></div>' : '')
+        + '</div>'
+        : '')
+    + '</div>';
+  }).join('');
+}
+
+function rpRenderAnswer(result) {
+  const answer = result.answer;
+  if (result.error) {
+    return '<div class="rp-answer-text" style="color:var(--err)">Error: ' + escH(result.error) + '</div>';
+  }
+  if (!answer || typeof answer !== 'object' || Array.isArray(answer)) {
+    return answer !== null && answer !== undefined && answer !== ''
+      ? '<div class="rp-answer-text">' + escH(rpScalarText(answer)) + '</div>'
+      : '<div class="rp-answer-text muted"><em>No answer was returned.</em></div>';
+  }
+
+  const extracted = rpRenderExtractedFields(result);
+  if (extracted) {
+    return extracted + rpRenderMetadata(answer.document_metadata);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(answer, 'value')) {
+    const value = answer.value;
+    const unit = answer.unit ? ' ' + answer.unit : '';
+    const main = value !== null && value !== undefined
+      ? escH(rpScalarText(value) + unit)
+      : '<em class="muted">No value</em>';
+    return '<div class="rp-answer-value">' + main + '</div>'
+      + rpRenderGenericObject(answer, ['value', 'unit', 'label']);
+  }
+
+  return rpRenderGenericObject(answer, []);
+}
+
+function rpRenderConfidence(result) {
+  const conf = result.confidence || 'insufficient_evidence';
+  const cClass = rpConfClass(conf);
+  const cLabel = rpConfLabel(conf);
+  const score = rpAnswerScore(result);
+  const scoreText = rpFormatScore(score);
+  const confidence = result.confidence_full && typeof result.confidence_full === 'object'
+    ? result.confidence_full
+    : {};
+  const reasons = Array.isArray(confidence.reasons) ? confidence.reasons.filter(Boolean) : [];
+  const fillClass = conf === 'high' ? 'high' : conf === 'medium' ? 'medium' : 'low';
+
+  return (score !== null
+    ? '<div class="rp-score-grid">'
+      + '<span class="rp-score-label">Answer confidence</span>'
+      + '<div class="rp-score-bar"><div class="rp-score-fill ' + fillClass
+        + '" style="width:' + score + '%"></div></div>'
+      + '<span class="rp-score-value">' + scoreText + '</span>'
+    + '</div>'
+    : '')
+    + '<div class="rp-confidence-note">Validated level: <strong class="' + cClass + '">'
+      + escH(cLabel) + '</strong>'
+      + (confidence.downgraded ? ' · downgraded during evidence validation' : '')
+    + '</div>'
+    + (reasons.length
+      ? '<div class="rp-confidence-note">' + reasons.map(reason => escH(reason)).join(' · ') + '</div>'
+      : '');
+}
+
 function rpRenderQA() {
   const tbody = document.getElementById('rpQABody');
   const total = rpState.filteredQA.length;
-  document.getElementById('rpQACount').textContent = total + ' question' + (total !== 1 ? 's' : '');
+  const scores = rpState.filteredQA.map(rpAnswerScore).filter(score => score !== null);
+  const avgScore = scores.length
+    ? scores.reduce((sum, score) => sum + score, 0) / scores.length
+    : null;
+  document.getElementById('rpQACount').textContent =
+    total + ' question' + (total !== 1 ? 's' : '')
+    + (avgScore !== null ? ' · avg confidence ' + rpFormatScore(avgScore) : '');
 
   if (!total) {
     tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No results match your filters.</td></tr>';
@@ -1975,20 +2250,11 @@ function rpRenderQA() {
   tbody.innerHTML = rpState.filteredQA.map((r, idx) => {
     const qNum = 'Q.' + (idx + 1);
     const conf  = r.confidence || 'insufficient_evidence';
-    const cClass = rpConfClass(conf);
     const cLabel = rpConfLabel(conf);
-
-    // Answer value
-    let answerText = '';
-    if (r.answer && typeof r.answer === 'object') {
-      const val  = r.answer.value !== undefined ? r.answer.value : JSON.stringify(r.answer);
-      const unit = r.answer.unit ? ' ' + r.answer.unit : '';
-      answerText = (val !== null && val !== undefined)
-        ? escH(String(val) + unit)
-        : '<em class="muted">No value</em>';
-    } else if (r.error) {
-      answerText = '<span style="color:var(--err)">Error: ' + escH(r.error) + '</span>';
-    }
+    const score = rpAnswerScore(r);
+    const scoreText = rpFormatScore(score);
+    const answerHtml = rpRenderAnswer(r);
+    const confidenceHtml = rpRenderConfidence(r);
 
     // Citations
     const cits = (r.citations || []).map(c => {
@@ -2015,9 +2281,13 @@ function rpRenderQA() {
     }).join('');
 
     const hasCitations = (r.citations || []).length > 0;
-    const srcLabel = hasCitations
+    const fieldSource = rpPrimaryField(r);
+    const hasFieldSource = Boolean(fieldSource && fieldSource.source);
+    const srcLabel = hasCitations || hasFieldSource
       ? '<span class="url-ref">official</span>'
       : '<span class="muted" style="font-size:12px">—</span>';
+    const confidenceBadge = '<span class="rp-confidence-badge ' + escH(conf) + '">'
+      + escH(cLabel) + (scoreText ? ' · ' + scoreText : '') + '</span>';
 
     const detailId = 'rpDetail_' + idx;
     return '<tr class="expandable" onclick="rpToggleDetail(this)">'
@@ -2027,15 +2297,15 @@ function rpRenderQA() {
         + '<div style="font-size:13px;color:var(--muted)">' + escH(rpState.currentCompany) + '</div>'
       + '</td>'
       + '<td>' + srcLabel + '</td>'
-      + '<td><span class="' + cClass + '">' + escH(cLabel) + '</span></td>'
+      + '<td>' + confidenceBadge + '</td>'
     + '</tr>'
     + '<tr class="detail-row" id="' + detailId + '" style="display:none">'
       + '<td colspan="4">'
         + '<div class="detail-panel">'
-          + '<div class="rp-answer-text">' + answerText + '</div>'
-          + (cits || '<div class="muted" style="font-size:13px">No citations recorded.</div>')
+          + answerHtml
+          + (cits ? '<div class="rp-section-label">Recorded citations</div>' + cits : '')
+          + confidenceHtml
           + '<div style="margin-top:14px;display:flex;gap:20px;font-size:12px;color:var(--muted)">'
-            + '<span>Confidence: <strong class="' + cClass + '">' + escH(cLabel) + '</strong></span>'
             + '<span>Tool calls: ' + (r.tool_calls_used || 0) + '</span>'
             + (r.flags && r.flags.length ? '<span>Flags: ' + escH(r.flags.join(', ')) + '</span>' : '')
           + '</div>'
@@ -2049,7 +2319,15 @@ function rpToggleDetail(row) {
   const next = row.nextElementSibling;
   if (next && next.classList.contains('detail-row')) {
     const isOpen = next.style.display !== 'none';
+    document.querySelectorAll('#rpQABody .detail-row').forEach(detail => {
+      detail.style.display = 'none';
+    });
+    document.querySelectorAll('#rpQABody tr.expandable').forEach(answerRow => {
+      answerRow.classList.remove('highlighRow');
+    });
     next.style.display = isOpen ? 'none' : '';
+    if (isOpen) row.classList.remove('highlighRow');
+    else row.classList.add('highlighRow');
   }
 }
 

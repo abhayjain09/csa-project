@@ -1,0 +1,18 @@
+Q.2	
+Guidelines for gifts
+edwards-lifesciences-corporation
+official	Medium
+{"document_metadata":{"company_name":"Edwards Lifesciences Corporation","document_link":"Titanium Book - Global Business Practice Standards (Edwards Lifesciences Code of Conduct)","validated_fiscal_year":"2018 (Titanium Book - Global Business Practice Standards, latest available edition)"},"extracted_fields":[{"confidence_score":95,"justification":"The Titanium Book (Global Business Practice Standards) contains a dedicated section 'Gifts, hospitality, travel and other items of value' that explicitly defines acceptable gift criteria (customary, legal, not excessive in value, no strings attached), lists prohibited situations (e.g., soliciting gifts, giving/receiving currency gifts without approval, purchasing at preferential terms), and provides an approval/return/donation process for inappropriate gifts. It also references additional franchise/region-specific written policies on gifts and entertainment. This directly matches the counts_as criteria of prohibiting gifts in any form and defining acceptable gift requirements/thresholds.","met_criteria":"Yes","needs_review":false,"question_id":"Q2","question_label":"Guidelines for gifts","source":{"evidence_snippet":"Accepting unsolicited gifts and business courtesies such as meals and entertainment is only permissible if they are: Customary and commonly accepted business courtesies; Permitted by all applicable laws; Not excessive in value; Given and accepted without an express or implied understanding that you are in any way obligated by accepting the gift. Giving and receiving any gift of currency, unless it is allowed by local policy and approved by your manager [is prohibited].","page_number":"Page 55-56"}}]}
+“Accepting unsolicited gifts and business courtesies such as meals and entertainment is only permissible if they are: • Customary and commonly accepted business courtesies • Permitted by all applicable laws • Not excessive in value”
+Titanium Book
+p.55
+Titanium Book
+open source
+“Giving and receiving any gift of currency, unless it is allowed by local policy and approved by your manager”
+Titanium Book
+p.55
+Titanium Book
+open source
+Confidence: Medium
+Tool calls: 6
+Flags: confidence_downgraded

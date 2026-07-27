@@ -1,0 +1,319 @@
+digraph PageIndexAWSInfrastructure {
+  graph [
+    rankdir=TB,
+    bgcolor="#FFFFFF",
+    pad="0.42",
+    nodesep="0.42",
+    ranksep="1.28",
+    splines=ortho,
+    compound=true,
+    newrank=true,
+    fontname="Helvetica Neue",
+    fontsize=22,
+    labelloc="t",
+    label="PageIndex AgentCore — Full AWS Infrastructure and Data Flow"
+  ];
+
+  node [
+    shape=box,
+    style="rounded,filled",
+    fillcolor="#F7F8FA",
+    color="#B7C0CC",
+    penwidth=1.8,
+    fontname="Helvetica Neue",
+    fontsize=13,
+    margin="0.20,0.15"
+  ];
+
+  edge [
+    color="#5B6573",
+    fontcolor="#394150",
+    penwidth=1.9,
+    arrowsize=0.78,
+    fontname="Helvetica Neue",
+    fontsize=10
+  ];
+
+  subgraph cluster_aws {
+    label="AWS Account  •  Region: var.aws_region  •  Environment: NonProd";
+    color="#FF9900";
+    penwidth=2.6;
+    style="rounded";
+    margin=28;
+
+    subgraph cluster_deployment {
+      label="1  DEPLOYMENT AND CONTROL PLANE";
+      color="#85B6DD";
+      fillcolor="#F8FBFE";
+      penwidth=1.7;
+      style="rounded,filled,dashed";
+
+      lifecycle [
+        label="ECR Lifecycle Policy\nRetain latest 5 images",
+        fillcolor="#F4F6F8",
+        color="#7B8794"
+      ];
+
+      ecr [
+        label="Amazon ECR Repository\nARM64 PageIndex image\nMutable tags • scan on push",
+        fillcolor="#E8F1FB",
+        color="#1F73B7",
+        penwidth=2.3
+      ];
+
+      control [
+        label="Bedrock AgentCore Control Plane\nCreate/update runtime version\nQuery endpoint status",
+        fillcolor="#EEE8FF",
+        color="#7759C2",
+        penwidth=2.1
+      ];
+
+      { rank=same; lifecycle; ecr; control; }
+      lifecycle -> ecr [label="expire old images", color="#7B8794"];
+      ecr -> control [style=invis, weight=25];
+    }
+
+    subgraph cluster_runtime {
+      label="2  RUNTIME AND DATA PLANE";
+      color="#A5C88C";
+      fillcolor="#FBFDF9";
+      penwidth=1.7;
+      style="rounded,filled,dashed";
+
+      s3 [
+        label="Amazon S3 Reports Bucket\nCompany PDFs\nExisting and updated pageindex JSON",
+        fillcolor="#EAF4E5",
+        color="#3F8624",
+        penwidth=2.3
+      ];
+
+      ec2 [
+        label="Amazon EC2\nDeployment + indexer host\n\ndeploy.sh • Terraform • Docker buildx\nbuild_pdf_index.py",
+        fillcolor="#FFF1E8",
+        color="#ED7100",
+        penwidth=2.4
+      ];
+
+      endpoint [
+        label="AgentCore Runtime Endpoint\nInvokeAgentRuntime API",
+        fillcolor="#F3EEFF",
+        color="#8C4FFF",
+        penwidth=2.2
+      ];
+
+      runtime [
+        label="Bedrock AgentCore Runtime\nPageIndex ARM64 container\nPublic network mode\nPAGEINDEX_MODEL • AWS_REGION",
+        fillcolor="#F1EAFE",
+        color="#8C4FFF",
+        penwidth=2.9
+      ];
+
+      bedrock [
+        label="Amazon Bedrock\nClaude cross-region inference profile\nLiteLLM integration",
+        fillcolor="#F1EAFE",
+        color="#8C4FFF",
+        penwidth=2.3
+      ];
+
+      logs [
+        label="Amazon CloudWatch Logs\n/aws/bedrock-agentcore/*\nRuntime and application logs",
+        fillcolor="#EEF4E7",
+        color="#759C3E",
+        penwidth=2.1
+      ];
+
+      { rank=same; s3; ec2; endpoint; runtime; bedrock; logs; }
+
+      s3 -> ec2 [
+        dir=both,
+        arrowhead=normal,
+        arrowtail=normal,
+        color="#3F8624",
+        penwidth=2.5,
+        label="PDF list + existing index\nupdated index JSON"
+      ];
+
+      ec2 -> endpoint [
+        dir=both,
+        arrowhead=normal,
+        arrowtail=normal,
+        color="#5636B3",
+        penwidth=2.9,
+        label="invoke payload\nindex result"
+      ];
+
+      endpoint -> runtime [
+        dir=both,
+        arrowhead=normal,
+        arrowtail=normal,
+        color="#8C4FFF",
+        penwidth=2.9,
+        label="request\nhandler response"
+      ];
+
+      runtime -> bedrock [
+        dir=both,
+        arrowhead=normal,
+        arrowtail=normal,
+        color="#8C4FFF",
+        penwidth=2.9,
+        label="LiteLLM prompt\nClaude response"
+      ];
+
+      runtime -> logs [
+        color="#759C3E",
+        penwidth=2.3,
+        label="log events",
+        constraint=false
+      ];
+
+      runtime -> s3 [
+        dir=both,
+        arrowhead=normal,
+        arrowtail=normal,
+        tailport=n,
+        headport=n,
+        color="#3F8624",
+        penwidth=2.5,
+        label="GetObject\nPDF byte stream",
+        constraint=false
+      ];
+    }
+
+    subgraph cluster_security {
+      label="3  IDENTITY AND AUTHORIZATION";
+      labelloc="b";
+      color="#E78B98";
+      fillcolor="#FFFBFC";
+      penwidth=1.7;
+      style="rounded,filled,dashed";
+
+      warning [
+        shape=note,
+        label="Current gap\nNo EC2 service trust or\naws_iam_instance_profile",
+        fillcolor="#FFF4CE",
+        color="#C98A00",
+        fontcolor="#6B4A00",
+        penwidth=1.9
+      ];
+
+      sts [
+        label="AWS STS\nGetCallerIdentity\nRole session credentials",
+        fillcolor="#FFF3F5",
+        color="#DD344C"
+      ];
+
+      trust [
+        label="IAM Trust Policy\nAgentCore service + account root\nSourceAccount condition",
+        fillcolor="#FFF3F5",
+        color="#DD344C"
+      ];
+
+      role [
+        label="Shared PageIndex IAM Role\nExecution + caller permissions",
+        fillcolor="#FDECEF",
+        color="#DD344C",
+        penwidth=2.4
+      ];
+
+      policy [
+        label="Inline IAM Policy\nAgentCore invoke • S3 List/Get/Put\nBedrock invoke • ECR pull • log writes",
+        fillcolor="#FFF8F9",
+        color="#DD344C"
+      ];
+
+      { rank=same; warning; sts; trust; role; policy; }
+
+      trust -> role [
+        color="#DD344C",
+        style=dashed,
+        label="assume-role trust"
+      ];
+
+      policy -> role [
+        color="#DD344C",
+        style=dashed,
+        label="inline permissions"
+      ];
+    }
+
+    lifecycle -> s3 [style=invis, weight=45];
+    s3 -> warning [style=invis, weight=45];
+
+    ec2 -> ecr [
+      dir=both,
+      arrowhead=normal,
+      arrowtail=normal,
+      color="#1F73B7",
+      penwidth=2.4,
+      label="auth token\nimage push",
+      constraint=false
+    ];
+
+    ec2 -> control [
+      color="#356EA8",
+      penwidth=2.3,
+      label="Terraform apply",
+      constraint=false
+    ];
+
+    ecr -> runtime [
+      color="#1F73B7",
+      penwidth=2.4,
+      label="pull image",
+      constraint=false
+    ];
+
+    control -> runtime [
+      color="#7759C2",
+      penwidth=2.3,
+      label="deploy version",
+      constraint=false
+    ];
+
+    ec2 -> sts [
+      dir=both,
+      arrowhead=normal,
+      arrowtail=normal,
+      color="#DD344C",
+      style=dashed,
+      label="identity / session",
+      constraint=false
+    ];
+
+    role -> runtime [
+      color="#DD344C",
+      style=dashed,
+      penwidth=2.2,
+      label="execution credentials",
+      constraint=false
+    ];
+
+    role -> ec2 [
+      color="#C98A00",
+      style=dashed,
+      penwidth=2.0,
+      label="intended caller credentials",
+      constraint=false
+    ];
+
+    warning -> ec2 [
+      color="#C98A00",
+      style=dotted,
+      arrowhead=none,
+      constraint=false
+    ];
+  }
+
+  legend [
+    shape=plain,
+    label=<
+      <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" COLOR="#CBD1D8">
+        <TR><TD BGCOLOR="#F7F8FA"><B>FLOW LEGEND</B></TD><TD BGCOLOR="#F7F8FA">Meaning</TD></TR>
+        <TR><TD><FONT COLOR="#5636B3">↔</FONT></TD><TD ALIGN="LEFT">Bidirectional request and response</TD></TR>
+        <TR><TD><FONT COLOR="#356EA8">→</FONT></TD><TD ALIGN="LEFT">One-way deployment, image, lifecycle, or log action</TD></TR>
+        <TR><TD><FONT COLOR="#DD344C">- - →</FONT></TD><TD ALIGN="LEFT">IAM trust or credential relationship</TD></TR>
+      </TABLE>
+    >
+  ];
+}

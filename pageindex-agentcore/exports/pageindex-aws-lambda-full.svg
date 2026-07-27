@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="930" viewBox="0 0 1800 930">
+  <defs>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#147EBA"/></marker>
+    <marker id="arrow-purple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#6D4AFF"/></marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#248224"/></marker>
+    <marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#DD344C"/></marker>
+    <marker id="arrow-gray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#7B8794"/></marker>
+    <style>
+      text { font-family: "Helvetica Neue", Arial, sans-serif; }
+      .title { font-size: 31px; font-weight: 700; fill: #111827; }
+      .icon { font-size: 24px; font-weight: 800; }
+      .card-title { font-size: 21px; font-weight: 700; fill: #1F2937; }
+      .card-subtitle { font-size: 17px; fill: #26313D; }
+      .flow-label { font-size: 15px; font-weight: 500; }
+      .flow { fill: none; stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; }
+    </style>
+  </defs>
+
+  <rect width="1800" height="930" fill="#FFFFFF"/>
+  <rect x="24" y="24" width="1752" height="882" rx="24" fill="#FFFFFF" stroke="#FF9900" stroke-width="3"/>
+  <text x="900" y="72" text-anchor="middle" class="title">AWS Account — PageIndex AgentCore with Lambda</text>
+
+  
+    <g>
+      <rect x="60" y="112" width="360" height="112" rx="18" fill="#EAF4FF" stroke="#147EBA" stroke-width="3"/>
+      <rect x="78" y="130" width="72" height="76" rx="14" fill="#FFFFFF" stroke="#147EBA" stroke-width="2"/>
+      <text x="114" y="176" text-anchor="middle" class="icon" fill="#147EBA">ECR</text>
+      <text x="168" y="147" class="card-title">Amazon ECR</text>
+      <text x="168" y="154" class="card-subtitle"><tspan x="168" dy="27">ARM64 PageIndex image</tspan></text>
+    </g>
+  
+    <g>
+      <rect x="710" y="108" width="390" height="118" rx="18" fill="#F3ECFF" stroke="#7C3AED" stroke-width="3"/>
+      <rect x="728" y="126" width="72" height="82" rx="14" fill="#FFFFFF" stroke="#7C3AED" stroke-width="2"/>
+      <text x="764" y="175" text-anchor="middle" class="icon" fill="#7C3AED">BR</text>
+      <text x="818" y="143" class="card-title">Amazon Bedrock</text>
+      <text x="818" y="150" class="card-subtitle"><tspan x="818" dy="27">Claude inference</tspan></text>
+    </g>
+  
+    <g>
+      <rect x="60" y="420" width="340" height="126" rx="18" fill="#FFF4E8" stroke="#ED7100" stroke-width="3"/>
+      <rect x="78" y="438" width="72" height="90" rx="14" fill="#FFFFFF" stroke="#ED7100" stroke-width="2"/>
+      <text x="114" y="491" text-anchor="middle" class="icon" fill="#ED7100">λ</text>
+      <text x="168" y="455" class="card-title">AWS Lambda</text>
+      <text x="168" y="462" class="card-subtitle"><tspan x="168" dy="27">PageIndex orchestrator</tspan><tspan x="168" dy="23">Starts indexing jobs</tspan></text>
+    </g>
+  
+    <g>
+      <rect x="445" y="430" width="300" height="108" rx="18" fill="#F3ECFF" stroke="#7C3AED" stroke-width="3"/>
+      <rect x="463" y="448" width="72" height="72" rx="14" fill="#FFFFFF" stroke="#7C3AED" stroke-width="2"/>
+      <text x="499" y="492" text-anchor="middle" class="icon" fill="#7C3AED">API</text>
+      <text x="553" y="465" class="card-title">AgentCore Endpoint</text>
+      <text x="553" y="472" class="card-subtitle"><tspan x="553" dy="27">IAM-authenticated invoke</tspan></text>
+    </g>
+  
+    <g>
+      <rect x="800" y="400" width="435" height="168" rx="18" fill="#F3ECFF" stroke="#7C3AED" stroke-width="3"/>
+      <rect x="818" y="418" width="72" height="132" rx="14" fill="#FFFFFF" stroke="#7C3AED" stroke-width="2"/>
+      <text x="854" y="492" text-anchor="middle" class="icon" fill="#7C3AED">AC</text>
+      <text x="908" y="435" class="card-title">AgentCore Runtime</text>
+      <text x="908" y="442" class="card-subtitle"><tspan x="908" dy="27">PageIndex container</tspan><tspan x="908" dy="23">Public network mode</tspan></text>
+    </g>
+  
+    <g>
+      <rect x="1390" y="370" width="340" height="126" rx="18" fill="#ECF8EA" stroke="#248224" stroke-width="3"/>
+      <rect x="1408" y="388" width="72" height="90" rx="14" fill="#FFFFFF" stroke="#248224" stroke-width="2"/>
+      <text x="1444" y="441" text-anchor="middle" class="icon" fill="#248224">CW</text>
+      <text x="1498" y="405" class="card-title">CloudWatch Logs</text>
+      <text x="1498" y="412" class="card-subtitle"><tspan x="1498" dy="27">Lambda + runtime logs</tspan></text>
+    </g>
+  
+    <g>
+      <rect x="65" y="692" width="380" height="132" rx="18" fill="#FFF0F2" stroke="#DD344C" stroke-width="3"/>
+      <rect x="83" y="710" width="72" height="96" rx="14" fill="#FFFFFF" stroke="#DD344C" stroke-width="2"/>
+      <text x="119" y="766" text-anchor="middle" class="icon" fill="#DD344C">IAM</text>
+      <text x="173" y="727" class="card-title">AWS IAM Roles</text>
+      <text x="173" y="734" class="card-subtitle"><tspan x="173" dy="27">Lambda + AgentCore</tspan><tspan x="173" dy="23">execution permissions</tspan></text>
+    </g>
+  
+    <g>
+      <rect x="800" y="690" width="400" height="134" rx="18" fill="#ECF8EA" stroke="#248224" stroke-width="3"/>
+      <rect x="818" y="708" width="72" height="98" rx="14" fill="#FFFFFF" stroke="#248224" stroke-width="2"/>
+      <text x="854" y="765" text-anchor="middle" class="icon" fill="#248224">S3</text>
+      <text x="908" y="725" class="card-title">Amazon S3</text>
+      <text x="908" y="732" class="card-subtitle"><tspan x="908" dy="27">PDFs + pageindex JSON</tspan></text>
+    </g>
+
+  <path d="M 420 168 H 620 V 344 H 930 V 400" class="flow" stroke="#147EBA" marker-end="url(#arrow-blue)"/>
+  
+  <g>
+    <rect x="667.5" y="318" width="185" height="27" rx="6" fill="#FFFFFF" fill-opacity="0.96"/>
+    <text x="760" y="336" text-anchor="middle" class="flow-label" fill="#374151">container image pull</text>
+  </g>
+
+  <path d="M 400 483 H 445" class="flow" stroke="#6D4AFF" marker-start="url(#arrow-purple)" marker-end="url(#arrow-purple)"/>
+  
+  <g>
+    <rect x="334" y="393" width="178" height="27" rx="6" fill="#FFFFFF" fill-opacity="0.96"/>
+    <text x="423" y="411" text-anchor="middle" class="flow-label" fill="#5B35D5">invoke / index result</text>
+  </g>
+
+  <path d="M 745 484 H 800" class="flow" stroke="#6D4AFF" marker-start="url(#arrow-purple)" marker-end="url(#arrow-purple)"/>
+  
+  <g>
+    <rect x="688" y="364" width="168" height="27" rx="6" fill="#FFFFFF" fill-opacity="0.96"/>
+    <text x="772" y="382" text-anchor="middle" class="flow-label" fill="#5B35D5">request / response</text>
+  </g>
+
+  <path d="M 955 226 V 400" class="flow" stroke="#6D4AFF" marker-start="url(#arrow-purple)" marker-end="url(#arrow-purple)"/>
+  
+  <g>
+    <rect x="963" y="284" width="210" height="27" rx="6" fill="#FFFFFF" fill-opacity="0.96"/>
+    <text x="1068" y="302" text-anchor="middle" class="flow-label" fill="#5B35D5">prompt / model response</text>
+  </g>
+
+  <path d="M 1017 568 V 690" class="flow" stroke="#248224" marker-start="url(#arrow-green)" marker-end="url(#arrow-green)"/>
+  
+  <g>
+    <rect x="1017.5" y="607" width="185" height="27" rx="6" fill="#FFFFFF" fill-opacity="0.96"/>
+    <text x="1110" y="625" text-anchor="middle" class="flow-label" fill="#176B1C">GetObject / PDF bytes</text>
+  </g>
+
+  <path d="M 230 546 V 620 H 750 V 757 H 800" class="flow" stroke="#248224" marker-start="url(#arrow-green)" marker-end="url(#arrow-green)"/>
+  
+  <g>
+    <rect x="387.5" y="595" width="255" height="27" rx="6" fill="#FFFFFF" fill-opacity="0.96"/>
+    <text x="515" y="613" text-anchor="middle" class="flow-label" fill="#176B1C">PDF event + read / index write</text>
+  </g>
+
+  <path d="M 220 692 V 546" class="flow" stroke="#DD344C" stroke-dasharray="10 8" marker-end="url(#arrow-red)"/>
+  
+  <g>
+    <rect x="67.5" y="612" width="145" height="27" rx="6" fill="#FFFFFF" fill-opacity="0.96"/>
+    <text x="140" y="630" text-anchor="middle" class="flow-label" fill="#B42336">execution role</text>
+  </g>
+
+  <path d="M 445 754 H 770 V 595 H 850 V 568" class="flow" stroke="#DD344C" stroke-dasharray="10 8" marker-end="url(#arrow-red)"/>
+  
+  <g>
+    <rect x="667.5" y="569" width="135" height="27" rx="6" fill="#FFFFFF" fill-opacity="0.96"/>
+    <text x="735" y="587" text-anchor="middle" class="flow-label" fill="#B42336">assume role</text>
+  </g>
+
+  <path d="M 1235 445 H 1390" class="flow" stroke="#248224" marker-end="url(#arrow-green)"/>
+  
+  <g>
+    <rect x="1252" y="414" width="120" height="27" rx="6" fill="#FFFFFF" fill-opacity="0.96"/>
+    <text x="1312" y="432" text-anchor="middle" class="flow-label" fill="#176B1C">runtime logs</text>
+  </g>
+
+  <path d="M 400 450 H 460 V 94 H 1560 V 370" class="flow" stroke="#248224" marker-end="url(#arrow-green)"/>
+  
+  <g>
+    <rect x="1387.5" y="90" width="125" height="27" rx="6" fill="#FFFFFF" fill-opacity="0.96"/>
+    <text x="1450" y="108" text-anchor="middle" class="flow-label" fill="#176B1C">function logs</text>
+  </g>
+</svg>

@@ -1,0 +1,44 @@
+# Terraform state and local cache — never commit these
+infra/.terraform/
+infra/.terraform.lock.hcl
+infra/terraform.tfstate
+infra/terraform.tfstate.backup
+infra/terraform.tfstate.d/
+infra/crash.log
+infra/override.tf
+infra/override.tf.json
+infra/*_override.tf
+infra/*_override.tf.json
+
+# terraform.tfvars may contain sensitive values in future — keep out of git
+# If you want to track it, remove this line and ensure no secrets are in it
+infra/terraform.tfvars
+
+# PageIndex library — cloned separately, not part of this repo
+pageindex-lib/*
+!pageindex-lib/README.md
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# Local output files
+page-indexes/
+*.json.bak
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo

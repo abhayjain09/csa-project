@@ -1,0 +1,9 @@
+# AgentCore SDK — handles /invocations, /ping, HealthyBusy, uvicorn, session headers.
+# boto3, pydantic, starlette, and uvicorn come bundled with it automatically.
+bedrock-agentcore>=1.17.0
+
+# PDF extraction
+pypdf>=4.0
+
+# Output-schema validation (optional but used in validation/output_validator.py)
+jsonschema>=4.20

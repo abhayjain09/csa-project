@@ -1,0 +1,43 @@
+# Version control
+.git/
+.gitignore
+.gitattributes
+
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Local dev artifacts (should never be baked into an image)
+*.log
+.env
+.env.*
+.aws/
+
+# Tests that don't need to ship — pipeline is exercised in CI, not in prod
+smoke_test.py
+offline_smoke_test.py
+
+# Docs / infra live outside the container
+README.md
+Dockerfile
+.dockerignore

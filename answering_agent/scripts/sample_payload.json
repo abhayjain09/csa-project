@@ -1,0 +1,6 @@
+{
+  "run_id": "test-001",
+  "company": "first-magestic",
+  "pageindex": {"s3_uri": "s3://edo-coanalyst-report-610639371721/first-majestic/first-majestic_pageindex.json"},
+  "questionnaire_md": {"s3_uri": "s3://edo-coanalyst-report-610639371721/questionnaires/code_of_conduct.md"}
+}

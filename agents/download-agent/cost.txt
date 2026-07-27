@@ -1,0 +1,4 @@
+| Workload | Input tokens | Output tokens | Total tokens | Model cost | Infra cost | Current total | Post-promo total |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 1 company, 23 reports, 29 questions | 6,477,840 | 558,115 | 7,035,955 | $23.48 | $2.82 | **$26.29** | $29.74 |
+| 20 companies, 240 reports, 1,000 questions | 117,812,760 | 8,756,200 | 126,568,960 | $374.69 | $9.58 | **$384.27** | $485.13 |

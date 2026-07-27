@@ -1,0 +1,4 @@
+Local architecture source: /Users/abhay/Documents/csa-project/pageindex-agentcore/infra/main.tf
+Lucid Standard Import schema: https://developer.lucid.co/docs/overview-si
+Lucid AWS 2024 shape library: https://developer.lucid.co/docs/aws-2024-library
+Lucid line schema: https://developer.lucid.co/docs/lines-si

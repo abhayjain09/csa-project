@@ -1,0 +1,13 @@
+{
+  "status": "pass",
+  "checkedAt": "2026-07-27T19:00:48.527Z",
+  "workspace": "/Users/abhay/Documents/csa-project/pageindex-agentcore/.tmp/lucid-aws-infra",
+  "finalPptx": "/Users/abhay/Documents/csa-project/pageindex-agentcore/exports/pageindex-aws-infrastructure-simple-light.pptx",
+  "starterPptx": "/Users/abhay/Documents/csa-project/pageindex-agentcore/.tmp/lucid-aws-infra/template-starter.pptx",
+  "mapPath": "/Users/abhay/Documents/csa-project/pageindex-agentcore/.tmp/lucid-aws-infra/template-frame-map.json",
+  "starterLayoutDir": "/Users/abhay/Documents/csa-project/pageindex-agentcore/.tmp/lucid-aws-infra/template-starter-layout",
+  "finalLayoutDir": "/Users/abhay/Documents/csa-project/pageindex-agentcore/.tmp/lucid-aws-infra/final-render",
+  "editDir": "/Users/abhay/Documents/csa-project/pageindex-agentcore/.tmp/lucid-aws-infra",
+  "issueCount": 0,
+  "issues": []
+}

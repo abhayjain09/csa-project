@@ -1,0 +1,10 @@
+{
+  "status": "pass",
+  "checkedAt": "2026-07-27T18:57:17.205Z",
+  "workspace": "/Users/abhay/Documents/csa-project/pageindex-agentcore/.tmp/lucid-aws-infra",
+  "mapPath": "/Users/abhay/Documents/csa-project/pageindex-agentcore/.tmp/lucid-aws-infra/template-frame-map.json",
+  "inspectPath": "/Users/abhay/Documents/csa-project/pageindex-agentcore/.tmp/lucid-aws-infra/template-inspect/template-inspect.ndjson",
+  "sourceSlideCount": 26,
+  "issueCount": 0,
+  "issues": []
+}

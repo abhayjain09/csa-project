@@ -1,4 +1,9 @@
-"""Report download agent (single AgentCore Runtime) — v47.
+"""Report download agent (single AgentCore Runtime) — v48.
+
+v48 adds a bounded, identity-anchored Google recovery pass after the official
+static crawl.  It suppresses candidates already sampled by the broad Tier-1
+pass and explicitly boosts results that match the validated legal company name,
+ticker, and official domain before the expensive content verifier runs.
 
 v47 makes undated requests latest-first across current/prior fiscal labels,
 prefers English/default-language documents, follows safe document links from
@@ -81,7 +86,7 @@ import registry_tier
 
 app = BedrockAgentCoreApp()
 
-CODE_VERSION = os.environ.get("CODE_VERSION", "v46")
+CODE_VERSION = os.environ.get("CODE_VERSION", "v48")
 
 # Tier 2 (official registry fallback) master switch. registry_tier.py reads its
 # own EDGAR_* / CH_* configuration from the environment.
@@ -265,6 +270,13 @@ SELECTION_MODEL_ID = (
 ENABLE_LLM_QUERY_GEN = os.environ.get("ENABLE_LLM_QUERY_GEN", "true").lower() != "false"
 LLM_QUERY_GEN_MAX = int(os.environ.get("LLM_QUERY_GEN_MAX", "8"))
 SEARCH_FANOUT_WORKERS = int(os.environ.get("SEARCH_FANOUT_WORKERS", "4"))
+# A broad Google-grounded pass can miss an exact file even when later static
+# tiers expose useful section/path hints.  Allow one small, deliberately
+# different recovery pass after those tiers and before the live browser.
+ENABLE_TARGETED_SEARCH_RECOVERY = os.environ.get(
+    "ENABLE_TARGETED_SEARCH_RECOVERY", "true").lower() != "false"
+TARGETED_SEARCH_MAX_QUERIES = max(1, int(os.environ.get(
+    "TARGETED_SEARCH_MAX_QUERIES", "3")))
 ENABLE_SITEMAP = os.environ.get("ENABLE_SITEMAP", "true").lower() != "false"
 SITEMAP_MAX_URLS = int(os.environ.get("SITEMAP_MAX_URLS", "5000"))
 SITEMAP_MAX_NESTED = int(os.environ.get("SITEMAP_MAX_NESTED", "50"))
@@ -1241,6 +1253,115 @@ def _official_search_queries(query: str, company_ctx: dict,
     return out
 
 
+_RECOVERY_PATH_HINTS = (
+    "sustainability", "esg", "responsibility", "impact", "investor",
+    "investors", "governance", "policy", "policies", "compliance",
+    "ethics", "reports", "report", "filings", "financials",
+)
+
+
+def _company_identity_names(company_ctx: dict | None) -> list[str]:
+    """Return authoritative/preferred company names in precision order."""
+    ctx = company_ctx or {}
+    validation = ctx.get("_identity_validation") or {}
+    values = [
+        validation.get("official_name"),
+        ctx.get("official_name"),
+        ctx.get("name"),
+    ]
+    out: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        name = re.sub(r"\s+", " ", str(value or "")).strip().strip('"')
+        key = _normalize_company_text(name)
+        if not name or key in {"", "unknown"} or key in seen:
+            continue
+        seen.add(key)
+        out.append(name)
+    return out
+
+
+def _targeted_search_queries(query: str, company_ctx: dict,
+                             report_class: str | None,
+                             synonyms: list[str] | None = None,
+                             prior_urls: list[str] | None = None) -> list[str]:
+    """Build a small second-pass query set that is materially different.
+
+    The broad first pass optimizes recall.  This recovery pass uses an exact
+    legal-name phrase, canonical class, optional ticker, PDF intent, and one
+    section hint learned from first-pass URLs.  Every query remains scoped to
+    the attested official domain and preserves an explicitly requested year.
+    """
+    domain = _clean_domain((company_ctx or {}).get("domain"))
+    if not domain and REQUIRE_OFFICIAL_DOMAIN_FOR_WEB:
+        return []
+    names = _company_identity_names(company_ctx)
+    if not names:
+        return []
+
+    company_phrase = f'"{names[0]}"'
+    canonical = (report_class or "").strip()
+    if not canonical:
+        matched = _matched_doc_classes(query)
+        canonical = matched[0][0] if matched else _strip_site(query)
+    class_phrase = f'"{canonical}"' if canonical else ""
+    years = sorted(_extract_year_intent(query))
+    year_phrase = " ".join(str(year) for year in years)
+    ticker = str((company_ctx or {}).get("ticker") or "").upper().strip()
+
+    candidates = [
+        f"{company_phrase} {class_phrase} {year_phrase} filetype:pdf",
+    ]
+
+    alternate_terms: list[str] = []
+    canonical_key = canonical.lower()
+    for synonym in synonyms or []:
+        clean = re.sub(r"\s+", " ", str(synonym or "")).strip().strip('"')
+        if clean and clean.lower() != canonical_key and clean not in alternate_terms:
+            alternate_terms.append(clean)
+        if len(alternate_terms) >= 4:
+            break
+    if alternate_terms:
+        alternatives = " OR ".join(f'"{term}"' for term in alternate_terms)
+        candidates.append(
+            f"{company_phrase} ({alternatives}) {year_phrase} filetype:pdf")
+
+    path_hint = ""
+    for url in prior_urls or []:
+        path = unquote(urlparse(url or "").path).lower()
+        path_hint = next((hint for hint in _RECOVERY_PATH_HINTS
+                          if re.search(rf"(?:^|[/_.-]){re.escape(hint)}"
+                                       rf"(?:$|[/_.-])", path)), "")
+        if path_hint:
+            break
+    if path_hint:
+        candidates.append(
+            f"{company_phrase} {class_phrase} {year_phrase} "
+            f"inurl:{path_hint} filetype:pdf")
+
+    # The structured Vertex payload already carries the ticker on every query,
+    # so keep this dedicated text variant behind the more useful learned path
+    # probe when the bounded query cap cannot fit both.
+    if ticker:
+        candidates.append(
+            f'{company_phrase} ticker "{ticker}" {class_phrase} '
+            f"{year_phrase} filetype:pdf")
+
+    out: list[str] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        scoped = _scope_to_official_domain(
+            re.sub(r"\s+", " ", candidate).strip(), domain)
+        if not scoped or not _query_variant_preserves_years(query, scoped):
+            continue
+        key = scoped.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(scoped)
+    return out[:TARGETED_SEARCH_MAX_QUERIES]
+
+
 def _discovery_route(report_class: str | None,
                      registry_eligible: bool) -> list[str]:
     """Return the authoritative per-class discovery order."""
@@ -1252,6 +1373,7 @@ def _discovery_route(report_class: str | None,
         "direct_search",
         "official_crawl",
         "deep_crawl",
+        "targeted_search",
         "browser",
     ])
     if registry_eligible and "registry" not in route:
@@ -2073,7 +2195,8 @@ def _vertex_lambda_search(query: str, limit: int,
                           report_class: str | None = None,
                           year: int | None = None,
                           company_ctx: dict | None = None,
-                          synonyms: list[str] | None = None) -> tuple[list[dict], str]:
+                          synonyms: list[str] | None = None,
+                          search_phase: str | None = None) -> tuple[list[dict], str]:
     """Tier 1 discovery via the ISOLATED Vertex grounded-search Lambda.
 
     report_class/year/company_ctx are OPTIONAL structured hints (on top of the
@@ -2103,9 +2226,17 @@ def _vertex_lambda_search(query: str, limit: int,
         payload["report_class"] = report_class
     if synonyms:
         payload["synonyms"] = list(dict.fromkeys(synonyms))[:8]
+    if search_phase:
+        payload["search_phase"] = search_phase
     if year:
         payload["year"] = year
-    company_name = str(ctx.get("official_name") or ctx.get("name") or "").strip()
+    validation = ctx.get("_identity_validation") or {}
+    company_name = str(
+        validation.get("official_name")
+        or ctx.get("official_name")
+        or ctx.get("name")
+        or ""
+    ).strip()
     if company_name and company_name.lower() != "unknown":
         payload["company_name"] = company_name
     ticker = str(ctx.get("ticker") or "").strip()
@@ -2213,14 +2344,16 @@ def _single_web_search(query: str, limit: int,
                        report_class: str | None = None,
                        year: int | None = None,
                        company_ctx: dict | None = None,
-                       synonyms: list[str] | None = None) -> tuple[list[dict], str]:
+                       synonyms: list[str] | None = None,
+                       search_phase: str | None = None) -> tuple[list[dict], str]:
     # ── Tier 1: Vertex Lambda backend (no global _throttle; the Lambda + Vertex
     # handle concurrency; fan-out is bounded by SEARCH_FANOUT_WORKERS).
     # Optionally falls through to the Gateway path when it returns nothing. ──
     if SEARCH_BACKEND in ("vertex", "vertex_lambda", "lambda"):
         hits, via = _vertex_lambda_search(
             query, limit, report_class=report_class, year=year,
-            company_ctx=company_ctx, synonyms=synonyms)
+            company_ctx=company_ctx, synonyms=synonyms,
+            search_phase=search_phase)
         if hits or not (VERTEX_FALLBACK_TO_GATEWAY and GATEWAY_URL):
             return hits, via
         print(f"[search] vertex returned nothing ({via}); falling back to gateway")
@@ -2253,7 +2386,50 @@ def _keywords(query: str) -> list[str]:
     return [w for w in words if len(w) > 2 and w not in _STOP]
 
 
-def _rank(hits: list[dict], query: str, site_domain: str | None) -> list[tuple[int, dict]]:
+def _company_search_result_score(candidate: dict,
+                                 company_ctx: dict | None,
+                                 site_domain: str | None) -> int:
+    """Reward grounded results that carry the validated company identity.
+
+    This only affects shortlist ordering; it never bypasses the content-based
+    company verifier.  Official-domain ownership is strong evidence, while an
+    exact legal-name/ticker mention helps order CDN and registry candidates.
+    """
+    if not company_ctx:
+        return 0
+    url = str(candidate.get("url") or "")
+    identity_text = _normalize_company_text(
+        " ".join([
+            str(candidate.get("title") or ""),
+            str(candidate.get("snippet") or ""),
+            unquote(urlparse(url).path),
+            urlparse(url).netloc,
+        ]))
+    score = 0
+    if site_domain and _host_matches(url, site_domain):
+        score += 8
+    identity_names = _company_identity_names(company_ctx)
+    validation = (company_ctx or {}).get("_identity_validation") or {}
+    # When a registry-validated legal name exists, do not also award an
+    # off-domain result for matching only a short/ambiguous payload name
+    # ("Cisco" vs an unrelated company whose name merely starts with Cisco).
+    if validation.get("official_name"):
+        identity_names = identity_names[:1]
+    for name in identity_names:
+        tokens = _company_name_tokens(name)
+        if tokens and all(re.search(rf"\b{re.escape(token)}\b", identity_text)
+                          for token in tokens):
+            score += 10
+            break
+    ticker = str((company_ctx or {}).get("ticker") or "").strip().lower()
+    if (len(ticker) >= 2
+            and re.search(rf"\b{re.escape(ticker)}\b", identity_text)):
+        score += 4
+    return score
+
+
+def _rank(hits: list[dict], query: str, site_domain: str | None,
+          company_ctx: dict | None = None) -> list[tuple[int, dict]]:
     terms = _keywords(query)
     scored = []
     for c in hits:
@@ -2270,6 +2446,7 @@ def _rank(hits: list[dict], query: str, site_domain: str | None) -> list[tuple[i
             score += 3
         if site_domain and _registrable(urlparse(u).netloc) == _registrable(site_domain):
             score += 2
+        score += _company_search_result_score(c, company_ctx, site_domain)
         host_label = urlparse(u).netloc.lower().split(".")[0]
         if re.match(r"^(staging|stage|qa|dev|test|uat|preprod|sandbox)[-.]?", host_label):
             score -= 5
@@ -4620,14 +4797,17 @@ def _find_best_document(search_queries: list[str], limit: int, company: str = ""
                         company_ctx: dict | None = None,
                         preferred_language: str = "en",
                         company_aliases: list[str] | None = None,
-                        class_synonyms: list[str] | None = None) -> dict:
+                        class_synonyms: list[str] | None = None,
+                        exclude_urls: set[str] | None = None,
+                        search_phase: str | None = None) -> dict:
     """Search all query variants via a bounded PARALLEL fan-out, merge/dedupe by
     URL, rank + HEAD-filter, sample top candidates, then ONE grouped LLM
     selection across all of them (fail-closed)."""
     primary = search_queries[0]
     fanout = _parallel_web_search(
         search_queries, limit, report_class=report_class, year=year,
-        company_ctx=company_ctx, synonyms=class_synonyms)
+        company_ctx=company_ctx, synonyms=class_synonyms,
+        search_phase=search_phase)
     results_map: dict[str, tuple[list[dict], str]] = {}
     query_logs: list[dict] = []
     for q in search_queries:
@@ -4659,6 +4839,14 @@ def _find_best_document(search_queries: list[str], limit: int, company: str = ""
                 by_url[u]["_source_query"] = q
 
     qdomain = _domain(primary)
+    excluded_prior = 0
+    if exclude_urls:
+        before_exclude = len(merged)
+        merged = [h for h in merged if h.get("url", "") not in exclude_urls]
+        excluded_prior = before_exclude - len(merged)
+        if excluded_prior:
+            print(f"[find] suppressed {excluded_prior} candidate(s) already sampled "
+                  f"by the broad search pass")
     _pre_junk_count = len(merged)
     merged = [h for h in merged if not _is_junk_host(h.get("url", ""))]
     junk_dropped = _pre_junk_count - len(merged)
@@ -4751,7 +4939,7 @@ def _find_best_document(search_queries: list[str], limit: int, company: str = ""
             via += "+direct-probe"
             probe_only = True
 
-    ranked = _rank(merged, primary, qdomain)
+    ranked = _rank(merged, primary, qdomain, company_ctx=company_ctx)
     ranked_urls = _ranked_probe_urls(ranked, qdomain, TOP_N_FOR_LLM + 4)
     print(f"[find] domain_mode={domain_mode} | HEAD pre-filtering {len(ranked_urls)} "
           f"candidates for: {primary[:80]}")
@@ -4833,6 +5021,7 @@ def _find_best_document(search_queries: list[str], limit: int, company: str = ""
         "off_domain_dropped": raw_count - len(merged), "query_logs": query_logs,
         "probe_only": probe_only, "domain_mode": domain_mode,
         "junk_dropped": junk_dropped,
+        "excluded_prior_candidates": excluded_prior,
     }
 
 
@@ -4942,7 +5131,7 @@ def _llm_generate_search_queries(query, company, domain):
 # parallel multi-query search fan-out
 # ═══════════════════════════════════════════════════════════════════════════
 def _parallel_web_search(queries, limit, report_class=None, year=None,
-                         company_ctx=None, synonyms=None):
+                         company_ctx=None, synonyms=None, search_phase=None):
     results = {}
     if not queries:
         return results
@@ -4952,7 +5141,8 @@ def _parallel_web_search(queries, limit, report_class=None, year=None,
         try:
             res = _single_web_search(
                 q, limit, report_class=report_class, year=year,
-                company_ctx=company_ctx, synonyms=synonyms)
+                company_ctx=company_ctx, synonyms=synonyms,
+                search_phase=search_phase)
             # _single_web_search must return a 2-tuple; guard against a code
             # path that returns None so the fan-out map never holds a None value.
             return q, (res if res is not None else ([], "none-returned"))
@@ -5714,6 +5904,12 @@ def _invoke_sync(payload: dict) -> dict:
         # validated ticker gets a dedicated alias probe; the exact CIK is kept
         # for the registry API rather than used as noisy free-text.
         search_queries: list[str] = []
+        class_synonyms: list[str] = []
+        for _canon, _rule in _matched_doc_classes(prepared):
+            for _syn in _aliases_for_rule(
+                    _rule, region_override or ALIAS_REGION):
+                if _syn not in class_synonyms:
+                    class_synonyms.append(_syn)
         if (resolved is None and "direct_search" in route
                 and (domain or not REQUIRE_OFFICIAL_DOMAIN_FOR_WEB)):
             attempted_stages.append("direct_search")
@@ -5729,12 +5925,6 @@ def _invoke_sync(payload: dict) -> dict:
             # reasoning over a hint) still need the literal alias-substituted
             # query text to find synonym-titled documents at all.
             _vertex_backend = SEARCH_BACKEND in ("vertex", "vertex_lambda", "lambda")
-            class_synonyms: list[str] = []
-            if _vertex_backend:
-                for _canon, _rule in _matched_doc_classes(prepared):
-                    for _syn in _aliases_for_rule(_rule, region_override or ALIAS_REGION):
-                        if _syn not in class_synonyms:
-                            class_synonyms.append(_syn)
             search_queries = _official_search_queries(
                 prepared, company_ctx, ([] if _vertex_backend else aliases),
                 generated)
@@ -5826,6 +6016,109 @@ def _invoke_sync(payload: dict) -> dict:
                         if previous is not None:
                             print(f"[latest] upgraded candidate "
                                   f"{previous.get('url')} -> {dc.get('url')}")
+
+        # ── Identity-anchored Google recovery after static discovery ──
+        # The broad first pass has good recall but can return generic pages or
+        # a similarly named company.  Before paying for a live browser, issue
+        # a very small second pass with the exact validated legal name, class,
+        # ticker and a section hint learned from first-pass URLs.  Candidates
+        # already sampled by Tier 1 are suppressed so this buys new coverage
+        # instead of re-verifying the same top Google results.
+        if ((resolved is None
+             or (latest_discovery_mode
+                 and _needs_latest_document_upgrade(resolved)))
+                and "targeted_search" in route
+                and ENABLE_TARGETED_SEARCH_RECOVERY
+                and (domain or not REQUIRE_OFFICIAL_DOMAIN_FOR_WEB)
+                and _budget.can_verify(browser_reserve)):
+            prior_urls = [
+                candidate.get("url", "")
+                for _, candidate in found.get("ranked", [])
+                if candidate.get("url")
+            ]
+            targeted_queries = _targeted_search_queries(
+                prepared, company_ctx, _reg_class,
+                synonyms=class_synonyms or None,
+                prior_urls=prior_urls,
+            )
+            if targeted_queries:
+                attempted_stages.append("targeted_search")
+                prior_sampled = {
+                    item.get("url", "")
+                    for item in found.get("candidate_infos", [])
+                    if item.get("url")
+                }
+                recovery = _find_best_document(
+                    targeted_queries, MAX_RESULTS, company=company_raw,
+                    budget=_budget, reserve_verifies=browser_reserve,
+                    report_class=_reg_class, year=_reg_year,
+                    company_ctx=company_ctx,
+                    preferred_language=preferred_language,
+                    company_aliases=company_aliases,
+                    class_synonyms=class_synonyms or None,
+                    exclude_urls=prior_sampled,
+                    search_phase="targeted_recovery",
+                )
+                browser_candidates = list(dict.fromkeys(
+                    browser_candidates
+                    + list(recovery.get("browser_candidates") or [])))
+                recovery_landing_pages = [
+                    candidate.get("url", "")
+                    for _, candidate in recovery.get("ranked", [])
+                    if (candidate.get("url")
+                        and not _is_doc_url(candidate.get("url", ""))
+                        and _host_matches(candidate.get("url", ""), domain or "")
+                        and urlparse(candidate.get("url", "")).scheme in {
+                            "http", "https",
+                        })
+                ][:3]
+                browser_landing_pages = list(dict.fromkeys(
+                    browser_landing_pages + recovery_landing_pages))[:6]
+                recovery_decision = recovery["decision"]
+                base_log["targeted_search"] = {
+                    "queries": targeted_queries,
+                    "via": recovery.get("via"),
+                    "domain_mode": recovery.get("domain_mode"),
+                    "decision_reason": recovery_decision.get("reason"),
+                    "prior_sampled_candidates": len(prior_sampled),
+                    "prior_candidates_suppressed": recovery.get(
+                        "excluded_prior_candidates", 0),
+                }
+                if (_confident(recovery_decision, prepared)
+                        and recovery_decision.get("selected_url")):
+                    sel = recovery_decision["selected_url"]
+                    body, ctype = _material_for(sel, recovery)
+                    recovered: dict | None = None
+                    recovered_stage: str | None = None
+                    if body is not None:
+                        if _is_doc_ctype(ctype) or _is_doc_url(sel):
+                            recovered = {
+                                "url": sel, "body": body,
+                                "ctype": ctype or "application/pdf",
+                                "via": "targeted_search",
+                            }
+                            recovered_stage = "targeted_search"
+                        else:
+                            recovered = _resolve_from_html(
+                                sel, body, domain, prepared,
+                                prebrowser_verify_fn, _budget)
+                            if recovered:
+                                recovered_stage = "targeted_search+html_crawl"
+                    if recovered:
+                        previous = resolved
+                        preferred = _prefer_newer_document(resolved, recovered)
+                        if preferred is recovered:
+                            resolved = recovered
+                            stage = recovered_stage
+                            decision = recovery_decision
+                            base_log["decision_reason"] = decision.get("reason")
+                            if previous is not None:
+                                print(f"[latest] upgraded candidate "
+                                      f"{previous.get('url')} -> "
+                                      f"{recovered.get('url')}")
+                elif resolved is None:
+                    decision = recovery_decision
+                    base_log["decision_reason"] = decision.get("reason")
 
         # ── JavaScript/deep-navigation browser fallback ──
         if ((resolved is None

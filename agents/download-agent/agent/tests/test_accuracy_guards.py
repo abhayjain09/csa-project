@@ -816,6 +816,7 @@ class DiscoveryRoutingTests(unittest.TestCase):
             "direct_search",
             "official_crawl",
             "deep_crawl",
+            "targeted_search",
             "browser",
         ])
 
@@ -826,6 +827,7 @@ class DiscoveryRoutingTests(unittest.TestCase):
             "direct_search",
             "official_crawl",
             "deep_crawl",
+            "targeted_search",
             "browser",
             "registry",
         ])

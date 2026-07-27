@@ -13,7 +13,8 @@ Contracts (direct boto3 RequestResponse invoke from the AgentCore runtime):
          "year": <int, optional>,
          "company_name": "<legal/official name, optional>",
          "ticker": "<ticker, optional>",
-         "jurisdiction": "<jurisdiction, optional>"}
+         "jurisdiction": "<jurisdiction, optional>",
+         "search_phase": "targeted_recovery" (optional)}
   OUT : {"results": [{"title","url","snippet"}, ...],
          "via": "vertex-grounding", "count": <int>}
 
@@ -248,7 +249,8 @@ def _clean_identity_hint(raw: dict) -> dict:
 def _document_search_prompt(query: str, report_class: str, year,
                             company_name: str, ticker: str,
                             jurisdiction: str,
-                            synonyms: list | None = None) -> str:
+                            synonyms: list | None = None,
+                            search_phase: str = "") -> str:
     """Layer structured identity/class/year facts on top of the free-text
     query so Gemini's own internal search formulation has explicit anchors,
     instead of relying on those signals being embedded as ordinary words
@@ -272,6 +274,16 @@ def _document_search_prompt(query: str, report_class: str, year,
         facts.append(f"Document type requested: {report_class}{also}.")
     if year:
         facts.append(f"Target fiscal/reporting year: {year}.")
+    if search_phase == "targeted_recovery":
+        facts.append(
+            "Recovery search: an earlier broad Google pass and the company's "
+            "static website crawl did not yield a verified document. Reformulate "
+            "the search around the exact legal company identity and exact document "
+            "class. Look specifically for a direct official PDF, an official "
+            "archive/CMS asset, or a document CDN URL linked by the official site. "
+            "Do not return a similarly named company, generic guidance, a vendor "
+            "template, or a neighboring document class."
+        )
     if not facts:
         return query
     facts.append(
@@ -317,6 +329,7 @@ def lambda_handler(event, context):
         report_class = str(event.get("report_class") or "").strip()
         ticker = str(event.get("ticker") or "").strip()
         jurisdiction = str(event.get("jurisdiction") or "").strip()
+        search_phase = str(event.get("search_phase") or "").strip().lower()
         raw_synonyms = event.get("synonyms") or []
         synonyms = [str(s).strip() for s in raw_synonyms
                     if isinstance(s, str) and str(s).strip()][:8]
@@ -327,7 +340,7 @@ def lambda_handler(event, context):
             year = None
         query = _document_search_prompt(
             query, report_class, year, company_name, ticker, jurisdiction,
-            synonyms=synonyms)
+            synonyms=synonyms, search_phase=search_phase)
 
     if not query or (mode == "company_identity" and not company_name):
         return {"results": [], "via": "vertex-error", "count": 0,

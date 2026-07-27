@@ -3,14 +3,15 @@ Here's how the EDO Co-Analyst Download Agent works, end to end — updated after
 ## Purpose
 Given a company (by name/ticker/CIK), the agent finds, verifies, and downloads specific classes of official corporate compliance documents — annual reports, ESG/sustainability reports, codes of conduct, anti-bribery policies, proxy statements, whistleblowing policies, insider trading policies, tax strategy documents, etc. (21 classes total) — into the S3 corpus, with every stored object backed by a provenance record. The whole design philosophy is **fail-closed**: if the agent can't verify a document with confidence, it stores nothing rather than storing something wrong.
 
-## The five-tier discovery cascade
+## The six-tier discovery cascade
 For a given company + document class, the agent tries tiers in order, stopping as soon as one produces a verified match:
 
 1. **Tier 1 — Vertex AI Search grounded by Gemini** (real Vertex `generateContent` call with `tools: [{"google_search": {}}]` — confirmed genuine grounded search, not a plain LLM guess; see `vertex_search/lambda.py:_vertex_grounded_search`). Runs in an isolated Lambda (`edo-coanalyst-report-vertex-search`), kept separate from the main agent container specifically because it uses GCP credentials (pulled from Secrets Manager via AWS↔GCP Workload Identity Federation) — a deliberate security boundary. Set via `SEARCH_BACKEND=vertex_lambda`.
 2. **Tier 2 — Deterministic registry lookup** (`registry_tier.py`) — SEC EDGAR (≤8 req/s, global in-process lock — safe even under bulk concurrency), UK Companies House, or NSE/BSE (India — partial). Sub-second, bypasses LLM verification entirely.
 3. **Tier 3 — Sitemap enumeration**.
 4. **Tier 4 — Deep static crawl** — now **class-aware** (see "Crawl efficiency" below): steers away from SEC-filing index sections for non-filing classes.
-5. **Tier 5 — AgentCore Browser (JS-heavy fallback)** — Playwright via CDP, most expensive/slowest, used last.
+5. **Tier 5 — Targeted Google recovery** — if the broad search and static tiers fail, issue at most three materially different Google-grounded probes using the exact validated legal name, canonical class/aliases, year, official domain, and a relevant path hint learned from Tier 1 results. URLs already sampled in Tier 1 are suppressed. Search ranking explicitly boosts validated legal-name/ticker/official-domain evidence, but the content-based company gate still makes the final decision.
+6. **Tier 6 — AgentCore Browser (JS-heavy fallback)** — Playwright via CDP, most expensive/slowest, used last.
 
 ## Verification & selection
 - **Claude Haiku 4.5** (`us.anthropic.claude-haiku-4-5-20251001-v1:0`) is the default verification/selection model. Override via `SELECTION_MODEL_ID`.

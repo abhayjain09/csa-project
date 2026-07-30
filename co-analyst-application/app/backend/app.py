@@ -110,13 +110,14 @@ Patches in this revision (1-6, plus 7-8 below):
      Manual uploads and presigned downloads reject mislabeled/corrupt PDFs.
 """
 import os, json, uuid, re, threading, hashlib, logging, urllib.request, urllib.error
+import time, random
 import unicodedata
 from datetime import datetime, timezone, timedelta
 from io import BytesIO
 from pathlib import PurePosixPath
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from urllib.parse import urlsplit
-from flask import Flask, request, jsonify, send_from_directory
+from urllib.parse import urlsplit, quote
+from flask import Flask, request, jsonify, send_from_directory, Response, stream_with_context
 from flask_cors import CORS
 from werkzeug.exceptions import NotFound as WerkzeugNotFound
 import boto3
@@ -205,7 +206,7 @@ AGENT_READ_TIMEOUT = int(os.environ.get("AGENT_READ_TIMEOUT", "1620"))
 AGENT_CHUNK_SIZE        = int(os.environ.get("AGENT_CHUNK_SIZE",        "1"))
 AGENT_CHUNK_CONCURRENCY = int(os.environ.get("AGENT_CHUNK_CONCURRENCY", "3"))
 BULK_COMPANY_CONCURRENCY = max(
-    1, int(os.environ.get("BULK_COMPANY_CONCURRENCY", "3")))
+    1, int(os.environ.get("BULK_COMPANY_CONCURRENCY", "4")))
 
 # One executor per backend process. A single bulk request is handled by one
 # process, so ten submitted companies occupy at most three worker threads while
@@ -214,6 +215,37 @@ _BULK_COMPANY_EXECUTOR = ThreadPoolExecutor(
     max_workers=BULK_COMPANY_CONCURRENCY,
     thread_name_prefix="reportiq-bulk-company",
 )
+
+# ─── Manual "kill" signal for in-flight runs ───────────────────────────────────
+# In-memory only — sufficient because the Dockerfile pins gunicorn to a single
+# worker process (same assumption _BULK_COMPANY_EXECUTOR already relies on).
+# DELETE /api/runs/<run_id> flags the run here, then deletes its DynamoDB row.
+# _do_invoke_inner checks this flag between chunks and, once it sees it, stops
+# dispatching further work and returns WITHOUT writing to the run row again —
+# otherwise update_item's default upsert behaviour would silently recreate the
+# row we just deleted.
+_KILLED_RUN_IDS: set = set()
+_KILLED_RUN_IDS_LOCK = threading.Lock()
+
+
+def _mark_run_killed(run_id: str) -> None:
+    with _KILLED_RUN_IDS_LOCK:
+        _KILLED_RUN_IDS.add(run_id)
+
+
+def _consume_run_kill(run_id: str) -> bool:
+    """Return True (and forget) exactly once if this run_id was killed."""
+    with _KILLED_RUN_IDS_LOCK:
+        if run_id in _KILLED_RUN_IDS:
+            _KILLED_RUN_IDS.remove(run_id)
+            return True
+    return False
+
+
+def _is_run_killed(run_id: str) -> bool:
+    """Peek without clearing — used mid-loop to decide whether to keep going."""
+    with _KILLED_RUN_IDS_LOCK:
+        return run_id in _KILLED_RUN_IDS
 
 # A run is considered "stuck" if it has been running for more than this many
 # minutes (used only as a cheap outer gate for whether it's worth spawning a
@@ -492,6 +524,40 @@ def _invoke_agentcore_sigv4(payload_bytes: bytes) -> bytes:
         raise RuntimeError(f"AgentCore HTTP {e.code}: {body.decode('utf-8', errors='replace')}")
 
 
+AGENT_THROTTLE_MAX_RETRIES = int(os.environ.get("AGENT_THROTTLE_MAX_RETRIES", "3"))
+
+
+def _is_throttling_error(e: Exception) -> bool:
+    """True for a ThrottlingException/429 from either invoke path.
+
+    Safe to retry (unlike a read-timeout): a throttled call never reached
+    the agent, so re-sending the same payload cannot double-run it.
+    """
+    if isinstance(e, ClientError):
+        code = e.response.get("Error", {}).get("Code", "")
+        if code in ("ThrottlingException", "TooManyRequestsException"):
+            return True
+    text = str(e).lower()
+    return "throttl" in text or "too many requests" in text or "http 429" in text
+
+
+def _invoke_agentcore_http_with_retry(payload_bytes: bytes) -> bytes:
+    """_invoke_agentcore_http, retrying only on throttling with backoff."""
+    attempt = 0
+    while True:
+        try:
+            return _invoke_agentcore_http(payload_bytes)
+        except Exception as e:  # noqa: BLE001
+            if not _is_throttling_error(e) or attempt >= AGENT_THROTTLE_MAX_RETRIES:
+                raise
+            wait = 1.5 * (2 ** attempt) + random.uniform(0.0, 0.5)
+            attempt += 1
+            log.warning(
+                "[agentcore] throttled (attempt %d/%d) — retrying in %.1fs: %s",
+                attempt, AGENT_THROTTLE_MAX_RETRIES, wait, e)
+            time.sleep(wait)
+
+
 # ─── S3 reconciliation ────────────────────────────────────────────────────────
 def _normalize_company(company: str) -> str:
     """Strip accents and lowercase for matching."""
@@ -537,11 +603,13 @@ def _s3_prefix_for_company(company: str) -> str:
 
 
 def _clean_company_reports(company: str, dynamo=None, s3=None) -> dict:
-    """Delete one company's reports and provenance before a fresh run.
+    """Reset one company's page index before a fresh run.
 
-    Query definitions and historical run rows are deliberately retained:
-    reruns depend on the query record, and run rows are status/audit history.
-    Any AWS deletion error is raised so the agent cannot run over stale data.
+    Only deletes the pageindex JSON file from S3 — never touches the
+    source PDFs. Provenance records are also cleared so rag_status
+    resets to Pending and the UI shows documents as unindexed.
+
+    Query definitions and historical run rows are deliberately retained.
     """
     if dynamo is None:
         dynamo = get_dynamo()
@@ -549,36 +617,19 @@ def _clean_company_reports(company: str, dynamo=None, s3=None) -> dict:
         s3 = get_s3()
 
     company_slug = _agent_slug(company)
-    prefix = company_slug + "/"
-    deleted_s3 = 0
+    prefix       = company_slug + "/"
+    deleted_s3   = 0
 
-    def _delete_s3_batch(objects):
-        nonlocal deleted_s3
-        for start in range(0, len(objects), 1000):
-            batch = objects[start:start + 1000]
-            if not batch:
-                continue
-            response = s3.delete_objects(
-                Bucket=REPORTS_BUCKET,
-                Delete={"Objects": batch, "Quiet": True},
-            )
-            errors = response.get("Errors") or []
-            if errors:
-                raise RuntimeError(f"S3 cleanup failed for {prefix}: {errors[:3]}")
-            deleted_s3 += len(batch)
-
-    # Delete current objects, then all retained versions/delete markers.
-    paginator = s3.get_paginator("list_objects_v2")
-    for page in paginator.paginate(Bucket=REPORTS_BUCKET, Prefix=prefix):
-        _delete_s3_batch([{"Key": obj["Key"]} for obj in page.get("Contents", [])])
-
-    version_paginator = s3.get_paginator("list_object_versions")
-    for page in version_paginator.paginate(Bucket=REPORTS_BUCKET, Prefix=prefix):
-        versioned = []
-        for field in ("Versions", "DeleteMarkers"):
-            versioned.extend({"Key": obj["Key"], "VersionId": obj["VersionId"]}
-                             for obj in page.get(field, []))
-        _delete_s3_batch(versioned)
+    # ONLY delete the pageindex JSON — never touch source PDFs
+    pageindex_key = _pageindex_s3_key(prefix, company_slug)
+    try:
+        s3.delete_object(Bucket=REPORTS_BUCKET, Key=pageindex_key)
+        deleted_s3 = 1
+        log.info("[cleanup] deleted pageindex JSON: %s", pageindex_key)
+    except ClientError as exc:
+        if exc.response["Error"]["Code"] not in ("NoSuchKey", "404"):
+            raise
+        log.info("[cleanup] pageindex JSON not found, skipping: %s", pageindex_key)
 
     # Provenance is keyed by company slug + S3 key. Query the exact company
     # partition instead of scanning or touching any other company's records.
@@ -602,15 +653,14 @@ def _clean_company_reports(company: str, dynamo=None, s3=None) -> dict:
         query_args["ExclusiveStartKey"] = last_key
 
     summary = {
-        "company": company,
-        "company_slug": company_slug,
-        "s3_deleted": deleted_s3,
+        "company":            company,
+        "company_slug":       company_slug,
+        "s3_deleted":         deleted_s3,
         "provenance_deleted": deleted_provenance,
     }
     log.info("[fresh-run-cleanup] company=%r slug=%s s3=%d provenance=%d",
              company, company_slug, deleted_s3, deleted_provenance)
     return summary
-
 
 def _list_s3_files_for_run(company: str, run_id: str) -> list:
     """
@@ -1562,35 +1612,39 @@ def _refresh_timed_out_queries(run: dict, dynamo=None) -> dict:
 
 def _patch_run_with_upload(run_id: str, s3_key: str, file_name: str, query: str,
                            chunk: str, dynamo=None,
-                           source_url: str = "") -> bool:
+                           source_url: str = "") -> dict:
     """
-    PATCH #7 (+ #9 fix below): after a manual upload succeeds, patch the run
-    row so the portal's next refresh shows a Download button instead of
-    Upload for that query, AND so the run-list "Failures" count actually
+    PATCH #7 (+ #9, + manual-replace fix below): after a manual upload
+    succeeds, patch the run row so the portal's next refresh shows a Download
+    button for that query, AND so the run-list "Failures" count actually
     drops:
-      - append the file to the run's `downloaded` list (dedup by s3_key)
+      - replace/append the file in the run's `downloaded` list (dedup by
+        s3_key; an existing entry for the SAME query's previous s3_key, if
+        any, is dropped rather than left alongside the new one)
       - flip the matching per-query row's status to 'downloaded' inside
         diagnostics.per_chunk[*].results (matched by chunk index + query text
-        when both are supplied; falls back to matching by query text alone)
+        when both are supplied; falls back to matching by query text alone).
+        This now OVERWRITES an already-'downloaded' row too — the agent can
+        grab the wrong document, and a manual upload against the same query
+        must be able to correct it, not just fill in a missing one.
       - PATCH #9: remove the matching entry from the run's top-level
-        `failures` list too. Previously this list (which feeds
-        countFailures() / the Runs table's "Failures" column) was never
-        touched by a manual upload — only `downloaded` and the per-query
-        diagnostics rows were patched — so a run could show a correct
-        per-query "downloaded" row for the uploaded query while the run-list
-        Failures count stayed frozen at its original value forever. Entries
-        in `failures` may be plain query strings or dicts carrying a
-        "query"/"web_query" key (the agent's no_document_found shape isn't
-        fully pinned down yet), so both are matched.
-    Returns False if the run row doesn't exist (upload + provenance still
-    succeed independently — this is purely a UI convenience patch).
+        `failures` list too. Entries in `failures` may be plain query strings
+        or dicts carrying a "query"/"web_query" key (the agent's
+        no_document_found shape isn't fully pinned down yet), so both are
+        matched.
+    Returns {"patched": bool, "old_s3_key": str|None}. `old_s3_key` is set
+    when this upload superseded a different s3_key for the same query — the
+    caller is responsible for deleting that now-orphaned object from S3 (see
+    upload_source()). "patched" is False if the run row doesn't exist (the
+    upload + provenance write still succeed independently — this patch is
+    purely a UI/cleanup convenience).
     """
     if dynamo is None:
         dynamo = get_dynamo()
     tbl  = dynamo.Table(RUNS_TABLE)
     item = tbl.get_item(Key={"run_id": run_id}).get("Item")
     if not item:
-        return False
+        return {"patched": False, "old_s3_key": None}
 
     try:
         downloaded = json.loads(item.get("downloaded") or "[]")
@@ -1598,14 +1652,6 @@ def _patch_run_with_upload(run_id: str, s3_key: str, file_name: str, query: str,
         downloaded = []
     if not isinstance(downloaded, list):
         downloaded = []
-    if not any(isinstance(d, dict) and d.get("s3_key") == s3_key for d in downloaded):
-        downloaded.append({
-            "s3_key":      s3_key,
-            "file_name":   file_name,
-            "source_url":  source_url or (
-                ("manual-upload: " + query) if query else "manual-upload"),
-            "manual_upload": True,
-        })
 
     # PATCH #9: drop this query from the top-level failures list so the Runs
     # table's Failures column count actually reflects the manual upload.
@@ -1631,6 +1677,7 @@ def _patch_run_with_upload(run_id: str, s3_key: str, file_name: str, query: str,
 
     query_key = _normalise_query(query)
     result_patched = False
+    old_s3_key = None
     for pc in (diag.get("per_chunk") or []):
         if not isinstance(pc, dict) or not isinstance(pc.get("results"), list):
             continue
@@ -1642,8 +1689,11 @@ def _patch_run_with_upload(run_id: str, s3_key: str, file_name: str, query: str,
         for r in pc["results"]:
             if not isinstance(r, dict):
                 continue
-            if (query_key and _normalise_query(r.get("query")) == query_key
-                    and r.get("status") != "downloaded"):
+            if query_key and _normalise_query(r.get("query")) == query_key:
+                was_downloaded = r.get("status") == "downloaded"
+                prior_key = r.get("s3_key")
+                if was_downloaded and prior_key and prior_key != s3_key:
+                    old_s3_key = prior_key
                 r.update({
                     "status":     "downloaded",
                     "s3_key":     s3_key,
@@ -1653,13 +1703,30 @@ def _patch_run_with_upload(run_id: str, s3_key: str, file_name: str, query: str,
                 })
                 result_patched = True
                 # Keep legacy/fallback chunk counts consistent with the
-                # per-query result that was just resolved.
-                try:
-                    pc["failures"] = max(0, int(pc.get("failures") or 0) - 1)
-                    pc["downloaded"] = int(pc.get("downloaded") or 0) + 1
-                except (TypeError, ValueError):
-                    pass
+                # per-query result that was just resolved (only decrement
+                # `failures` when this query genuinely was one — replacing an
+                # already-downloaded row must not double-count).
+                if not was_downloaded:
+                    try:
+                        pc["failures"] = max(0, int(pc.get("failures") or 0) - 1)
+                        pc["downloaded"] = int(pc.get("downloaded") or 0) + 1
+                    except (TypeError, ValueError):
+                        pass
                 break
+
+    if old_s3_key:
+        downloaded = [
+            d for d in downloaded
+            if not (isinstance(d, dict) and d.get("s3_key") == old_s3_key)
+        ]
+    if not any(isinstance(d, dict) and d.get("s3_key") == s3_key for d in downloaded):
+        downloaded.append({
+            "s3_key":      s3_key,
+            "file_name":   file_name,
+            "source_url":  source_url or (
+                ("manual-upload: " + query) if query else "manual-upload"),
+            "manual_upload": True,
+        })
 
     # Remove exactly one failure: one upload resolves one failed query.  Use a
     # normalised comparison first; if the agent rewrote the prepared query more
@@ -1674,7 +1741,7 @@ def _patch_run_with_upload(run_id: str, s3_key: str, file_name: str, query: str,
             if _normalise_query(failure_query) == query_key:
                 failure_index = i
                 break
-    if failure_index is None and result_patched and failures:
+    if failure_index is None and result_patched and failures and not old_s3_key:
         failure_index = 0
     if failure_index is not None:
         failures.pop(failure_index)
@@ -1691,10 +1758,10 @@ def _patch_run_with_upload(run_id: str, s3_key: str, file_name: str, query: str,
                 ":fa": json.dumps(failures),
             },
         )
-        return True
+        return {"patched": True, "old_s3_key": old_s3_key}
     except Exception as ex:
         log.error("[upload] run patch write failed for %s: %s", run_id[:8], ex)
-        return False
+        return {"patched": False, "old_s3_key": None}
 
 
 def _get_stuck_runs(dynamo=None) -> list:
@@ -1711,6 +1778,170 @@ def _get_stuck_runs(dynamo=None) -> list:
     except Exception as e:
         log.error("[reconcile] scan error: %s", e)
         return []
+
+
+# Statuses that mean "a run for this company is already in flight" — used to
+# stop a second run for the SAME company from being started concurrently.
+# This matters because _clean_company_reports() (called at the start of every
+# run) deletes ALL of a company's existing S3 objects/provenance before that
+# run downloads anything; two concurrent runs for the same company would race
+# on that cleanup and could delete files the other run just stored.
+_ACTIVE_RUN_STATUSES = {"queued", "running", "browser_retry_pending"}
+
+
+class ActiveRunConflict(Exception):
+    """Raised when a company already has an in-flight run."""
+
+    def __init__(self, run: dict):
+        self.run = run
+        company = run.get("company", "This company")
+        status  = run.get("status", "active")
+        super().__init__(f"{company} already has an active run ({status}).")
+
+
+def _find_active_run_for_company(company: str, dynamo=None) -> dict | None:
+    """Return the in-flight run for this company, if any.
+
+    A plain scan-then-check — not perfectly atomic against two near-
+    simultaneous submissions for the same company, but this guards a
+    human clicking buttons in the UI, not a tight automated retry loop, so
+    the tiny race window is an acceptable trade-off for staying simple.
+    """
+    if dynamo is None:
+        dynamo = get_dynamo()
+    if not company:
+        return None
+    try:
+        resp = dynamo.Table(RUNS_TABLE).scan(
+            FilterExpression=(
+                "#c = :c AND (#st = :s1 OR #st = :s2 OR #st = :s3)"),
+            ExpressionAttributeNames={"#c": "company", "#st": "status"},
+            ExpressionAttributeValues={
+                ":c":  company,
+                ":s1": "queued",
+                ":s2": "running",
+                ":s3": "browser_retry_pending",
+            },
+        )
+        items = resp.get("Items", [])
+        return items[0] if items else None
+    except Exception as e:
+        log.error("[guard] active-run scan failed for company=%r: %s",
+                  company, e)
+        return None  # fail-open: a scan hiccup shouldn't block a real run
+
+
+# Grace window before a "queued" run is treated as orphaned rather than
+# genuinely waiting behind BULK_COMPANY_CONCURRENCY. Must comfortably exceed
+# how long a submit() takes to be picked up by a free executor thread in the
+# SAME live process (near-instant) so this only fires for rows whose original
+# in-memory ThreadPoolExecutor submission was lost (process restart/crash).
+QUEUED_RESUME_GRACE_SECONDS = int(
+    os.environ.get("QUEUED_RESUME_GRACE_SECONDS", "90"))
+
+
+def _get_running_count(dynamo=None) -> int:
+    if dynamo is None:
+        dynamo = get_dynamo()
+    try:
+        resp = dynamo.Table(RUNS_TABLE).scan(
+            FilterExpression="#st = :r",
+            ExpressionAttributeNames={"#st": "status"},
+            ExpressionAttributeValues={":r": "running"},
+            Select="COUNT",
+        )
+        return resp.get("Count", 0)
+    except Exception as e:
+        log.error("[reconcile] running-count scan error: %s", e)
+        return BULK_COMPANY_CONCURRENCY  # fail safe: assume full, don't resubmit
+
+
+def _get_queued_runs(dynamo=None) -> list:
+    """Scan runs table for any run with status=queued."""
+    if dynamo is None:
+        dynamo = get_dynamo()
+    try:
+        resp = dynamo.Table(RUNS_TABLE).scan(
+            FilterExpression="#st = :q",
+            ExpressionAttributeNames={"#st": "status"},
+            ExpressionAttributeValues={":q": "queued"},
+        )
+        items = resp.get("Items", [])
+        while resp.get("LastEvaluatedKey"):
+            resp = dynamo.Table(RUNS_TABLE).scan(
+                ExclusiveStartKey=resp["LastEvaluatedKey"],
+                FilterExpression="#st = :q",
+                ExpressionAttributeNames={"#st": "status"},
+                ExpressionAttributeValues={":q": "queued"},
+            )
+            items.extend(resp.get("Items", []))
+        return items
+    except Exception as e:
+        log.error("[reconcile] queued scan error: %s", e)
+        return []
+
+
+def _resume_stale_queued_runs(dynamo=None) -> list:
+    """Resubmit 'queued' runs whose original in-memory executor submission was
+    lost (e.g. a backend restart/crash/deploy).
+
+    _async_invoke / _queue_bulk_invocations persist a run row as "queued" and
+    ONLY start it by handing a callable to the in-process _BULK_COMPANY_EXECUTOR
+    (a ThreadPoolExecutor). That pending-task queue is purely in-memory and does
+    not survive a process restart, so a row can be stranded at "queued" forever
+    with nothing left to ever execute it — this is why runs pile up in "queued"
+    with progress permanently stuck at 0/N chunks. A row genuinely waiting for a
+    free BULK_COMPANY_CONCURRENCY slot in the SAME live process starts almost
+    immediately once a slot frees, so any "queued" row older than
+    QUEUED_RESUME_GRACE_SECONDS while a slot is actually free must be orphaned,
+    not just waiting in line.
+    """
+    if dynamo is None:
+        dynamo = get_dynamo()
+    queued = _get_queued_runs(dynamo)
+    if not queued:
+        return []
+
+    now = datetime.now(timezone.utc)
+
+    def _age_seconds(run: dict) -> float:
+        queued_at = run.get("queued_at", "")
+        try:
+            dt = datetime.fromisoformat(queued_at.replace("Z", "+00:00"))
+            return (now - dt).total_seconds()
+        except Exception:
+            return float("inf")  # missing/garbled timestamp — treat as stale
+
+    eligible = sorted(
+        (r for r in queued if _age_seconds(r) > QUEUED_RESUME_GRACE_SECONDS),
+        key=_age_seconds, reverse=True,
+    )
+    if not eligible:
+        return []
+
+    available = max(0, BULK_COMPANY_CONCURRENCY - _get_running_count(dynamo))
+    resumed = []
+    queries_tbl = dynamo.Table(QUERIES_TABLE)
+    for run in eligible[:available]:
+        run_id   = run.get("run_id", "")
+        query_id = run.get("query_id", "")
+        if not run_id or not query_id:
+            continue
+        record = queries_tbl.get_item(Key={"query_id": query_id}).get("Item")
+        if not record:
+            log.error(
+                "[reconcile] queued run %s has no matching query %s — "
+                "cannot resubmit", run_id[:8], query_id)
+            continue
+        record = dict(record)
+        record["run_id"] = run_id
+        log.info(
+            "[reconcile] resubmitting orphaned queued run %s (company=%s, "
+            "queued %.0fs ago)", run_id[:8], run.get("company", ""),
+            _age_seconds(run))
+        _BULK_COMPANY_EXECUTOR.submit(_do_invoke, run_id, record)
+        resumed.append(run_id)
+    return resumed
 
 
 # ─── Background reconciler — runs every 60s ───────────────────────────────────
@@ -1737,6 +1968,10 @@ def _background_reconciler():
                     except Exception as ex:
                         log.error("[bg-reconciler] run %s failed: %s",
                                  run.get("run_id", "")[:8], ex)
+            resumed = _resume_stale_queued_runs(dynamo)
+            if resumed:
+                log.info("[bg-reconciler] resumed %d orphaned queued run(s): %s",
+                         len(resumed), [r[:8] for r in resumed])
         except Exception as e:
             log.error("[bg-reconciler] Error: %s", e)
 
@@ -1809,11 +2044,47 @@ def save_query():
 
     run_ids = []
     bulk_batch_id = None
+    skipped = []
     if trigger:
-        if len(saved) > 1:
-            run_ids, bulk_batch_id = _queue_bulk_invocations(saved)
-        else:
-            run_ids.append(_async_invoke(saved[0]))
+        # Guard against two runs for the SAME company executing concurrently
+        # (see _find_active_run_for_company) — both against runs already in
+        # flight from an earlier submission, and against duplicate company
+        # names within this very batch. Skipped entries are still saved as
+        # queries above; they're just not started as a second run.
+        seen_companies = set()
+        eligible = []
+        for record in saved:
+            company = record.get("company", "Unknown")
+            company_key = (company or "").strip().casefold()
+            if company_key in seen_companies:
+                skipped.append({
+                    "company": company,
+                    "reason": "duplicate company in this submission",
+                })
+                continue
+            active = _find_active_run_for_company(company, dynamo)
+            if active:
+                skipped.append({
+                    "company":  company,
+                    "reason":   f"already has an active run "
+                                f"(status={active.get('status', '')})",
+                    "run_id":   active.get("run_id", ""),
+                })
+                continue
+            seen_companies.add(company_key)
+            eligible.append(record)
+
+        if len(eligible) > 1:
+            run_ids, bulk_batch_id = _queue_bulk_invocations(eligible)
+        elif len(eligible) == 1:
+            try:
+                run_ids.append(_async_invoke(eligible[0]))
+            except ActiveRunConflict as exc:
+                skipped.append({
+                    "company": eligible[0].get("company", "Unknown"),
+                    "reason":  str(exc),
+                    "run_id":  exc.run.get("run_id", ""),
+                })
 
     return jsonify({"saved": len(saved), "queries": saved,
                     "run_ids": run_ids, "triggered": trigger,
@@ -1823,7 +2094,8 @@ def save_query():
                         if bulk_batch_id else None),
                     "queued": (
                         max(0, len(run_ids) - BULK_COMPANY_CONCURRENCY)
-                        if bulk_batch_id else 0)}), 201
+                        if bulk_batch_id else 0),
+                    "skipped": skipped}), 201
 
 
 @app.route("/api/queries", methods=["GET"])
@@ -1846,7 +2118,14 @@ def trigger_query(query_id):
     item   = resp.get("Item")
     if not item:
         return jsonify({"error": "Query not found"}), 404
-    run_id = _async_invoke(item)
+    try:
+        run_id = _async_invoke(item)
+    except ActiveRunConflict as exc:
+        return jsonify({
+            "error":           str(exc),
+            "active_run_id":   exc.run.get("run_id", ""),
+            "active_status":   exc.run.get("status", ""),
+        }), 409
     return jsonify({"run_id": run_id, "query_id": query_id, "status": "triggered"})
 
 
@@ -1916,6 +2195,93 @@ def get_run(run_id):
     return jsonify(item)
 
 
+@app.route("/api/runs/<run_id>", methods=["DELETE"])
+def kill_run(run_id):
+    """Kill a run (best-effort) and remove its row from the Runs table.
+
+    In-flight AgentCore chunk calls already executing cannot be forcibly
+    interrupted, but no further chunks are dispatched once _do_invoke_inner
+    observes the kill flag (see _is_run_killed/_consume_run_kill), and it
+    never writes to this run_id again — so deleting the row here is final,
+    not something a lagging background write can resurrect.
+
+    For a run in browser_retry_pending, the ECS browser-worker task(s) for it
+    are also stopped directly, since that separate process's own patch-back
+    (browser_worker.py:_patch_run) would otherwise recreate the row after we
+    delete it.
+    """
+    dynamo   = get_dynamo()
+    runs_tbl = dynamo.Table(RUNS_TABLE)
+    item     = runs_tbl.get_item(Key={"run_id": run_id}).get("Item")
+    if not item:
+        return jsonify({"error": "Run not found"}), 404
+
+    _mark_run_killed(run_id)
+
+    if item.get("status") == "browser_retry_pending" and BROWSER_ECS_CLUSTER:
+        try:
+            jobs_tbl = dynamo.Table(BROWSER_JOBS_TABLE)
+            resp = jobs_tbl.scan(
+                FilterExpression="#run = :run",
+                ExpressionAttributeNames={"#run": "run_id"},
+                ExpressionAttributeValues={":run": run_id},
+            )
+            for job in resp.get("Items", []):
+                if job.get("status") not in {"queued", "launched", "running"}:
+                    continue
+                task_arn = job.get("task_arn")
+                if task_arn:
+                    try:
+                        get_ecs().stop_task(
+                            cluster=BROWSER_ECS_CLUSTER, task=task_arn,
+                            reason="Killed from Report IQ portal")
+                    except Exception as exc:
+                        log.warning("[kill] stop_task failed for %s: %s",
+                                    task_arn, exc)
+                try:
+                    jobs_tbl.update_item(
+                        Key={"job_id": job["job_id"]},
+                        UpdateExpression="SET #st = :s, updated_at = :u",
+                        ExpressionAttributeNames={"#st": "status"},
+                        ExpressionAttributeValues={
+                            ":s": "failed",
+                            ":u": datetime.now(timezone.utc).isoformat(),
+                        },
+                    )
+                except Exception as exc:
+                    log.warning("[kill] browser job status update failed for "
+                                "%s: %s", job.get("job_id", ""), exc)
+        except Exception as exc:
+            log.error("[kill] browser job cleanup failed for run %s: %s",
+                       run_id[:8], exc)
+
+    query_id = item.get("query_id")
+    if query_id and query_id != "unknown":
+        try:
+            dynamo.Table(QUERIES_TABLE).update_item(
+                Key={"query_id": query_id},
+                UpdateExpression="SET #st = :s, #u = :u",
+                ExpressionAttributeNames={"#st": "status", "#u": "updated_at"},
+                ExpressionAttributeValues={
+                    ":s": "killed",
+                    ":u": datetime.now(timezone.utc).isoformat(),
+                },
+            )
+        except Exception as exc:
+            log.error("[kill] query status update failed for %s: %s",
+                       query_id, exc)
+
+    try:
+        runs_tbl.delete_item(Key={"run_id": run_id})
+    except Exception as exc:
+        log.error("[kill] delete_item failed for run %s: %s", run_id[:8], exc)
+        return jsonify({"error": f"Failed to delete run: {exc}"}), 500
+
+    log.info("[kill] run %s (company=%s, was %s) killed and removed",
+              run_id[:8], item.get("company", ""), item.get("status", ""))
+    return jsonify({"ok": True, "run_id": run_id, "removed": True})
+
+
 @app.route("/api/browser-jobs/<job_id>", methods=["GET"])
 def get_browser_job(job_id):
     """Return durable status for a WAF browser retry."""
@@ -1960,11 +2326,14 @@ def reconcile_runs():
             "updated": updated,
             "error":   error,
         })
+    resumed = _resume_stale_queued_runs(dynamo)
+
     return jsonify({
-        "stuck_found": len(stuck),
-        "updated":     sum(1 for f in fixed if f["updated"]),
-        "failed":      [f for f in fixed if f.get("error")],
-        "details":     fixed,
+        "stuck_found":   len(stuck),
+        "updated":       sum(1 for f in fixed if f["updated"]),
+        "failed":        [f for f in fixed if f.get("error")],
+        "details":       fixed,
+        "queued_resumed": [r[:8] for r in resumed],
     })
 
 
@@ -2024,6 +2393,16 @@ def check_key():
 
 @app.route("/api/sources/download-url", methods=["GET"])
 def presigned_url():
+    """Return a download link for an S3 key.
+
+    NOTE: despite the route name (kept for frontend compatibility), this no
+    longer returns an S3-signed URL. AWS caps SigV4 presigned URLs at a hard
+    maximum of 7 days no matter what ExpiresIn is requested — there is no way
+    to make one that never expires. A persistent link instead has to proxy
+    through this backend: /api/sources/download-file streams the object
+    directly using our own IAM credentials on every request, so it keeps
+    working for as long as the backend does, with no expiry.
+    """
     s3_key = request.args.get("key", "").strip()
     if not s3_key:
         return jsonify({"error": "key param required"}), 400
@@ -2037,27 +2416,60 @@ def presigned_url():
                 "key": s3_key,
                 "valid_pdf": False,
             }), status
-        download_name = re.sub(
-            r"[^A-Za-z0-9._-]+", "_", PurePosixPath(s3_key).name
-        ).strip("._") or "download"
-        url = s3.generate_presigned_url(
-            "get_object",
-            Params={
-                "Bucket": REPORTS_BUCKET,
-                "Key": s3_key,
-                "ResponseContentDisposition": (
-                    f'attachment; filename="{download_name}"'),
-            },
-            ExpiresIn=3600,
-        )
+        url = "/api/sources/download-file?key=" + quote(s3_key, safe="")
         return jsonify({
             "url": url,
             "key": s3_key,
-            "expires_in": 3600,
+            "expires_in": None,
             "valid_pdf": True if s3_key.lower().endswith(".pdf") else None,
         })
     except ClientError as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/sources/download-file", methods=["GET"])
+def download_file():
+    """Persistent (non-expiring) download link — streams the S3 object
+    through this backend on every request instead of a time-limited
+    presigned URL. See the note on presigned_url() above for why a truly
+    non-expiring S3-signed URL isn't possible.
+    """
+    s3_key = request.args.get("key", "").strip()
+    if not s3_key:
+        return jsonify({"error": "key param required"}), 400
+    s3 = get_s3()
+    integrity_error = _s3_pdf_integrity_error(s3, s3_key)
+    if integrity_error:
+        status = 404 if integrity_error == "S3 object does not exist" else 422
+        return jsonify({"error": integrity_error, "key": s3_key}), status
+
+    try:
+        obj = s3.get_object(Bucket=REPORTS_BUCKET, Key=s3_key)
+    except ClientError as e:
+        code = e.response.get("Error", {}).get("Code", "")
+        status = 404 if code in {"404", "NoSuchKey", "NotFound"} else 500
+        return jsonify({"error": str(e)}), status
+
+    download_name = re.sub(
+        r"[^A-Za-z0-9._-]+", "_", PurePosixPath(s3_key).name
+    ).strip("._") or "download"
+    body = obj["Body"]
+
+    def _stream():
+        try:
+            for chunk in body.iter_chunks(chunk_size=64 * 1024):
+                yield chunk
+        finally:
+            body.close()
+
+    resp = Response(
+        stream_with_context(_stream()),
+        mimetype=obj.get("ContentType") or "application/octet-stream",
+    )
+    resp.headers["Content-Disposition"] = f'attachment; filename="{download_name}"'
+    if obj.get("ContentLength") is not None:
+        resp.headers["Content-Length"] = str(obj["ContentLength"])
+    return resp
 
 
 @app.route("/api/sources/list-s3", methods=["GET"])
@@ -2226,23 +2638,50 @@ def upload_source():
         log.error("[upload] provenance write failed for %s: %s", s3_key, ex)
 
     patched = False
+    old_s3_key = None
     if run_id:
         try:
-            patched = _patch_run_with_upload(
+            patch_result = _patch_run_with_upload(
                 run_id, s3_key, safe_name, query, chunk, dynamo,
                 source_url=source_url)
+            patched = patch_result.get("patched", False)
+            old_s3_key = patch_result.get("old_s3_key")
         except Exception as ex:
             log.error("[upload] run patch failed for %s: %s", run_id[:8], ex)
 
-    log.info("[upload] company=%s query=%r -> s3_key=%s run_patched=%s",
-             company, query, s3_key, patched)
+    # A manual upload against a query the agent already answered means the
+    # agent's file was wrong — remove it from S3 (and its provenance row) so
+    # it doesn't linger as a stale/duplicate document for this company.
+    replaced_agent_download = False
+    if old_s3_key and old_s3_key != s3_key:
+        s3 = get_s3()
+        try:
+            s3.delete_object(Bucket=REPORTS_BUCKET, Key=old_s3_key)
+            s3.delete_object(
+                Bucket=REPORTS_BUCKET, Key=old_s3_key + ".metadata.json")
+            replaced_agent_download = True
+        except ClientError as ex:
+            log.error("[upload] failed to delete superseded download %s: %s",
+                       old_s3_key, ex)
+        try:
+            dynamo.Table(PROVENANCE_TABLE).delete_item(
+                Key={"company": slug, "s3_key": old_s3_key})
+        except Exception as ex:
+            log.error("[upload] failed to delete superseded provenance "
+                      "%s/%s: %s", slug, old_s3_key, ex)
+
+    log.info("[upload] company=%s query=%r -> s3_key=%s run_patched=%s "
+              "replaced=%s (old_key=%s)", company, query, s3_key, patched,
+              replaced_agent_download, old_s3_key)
 
     return jsonify({
-        "ok":          True,
-        "s3_key":      s3_key,
-        "file_name":   safe_name,
-        "company":     company,
-        "run_patched": patched,
+        "ok":                      True,
+        "s3_key":                  s3_key,
+        "file_name":               safe_name,
+        "company":                 company,
+        "run_patched":             patched,
+        "replaced_agent_download": replaced_agent_download,
+        "old_s3_key":              old_s3_key,
     }), 201
 
 
@@ -2290,11 +2729,16 @@ def _async_invoke(query_record: dict) -> str:
     is sufficient since desired_count=1 (single backend task, no
     autoscaling) means there's no cross-process concurrency to coordinate.
     """
-    run_id = str(uuid.uuid4())
-    now_iso = datetime.now(timezone.utc).isoformat()
     query_id = query_record.get("query_id", "unknown")
     company = query_record.get("company", "Unknown")
     dynamo = get_dynamo()
+
+    existing = _find_active_run_for_company(company, dynamo)
+    if existing:
+        raise ActiveRunConflict(existing)
+
+    run_id = str(uuid.uuid4())
+    now_iso = datetime.now(timezone.utc).isoformat()
     dynamo.Table(RUNS_TABLE).put_item(Item={
         "run_id":   run_id,
         "query_id": query_id,
@@ -2575,7 +3019,7 @@ def _invoke_one_chunk(chunk_index: int, chunk_queries: list, company: str,
     log.info("[run %s] chunk %d — invoking %d queries", run_id[:8], chunk_index, len(chunk_queries))
     invoked_at = datetime.now(timezone.utc).isoformat()
     try:
-        raw  = _invoke_agentcore_http(json.dumps(payload).encode("utf-8"))
+        raw  = _invoke_agentcore_http_with_retry(json.dumps(payload).encode("utf-8"))
         body = {}
         if raw:
             try:
@@ -2685,12 +3129,19 @@ def _invoke_one_chunk(chunk_index: int, chunk_queries: list, company: str,
             # PATCH #7: even a hard chunk failure gets per-query rows — every
             # query in the chunk is 'failed' so the UI can still offer manual
             # upload instead of only showing an opaque chunk-level error string.
+            if _is_throttling_error(e):
+                reason = (
+                    f"AgentCore Gateway throttled this request after "
+                    f"{AGENT_THROTTLE_MAX_RETRIES} retries — try again later "
+                    f"or re-run this query.")
+            else:
+                reason = str(e)[:500]
             results = [
                 {
                     "request_id": f"{chunk_index}:{position}",
                     "query": q,
                     "status": "failed",
-                    "reason": str(e)[:500],
+                    "reason": reason,
                 }
                 for position, q in enumerate(chunk_queries, start=1)
             ]
@@ -2701,6 +3152,12 @@ def _invoke_one_chunk(chunk_index: int, chunk_queries: list, company: str,
 
 
 def _do_invoke_inner(run_id: str, query_record: dict):
+    # A queued run can be killed before its callable ever leaves the executor's
+    # internal queue. Bail out before touching AWS or the (now-deleted) row.
+    if _consume_run_kill(run_id):
+        log.info("[run %s] killed before it started — skipping", run_id[:8])
+        return
+
     dynamo   = get_dynamo()
     runs_tbl = dynamo.Table(RUNS_TABLE)
     qry_tbl  = dynamo.Table(QUERIES_TABLE)
@@ -2725,6 +3182,31 @@ def _do_invoke_inner(run_id: str, query_record: dict):
                     "search_query": search_q,
                     "chunk_size": AGENT_CHUNK_SIZE,
                     "chunks_total": chunks_total}
+
+    # Claim the run atomically before doing any work. Two callables can race
+    # to invoke the SAME run_id when a queued run is resubmitted by
+    # _resume_stale_queued_runs() while the original executor task (thought
+    # lost to a process restart) is in fact still alive — this condition
+    # rejects the second caller instead of double-invoking AgentCore / running
+    # cleanup twice.
+    try:
+        runs_tbl.update_item(
+            Key={"run_id": run_id},
+            UpdateExpression="SET #st = :running, #u = :now",
+            ConditionExpression=(
+                "attribute_not_exists(#st) OR #st = :queued"),
+            ExpressionAttributeNames={"#st": "status", "#u": "updated_at"},
+            ExpressionAttributeValues={
+                ":running": "running", ":queued": "queued", ":now": now_iso},
+        )
+    except ClientError as exc:
+        if exc.response.get("Error", {}).get(
+                "Code") == "ConditionalCheckFailedException":
+            log.info(
+                "[run %s] already claimed by another invocation — skipping "
+                "duplicate start", run_id[:8])
+            return
+        raise
 
     # Write running row (downloaded starts empty; diagnostics carries progress).
     # heartbeat_at starts equal to started_at and is refreshed on every chunk
@@ -2951,7 +3433,10 @@ def _do_invoke_inner(run_id: str, query_record: dict):
                 "agent_diagnostics": _summarize_agent_diagnostics(res.get("diagnostics") or {}),
             })
             chunks_done[0] += 1
-            _flush_run_row(final=False)   # live update — UI shows the list grow
+            # Once killed, the row is (about to be) deleted — any further
+            # update_item here would silently resurrect it via upsert.
+            if not _is_run_killed(run_id):
+                _flush_run_row(final=False)   # live update — UI shows the list grow
 
     # ── Invoke chunks with bounded concurrency ("mix of both") ────────────────
     workers = max(1, min(AGENT_CHUNK_CONCURRENCY, chunks_total))
@@ -2963,6 +3448,12 @@ def _do_invoke_inner(run_id: str, query_record: dict):
             for i, ch in enumerate(chunks)
         ]
         for fut in as_completed(futures):
+            if _is_run_killed(run_id):
+                # Chunks already in flight can't be interrupted, but nothing
+                # still queued gets dispatched, and we stop touching the row.
+                for f in futures:
+                    f.cancel()
+                break
             try:
                 _handle_result(fut.result())
             except Exception as e:
@@ -2972,7 +3463,13 @@ def _do_invoke_inner(run_id: str, query_record: dict):
                     per_chunk_diag.append({"chunk": "?", "queries": [], "results": [],
                                            "downloaded": 0, "failures": 0,
                                            "error": str(e)[:500], "agent_diagnostics": {}})
-                    _flush_run_row(final=False)
+                    if not _is_run_killed(run_id):
+                        _flush_run_row(final=False)
+
+    if _consume_run_kill(run_id):
+        log.info("[run %s] killed mid-run — stopping without a final write",
+                 run_id[:8])
+        return
 
     # ── S3 direct-check fallback: agent may have uploaded without enumerating ──
     if not downloaded_by_key:
@@ -3181,17 +3678,35 @@ def _invoke_pageindex_runtime_chunk(
 def _merge_chunk_indexes(chunk_results: list, doc_name: str) -> dict:
     """
     Merge multiple chunk index results into one coherent document index.
-    Sorts all top-level nodes by start_index and renumbers node_ids.
+
+    chunk_results must already be sorted in document order (by page_start)
+    before calling — caller is responsible for sorting.
+    PageIndex node dicts do not contain a start_index field so we cannot
+    sort here. Renumbers all node_ids to avoid collisions across chunks.
     """
     all_nodes = []
     for result in chunk_results:
+        if not result:
+            continue
         nodes = result.get("structure", [])
-        all_nodes.extend(nodes)
+        if nodes:
+            all_nodes.extend(nodes)
 
-    # Sort by start_index to restore document order
-    all_nodes.sort(key=lambda n: n.get("start_index", 0))
+    if not all_nodes:
+        log.warning("[merge] no nodes from any chunk for %s — returning single-node fallback", doc_name)
+        title = doc_name.rsplit('.', 1)[0].replace('_', ' ').replace('-', ' ').title()
+        return {
+            "doc_name":  doc_name,
+            "structure": [{
+                "title":   title,
+                "node_id": "0001",
+                "summary": "",
+                "nodes":   [],
+            }]
+        }
 
-    # Renumber node_ids sequentially across merged tree
+    # Renumber node_ids sequentially across the full merged tree.
+    # chunk_results is already in page order (sorted by caller).
     counter = [1]
     def _renumber(nodes):
         for node in nodes:
@@ -3201,6 +3716,8 @@ def _merge_chunk_indexes(chunk_results: list, doc_name: str) -> dict:
                 _renumber(node["nodes"])
     _renumber(all_nodes)
 
+    log.info("[merge] merged %d top-level nodes from %d chunks for %s",
+             len(all_nodes), len(chunk_results), doc_name)
     return {
         "doc_name":  doc_name,
         "structure": all_nodes,
@@ -3298,7 +3815,24 @@ def _get_pdf_page_count_and_toc(bucket: str, s3_key: str, s3) -> tuple:
         reader = PdfReader(BytesIO(body), strict=False)
         page_count = len(reader.pages)
 
-        # Try to extract embedded bookmarks (outline)
+        # If pypdf returns 0 pages try PyMuPDF as fallback
+        if page_count == 0:
+            try:
+                import fitz
+                fitz_doc   = fitz.open(stream=body, filetype="pdf")
+                page_count = fitz_doc.page_count
+                fitz_doc.close()
+                log.info("[pageindex] pypdf returned 0 — PyMuPDF page_count=%d for %s",
+                         page_count, s3_key)
+            except Exception as fitz_err:
+                # Both parsers failed — assume large document so chunked
+                # path triggers and extract_toc mode handles structure.
+                log.warning(
+                    "[pageindex] both pypdf and PyMuPDF failed for %s (%s) "
+                    "— assuming page_count=300", s3_key, fitz_err
+                )
+                page_count = 300
+
         toc_items = []
         def _walk_outline(outline, reader):
             for item in outline:
@@ -3325,10 +3859,13 @@ def _get_pdf_page_count_and_toc(bucket: str, s3_key: str, s3) -> tuple:
         log.warning("[pageindex] page count/toc extraction failed for %s: %s", s3_key, exc)
         return 0, []
 
-def _split_toc_into_chunks(toc_items: list, total_pages: int, target_pages: int = 90) -> list:
+def _split_toc_into_chunks(toc_items: list, total_pages: int, target_pages: int = 60) -> list:
     """
     Split a flat TOC list into chunks of ~target_pages pages each,
     always splitting at section boundaries — never mid-section.
+
+    When no TOC is available, target_pages is reduced to 50 so each chunk
+    stays within the 840s AgentCore timeout even in brute-force mode.
 
     Returns list of:
     {
@@ -3338,13 +3875,17 @@ def _split_toc_into_chunks(toc_items: list, total_pages: int, target_pages: int 
     }
     """
     if not toc_items:
-        # No TOC — fall back to fixed page splitting
+        # No TOC — PageIndex must scan every page individually.
+        # Use smaller chunks so each runtime call stays under budget.
+        no_toc_target = min(target_pages, 40)
         chunks = []
         page = 1
         while page <= total_pages:
-            end = min(page + target_pages - 1, total_pages)
+            end = min(page + no_toc_target - 1, total_pages)
             chunks.append({"page_start": page, "page_end": end, "toc_slice": []})
             page = end + 1
+        log.info("[pageindex] no TOC — using smaller chunks of %d pages (%d total chunks)",
+                 no_toc_target, len(chunks))
         return chunks
 
     chunks      = []
@@ -3356,14 +3897,16 @@ def _split_toc_into_chunks(toc_items: list, total_pages: int, target_pages: int 
         current_page = item["page"]
         next_page    = toc_items[i + 1]["page"] if i + 1 < len(toc_items) else total_pages + 1
 
-        # Split when chunk reaches target size AND we're at a section boundary
-        if (next_page - chunk_start) >= target_pages:
+        # Split when chunk reaches target size AND we're at a section boundary.
+        # page_end = next_page - 1 so the last section in the chunk gets its
+        # full content (current_page is only the START of that section).
+        if (next_page - chunk_start) >= target_pages or (current_page - chunk_start) >= target_pages:
             chunks.append({
                 "page_start": chunk_start,
-                "page_end":   current_page,
+                "page_end":   next_page - 1,
                 "toc_slice":  chunk_toc,
             })
-            chunk_start = current_page + 1
+            chunk_start = next_page
             chunk_toc   = []
 
     # Last chunk
@@ -3377,32 +3920,37 @@ def _split_toc_into_chunks(toc_items: list, total_pages: int, target_pages: int 
     log.info("[pageindex] split %d pages into %d chunks", total_pages, len(chunks))
     return chunks
 
-def _async_pageindex(company: str, s3_prefix: str, force: bool) -> str:
+def _async_pageindex(company: str, s3_prefix: str, force: bool,
+                     s3_keys: list = None) -> str:
     run_id      = str(uuid.uuid4())
     now_iso     = datetime.now(timezone.utc).isoformat()
     # company is the PK — must be consistent with every subsequent _write_run_status call.
     key_company = (company or s3_prefix or "unknown").strip()
     try:
         get_dynamo().Table(PAGEINDEX_RUNS_TABLE).put_item(Item={
-            "company":    key_company,       # PK
-            "run_id":     run_id,            # SK
-            "s3_prefix":  s3_prefix or "",
-            "status":     "pending",
-            "started_at": now_iso,
-            "force":      force,
+            "company":       key_company,
+            "run_id":        run_id,
+            "s3_prefix":     s3_prefix or "",
+            "status":        "pending",
+            "started_at":    now_iso,
+            "force":         force,
+            "selective_run": bool(s3_keys),
+            "selected_keys": json.dumps(s3_keys or []),
         })
     except Exception as ex:
         log.error("[pageindex][run %s] Initial DynamoDB write failed: %s", run_id[:8], ex)
     t = threading.Thread(
-        target=_do_pageindex, args=(run_id, company, s3_prefix, force), daemon=True)
+        target=_do_pageindex, args=(run_id, company, s3_prefix, force),
+        kwargs={"s3_keys": s3_keys}, daemon=True)
     t.start()
     return run_id
 
 
-def _do_pageindex(run_id: str, company: str, s3_prefix: str, force: bool):
+def _do_pageindex(run_id: str, company: str, s3_prefix: str, force: bool,
+                  s3_keys: list = None):
     key_company = (company or s3_prefix or "unknown").strip()
     try:
-        _do_pageindex_inner(run_id, company, s3_prefix, force)
+        _do_pageindex_inner(run_id, company, s3_prefix, force, s3_keys=s3_keys)
     except Exception as e:
         log.error("[pageindex][run %s] FATAL: %s", run_id[:8], e)
         try:
@@ -3415,7 +3963,17 @@ def _do_pageindex(run_id: str, company: str, s3_prefix: str, force: bool):
             log.error("[pageindex][run %s] Could not write fatal status: %s", run_id[:8], ex2)
 
 
-def _do_pageindex_inner(run_id: str, company: str, s3_prefix: str, force: bool):
+def _do_pageindex_inner(run_id: str, company: str, s3_prefix: str, force: bool,
+                       s3_keys: list = None):
+    """
+    Core indexing worker.
+
+    Behaviour matrix (s3_keys = selective list | None):
+      s3_keys=None, force=False  index all unindexed docs (default)
+      s3_keys=None, force=True   wipe all and re-index entire company
+      s3_keys=[..], force=False  index only selected docs if not yet indexed
+      s3_keys=[..], force=True   force re-index only selected docs; leave others untouched
+    """
     s3      = get_s3()
     dynamo  = get_dynamo()
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -3435,10 +3993,12 @@ def _do_pageindex_inner(run_id: str, company: str, s3_prefix: str, force: bool):
     key_company      = (company or s3_prefix or "unknown").strip()
     pageindex_key    = _pageindex_s3_key(resolved_prefix, slug)
     pageindex_s3_uri = f"s3://{resolved_bucket}/{pageindex_key}"
+    s3_keys_set      = set(s3_keys) if s3_keys else None
 
     _write_run_status(run_id, {
         "status":           "running",
-        "company":          display_company,
+        # NOTE: "company" is the DynamoDB partition key — never include it in
+        # the SET expression, only in Key={}. key_company is passed via company= kwarg.
         "slug":             slug,
         "s3_prefix":        resolved_prefix,
         "pageindex_s3_uri": pageindex_s3_uri,
@@ -3456,12 +4016,64 @@ def _do_pageindex_inner(run_id: str, company: str, s3_prefix: str, force: bool):
         }, dynamo, company=key_company)
         return
 
-    existing        = {} if force else _load_existing_index(resolved_bucket, pageindex_key, s3)
-    already_indexed = {doc["_meta"]["s3_key"] for doc in existing.get("documents", [])}
-    documents       = list(existing.get("documents", []))
-    indexed         = []
-    skipped         = []
-    error_msg       = None
+    # ── Selective key validation ──────────────────────────────────────────────
+    if s3_keys_set:
+        available_keys = {p["s3_key"] for p in pdfs}
+        not_found_keys = s3_keys_set - available_keys
+        if not_found_keys:
+            msg = (
+                f"Requested s3_keys not found under prefix {resolved_prefix!r}: "
+                + ", ".join(sorted(not_found_keys))
+            )
+            log.error("[pageindex][run %s] %s", run_id[:8], msg)
+            _write_run_status(run_id, {
+                "status":      "failed",
+                "finished_at": datetime.now(timezone.utc).isoformat(),
+                "error_msg":   msg,
+                "indexed":     json.dumps([]),
+                "skipped":     json.dumps([]),
+            }, dynamo, company=key_company)
+            return
+        pdfs = [p for p in pdfs if p["s3_key"] in s3_keys_set]
+        log.info("[pageindex][run %s] selective run — %d of %d PDFs selected",
+                 run_id[:8], len(pdfs), len(available_keys))
+
+    # ── Cleanup / existing index handling ────────────────────────────────────
+    existing = _load_existing_index(resolved_bucket, pageindex_key, s3)
+
+    if force and not s3_keys_set:
+        # Full wipe — existing behaviour
+        log.info("[pageindex][run %s] full force — wiping company index", run_id[:8])
+        cleanup = _clean_company_reports(display_company, dynamo=dynamo, s3=s3)
+        _write_run_status(run_id, {
+            "pre_run_cleanup": json.dumps(cleanup),
+        }, dynamo, company=key_company)
+        existing  = {}
+        documents = []
+    elif force and s3_keys_set:
+        # Selective force — remove only selected entries, leave rest intact
+        log.info("[pageindex][run %s] selective force — removing %d selected entries",
+                 run_id[:8], len(s3_keys_set))
+        documents = [
+            doc for doc in existing.get("documents", [])
+            if doc["_meta"]["s3_key"] not in s3_keys_set
+        ]
+        for sk in s3_keys_set:
+            _update_provenance_rag_status(display_company, sk, "Pending", dynamo)
+    else:
+        documents = list(existing.get("documents", []))
+
+    # already_indexed: keys to SKIP. Selected keys are never skipped.
+    if s3_keys_set:
+        already_indexed = set()
+    elif force:
+        already_indexed = set()
+    else:
+        already_indexed = {doc["_meta"]["s3_key"] for doc in existing.get("documents", [])}
+
+    indexed   = []
+    skipped   = []
+    error_msg = None
 
     for pdf_meta in pdfs:
         s3_key   = pdf_meta["s3_key"]
@@ -3506,9 +4118,15 @@ def _do_pageindex_inner(run_id: str, company: str, s3_prefix: str, force: bool):
                 log.info("[pageindex][run %s] %d chunks for %s",
                          run_id[:8], len(chunks), s3_key)
 
-                # Fire all chunks in parallel
-                chunk_results = []
-                with ThreadPoolExecutor(max_workers=len(chunks)) as chunk_pool:
+                # Fire chunks with bounded concurrency (2 in-flight).
+                # Full parallelism saturates the runtime's ThreadPoolExecutor
+                # and LLM API quota simultaneously, making timeouts more likely.
+                CHUNK_CONCURRENCY = 2
+                # Each entry is (page_start, result) so merge sorts correctly
+                # regardless of future completion order.
+                chunk_results = []   # list of (page_start, result_dict)
+                failed_chunks = []
+                with ThreadPoolExecutor(max_workers=CHUNK_CONCURRENCY) as chunk_pool:
                     futures = {
                         chunk_pool.submit(
                             _invoke_pageindex_runtime_chunk,
@@ -3517,10 +4135,40 @@ def _do_pageindex_inner(run_id: str, company: str, s3_prefix: str, force: bool):
                             chunk["toc_slice"]
                         ): chunk for chunk in chunks
                     }
-                    for future in futures:
-                        chunk_results.append(future.result(timeout=840))
+                    for future in as_completed(futures):
+                        chunk = futures[future]
+                        try:
+                            result = future.result(timeout=840)
+                            chunk_results.append((chunk["page_start"], result))
+                            log.info(
+                                "[pageindex][run %s] chunk pages %d-%d done for %s",
+                                run_id[:8], chunk["page_start"], chunk["page_end"], s3_key
+                            )
+                        except Exception as chunk_exc:
+                            log.error(
+                                "[pageindex][run %s] chunk pages %d-%d failed for %s: %s",
+                                run_id[:8], chunk["page_start"], chunk["page_end"],
+                                s3_key, chunk_exc
+                            )
+                            failed_chunks.append(chunk)
 
-                index_data = _merge_chunk_indexes(chunk_results, doc_name)
+                if not chunk_results:
+                    raise RuntimeError(
+                        f"All {len(chunks)} chunks failed for {s3_key}"
+                    )
+
+                if failed_chunks:
+                    log.warning(
+                        "[pageindex][run %s] %d/%d chunks failed for %s — "
+                        "merging %d successful chunks in document order",
+                        run_id[:8], len(failed_chunks), len(chunks), s3_key,
+                        len(chunk_results)
+                    )
+
+                # Sort by page_start before merging so document order is correct
+                chunk_results.sort(key=lambda x: x[0])
+                ordered_results = [r for _, r in chunk_results]
+                index_data = _merge_chunk_indexes(ordered_results, doc_name)
 
             else:
                 index_data = _invoke_pageindex_runtime(resolved_bucket, s3_key, doc_name)
@@ -3596,23 +4244,54 @@ def _do_pageindex_inner(run_id: str, company: str, s3_prefix: str, force: bool):
 
 @app.route("/api/pageindex", methods=["POST"])
 def trigger_pageindex():
+    """
+    Trigger a PageIndex run.
+
+    Body fields:
+      company    str           Company name (or use s3_prefix)
+      s3_prefix  str           S3 prefix override
+      force      bool          Re-index even if already indexed
+      s3_keys    list[str]     Optional — index only these specific S3 keys.
+
+    Behaviour matrix:
+      s3_keys=None, force=false  index all unindexed docs (default)
+      s3_keys=None, force=true   wipe and re-index all docs for company
+      s3_keys=[..], force=false  index only selected docs if not yet indexed
+      s3_keys=[..], force=true   force re-index only selected docs; leave others untouched
+    """
     body = request.get_json(force=True, silent=True)
     if not body:
         return jsonify({"error": "Invalid JSON body"}), 400
     company   = (body.get("company")   or "").strip()
     s3_prefix = (body.get("s3_prefix") or "").strip()
     force     = bool(body.get("force", False))
+    s3_keys   = body.get("s3_keys")
+
     if not company and not s3_prefix:
         return jsonify({"error": "Either 'company' or 's3_prefix' is required"}), 400
-    run_id = _async_pageindex(company, s3_prefix, force)
-    log.info("[pageindex][api] triggered run=%s company=%r s3_prefix=%r force=%s",
-             run_id[:8], company, s3_prefix, force)
+
+    if s3_keys is not None:
+        if not isinstance(s3_keys, list) or len(s3_keys) == 0:
+            return jsonify({"error": "'s3_keys' must be a non-empty list of S3 key strings"}), 400
+        if not all(isinstance(k, str) and k.strip() for k in s3_keys):
+            return jsonify({"error": "'s3_keys' entries must be non-empty strings"}), 400
+        s3_keys = [k.strip() for k in s3_keys]
+
+    run_id = _async_pageindex(company, s3_prefix, force, s3_keys=s3_keys)
+    log.info(
+        "[pageindex][api] triggered run=%s company=%r s3_prefix=%r "
+        "force=%s selective=%s keys=%d",
+        run_id[:8], company, s3_prefix, force,
+        bool(s3_keys), len(s3_keys) if s3_keys else 0,
+    )
     return jsonify({
-        "run_id":    run_id,
-        "status":    "triggered",
-        "company":   company or s3_prefix,
-        "s3_prefix": s3_prefix,
-        "force":     force,
+        "run_id":        run_id,
+        "status":        "triggered",
+        "company":       company or s3_prefix,
+        "s3_prefix":     s3_prefix,
+        "force":         force,
+        "s3_keys":       s3_keys,
+        "selective_run": bool(s3_keys),
     }), 202
 
 
@@ -3882,7 +4561,10 @@ def _write_answering_run_status(run_id: str, update: dict, dynamo=None, session_
         expr_names  = {}
         expr_values = {}
         set_parts   = []
+        key_attrs = {"company", "run_id"}
         for k, v in update.items():
+            if k in key_attrs:
+                continue
             safe_key = f"#f_{k}"
             val_key  = f":v_{k}"
             expr_names[safe_key]  = k
@@ -3901,10 +4583,49 @@ def _write_answering_run_status(run_id: str, update: dict, dynamo=None, session_
         )
 
 
+def _delete_old_answering_results(company_slug: str, md_file: str, dynamo=None):
+    """
+    Delete all existing answering-results rows for a given company_slug + md_file
+    before writing fresh results. Prevents duplicate rows accumulating across runs.
+    """
+    if dynamo is None:
+        dynamo = get_dynamo()
+    table = dynamo.Table(ANSWERING_RESULTS_TABLE)
+    try:
+        resp = table.scan(
+            FilterExpression="#cs = :slug AND #mf = :md",
+            ExpressionAttributeNames={"#cs": "company_slug", "#mf": "md_file"},
+            ExpressionAttributeValues={":slug": company_slug, ":md": md_file},
+            ProjectionExpression="run_id, result_id",
+        )
+        items = resp.get("Items", [])
+        while "LastEvaluatedKey" in resp:
+            resp = table.scan(
+                FilterExpression="#cs = :slug AND #mf = :md",
+                ExpressionAttributeNames={"#cs": "company_slug", "#mf": "md_file"},
+                ExpressionAttributeValues={":slug": company_slug, ":md": md_file},
+                ProjectionExpression="run_id, result_id",
+                ExclusiveStartKey=resp["LastEvaluatedKey"],
+            )
+            items += resp.get("Items", [])
+        if not items:
+            return
+        for i in range(0, len(items), 25):
+            with table.batch_writer() as batch:
+                for item in items[i:i + 25]:
+                    batch.delete_item(Key={"run_id": item["run_id"], "result_id": item["result_id"]})
+        log.info("[answering] deleted %d stale rows for company_slug=%s md_file=%s", len(items), company_slug, md_file)
+    except Exception as ex:
+        log.error("[answering] failed to delete old results for %s/%s: %s", company_slug, md_file, ex)
+
+
 def _write_answering_results(run_result: dict, dynamo=None):
     """
     Write every question result from a RunResult dict into the
     answering-results DynamoDB table.
+
+    Deletes all previous rows for the same company_slug + md_file before
+    writing so re-runs overwrite rather than append.
 
     Table schema: PK=run_id (String), SK=result_id (String)
     result_id format: md_file#question_id  (e.g. code_of_conduct.md#q1)
@@ -3922,6 +4643,10 @@ def _write_answering_results(run_result: dict, dynamo=None):
     company      = run_result.get("company", "")
     created_at   = datetime.now(timezone.utc).isoformat()
     table        = dynamo.Table(ANSWERING_RESULTS_TABLE)
+
+    # Delete stale rows before writing fresh ones.
+    if company_slug and md_file:
+        _delete_old_answering_results(company_slug, md_file, dynamo)
 
     for q in run_result.get("results", []):
         question_id = q.get("question_id", "")
@@ -3963,14 +4688,16 @@ def _write_answering_results(run_result: dict, dynamo=None):
             )
 
 
-def _async_answering(company: str, pageindex_s3_uri: str) -> str:
+def _async_answering(company: str, pageindex_s3_uri: str, md_files: list = None) -> str:
     """
-    Start a background answering run for one company across all MD files.
-    Returns run_id immediately. Same async pattern as _async_pageindex.
+    Start a background answering run for one company.
+    If md_files is supplied only those files are processed (single file re-run).
+    Otherwise all questionnaire MD files in S3 are used.
+    Returns run_id immediately.
     """
     run_id   = str(uuid.uuid4())
     now_iso  = datetime.now(timezone.utc).isoformat()
-    md_files = _list_questionnaire_md_files()
+    md_files = md_files if md_files is not None else _list_questionnaire_md_files()
 
     # answering-runs table schema: PK=session_id (String), SK=run_id (String).
     # We have no separate session concept — use company slug as session_id so
@@ -4096,6 +4823,132 @@ def list_questionnaires():
     return jsonify(_list_questionnaire_md_files())
 
 
+@app.route("/api/answering-agent/questionnaires/<filename>", methods=["GET"])
+def get_questionnaire(filename):
+    """Fetch the content of a single questionnaire MD file from S3."""
+    if not filename.endswith(".md"):
+        return jsonify({"error": "filename must end in .md"}), 400
+    s3  = get_s3()
+    key = QUESTIONNAIRES_PREFIX + filename
+    try:
+        obj  = s3.get_object(Bucket=QUESTIONNAIRES_BUCKET, Key=key)
+        text = obj["Body"].read().decode("utf-8")
+        return jsonify({
+            "filename": filename,
+            "s3_key":   key,
+            "s3_uri":   f"s3://{QUESTIONNAIRES_BUCKET}/{key}",
+            "category": _category_from_filename(filename),
+            "content":  text,
+        })
+    except ClientError as e:
+        code = e.response["Error"]["Code"]
+        if code in ("NoSuchKey", "404"):
+            return jsonify({"error": f"{filename} not found"}), 404
+        log.error("[questionnaire] get %s: %s", filename, e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/answering-agent/questionnaires", methods=["POST"])
+def create_questionnaire():
+    """
+    Create a new questionnaire MD file in S3.
+
+    Body:
+        { "name": "Code Of Conduct", "content": "...md text..." }
+
+    The display name is slugified to a filename:
+        "Code Of Conduct" -> "code_of_conduct.md"
+    Returns 409 if the file already exists.
+    """
+    body = request.get_json(force=True, silent=True)
+    if not body:
+        return jsonify({"error": "Invalid JSON body"}), 400
+    name    = (body.get("name") or "").strip()
+    content = body.get("content") or ""
+    if not name:
+        return jsonify({"error": "name is required"}), 400
+    filename = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_") + ".md"
+    key      = QUESTIONNAIRES_PREFIX + filename
+    s3       = get_s3()
+    # Check for duplicates.
+    try:
+        s3.head_object(Bucket=QUESTIONNAIRES_BUCKET, Key=key)
+        return jsonify({"error": f"{filename} already exists. Use PUT to update."}), 409
+    except ClientError as e:
+        if e.response["Error"]["Code"] not in ("404", "NoSuchKey"):
+            log.error("[questionnaire] head %s: %s", filename, e)
+            return jsonify({"error": str(e)}), 500
+    # Write.
+    try:
+        s3.put_object(
+            Bucket=QUESTIONNAIRES_BUCKET,
+            Key=key,
+            Body=content.encode("utf-8"),
+            ContentType="text/markdown",
+        )
+        log.info("[questionnaire] created %s", key)
+        return jsonify({
+            "filename": filename,
+            "s3_key":   key,
+            "s3_uri":   f"s3://{QUESTIONNAIRES_BUCKET}/{key}",
+            "category": _category_from_filename(filename),
+        }), 201
+    except ClientError as e:
+        log.error("[questionnaire] put %s: %s", filename, e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/answering-agent/questionnaires/<filename>", methods=["PUT"])
+def update_questionnaire(filename):
+    """
+    Overwrite an existing questionnaire MD file in S3.
+
+    Body:
+        { "content": "...updated md text..." }
+    """
+    if not filename.endswith(".md"):
+        return jsonify({"error": "filename must end in .md"}), 400
+    body = request.get_json(force=True, silent=True)
+    if not body:
+        return jsonify({"error": "Invalid JSON body"}), 400
+    content = body.get("content") or ""
+    key     = QUESTIONNAIRES_PREFIX + filename
+    s3      = get_s3()
+    try:
+        s3.put_object(
+            Bucket=QUESTIONNAIRES_BUCKET,
+            Key=key,
+            Body=content.encode("utf-8"),
+            ContentType="text/markdown",
+        )
+        log.info("[questionnaire] updated %s", key)
+        return jsonify({
+            "filename": filename,
+            "s3_key":   key,
+            "s3_uri":   f"s3://{QUESTIONNAIRES_BUCKET}/{key}",
+            "category": _category_from_filename(filename),
+        })
+    except ClientError as e:
+        log.error("[questionnaire] put %s: %s", filename, e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/answering-agent/questionnaires/<filename>", methods=["DELETE"])
+def delete_questionnaire(filename):
+    """Delete a questionnaire MD file from S3."""
+    if not filename.endswith(".md"):
+        return jsonify({"error": "filename must end in .md"}), 400
+    key = QUESTIONNAIRES_PREFIX + filename
+    s3  = get_s3()
+    try:
+        s3.delete_object(Bucket=QUESTIONNAIRES_BUCKET, Key=key)
+        log.info("[questionnaire] deleted %s", key)
+        return jsonify({"deleted": filename})
+    except ClientError as e:
+        log.error("[questionnaire] delete %s: %s", filename, e)
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/answering-agent/run", methods=["POST"])
 def trigger_answering_run():
     """
@@ -4115,6 +4968,7 @@ def trigger_answering_run():
 
     company          = (body.get("company") or "").strip()
     pageindex_s3_uri = (body.get("pageindex_s3_uri") or "").strip()
+    md_file_filter   = (body.get("md_file") or "").strip()
 
     if not company:
         return jsonify({"error": "company is required"}), 400
@@ -4144,17 +4998,27 @@ def trigger_answering_run():
             )
         }), 400
 
-    run_id = _async_answering(company, pageindex_s3_uri)
+    # If md_file supplied, run only that file; otherwise run all.
+    if md_file_filter:
+        all_files = _list_questionnaire_md_files()
+        md_files  = [f for f in all_files if f["filename"] == md_file_filter]
+        if not md_files:
+            return jsonify({"error": f"MD file '{md_file_filter}' not found in S3."}), 404
+    else:
+        md_files = None  # _async_answering will list all files
+
+    run_id = _async_answering(company, pageindex_s3_uri, md_files=md_files)
 
     log.info(
-        "[answering][api] triggered run=%s company=%r pageindex=%s",
-        run_id[:8], company, pageindex_s3_uri,
+        "[answering][api] triggered run=%s company=%r pageindex=%s md_file=%s",
+        run_id[:8], company, pageindex_s3_uri, md_file_filter or "all",
     )
     return jsonify({
         "run_id":           run_id,
         "status":           "triggered",
         "company":          company,
         "pageindex_s3_uri": pageindex_s3_uri,
+        "md_file":          md_file_filter or "all",
     }), 202
 
 

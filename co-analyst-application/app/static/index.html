@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Report IQ — Web Search → RAG Portal</title>
+<title>Co-Analyst</title>
 <style>
 :root{
   --red:#d6002a;--red-dark:#b80024;
@@ -133,6 +133,17 @@ tr.detail-row td{padding:0}
 .badge.failed,.badge.no_results{background:#fdebe6;color:#a33012;border:1px solid var(--err)}
 .badge.indexed{background:#e7f8e9;color:#147327;border:1px solid #2bde3f}
 .badge.Pending{background:var(--light);color:var(--muted);border:1px solid var(--border)}
+.pi-detail-panel-header{background:#000;color:#fff;padding:12px 16px;font-weight:700;font-size:14px;display:flex;justify-content:space-between;align-items:center}
+.pi-doc-row{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);background:#fff}
+.pi-doc-row:last-child{border-bottom:none}
+.pi-doc-row:hover{background:var(--light)}
+.pi-doc-check{width:15px;height:15px;accent-color:var(--red);cursor:pointer;flex:none}
+.pi-doc-name{font-size:12px;font-family:var(--mono);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pi-doc-status{flex:none}
+.pi-doc-action{flex:none}
+.pi-force-toggle{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);cursor:pointer;user-select:none}
+.pi-force-toggle input{accent-color:var(--red);width:15px;height:15px}
+.pi-force-toggle.active{color:#a33012;font-weight:700}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.5}}
 
 /* Chunk progress pill */
@@ -176,6 +187,22 @@ tr.detail-row td{padding:0}
 .muted{color:var(--muted)}
 .mt-24{margin-top:24px}
 .hidden{display:none!important}
+/* Questionnaires */
+.qn-list{border:1px solid var(--border);margin-top:20px}
+.qn-item{display:flex;align-items:center;gap:14px;padding:14px 20px;border-bottom:1px solid var(--border);background:#fff;cursor:pointer;transition:background .1s}
+.qn-item:last-child{border-bottom:none}
+.qn-item:hover{background:var(--highlight)}
+.qn-item.selected{background:#e0e7ef;border-left:3px solid var(--red)}
+.qn-name{font-size:15px;font-weight:700;flex:1}
+.qn-file{font-size:12px;color:var(--muted);font-family:var(--mono)}
+.qn-editor{border:1px solid var(--border);margin-top:24px;background:#fff}
+.qn-editor-header{background:#000;color:#fff;padding:12px 18px;display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:14px}
+.qn-editor-body{padding:24px}
+.qn-editor textarea{font-family:var(--mono);font-size:13px;min-height:420px;border:1px solid var(--border);width:100%;padding:14px;outline:none;resize:vertical;line-height:1.6}
+.qn-editor textarea:focus{border-color:#000}
+.qn-layout{display:grid;grid-template-columns:320px 1fr;gap:24px;margin-top:8px;align-items:start}
+@media(max-width:900px){.qn-layout{grid-template-columns:1fr}}
+
 /* Page Index */
 .pi-layout{display:grid;grid-template-columns:380px 1fr;gap:24px;margin-top:24px;align-items:start}
 @media(max-width:900px){.pi-layout{grid-template-columns:1fr}}
@@ -210,6 +237,17 @@ tr.detail-row td{padding:0}
 .badge.Indexed{background:#e7f8e9;color:#147327;border:1px solid #2bde3f}
 .badge.Failed{background:#fdebe6;color:#a33012;border:1px solid var(--err)}
 .badge.Pending{background:var(--light);color:var(--muted);border:1px solid var(--border)}
+.pi-detail-panel-header{background:#000;color:#fff;padding:12px 16px;font-weight:700;font-size:14px;display:flex;justify-content:space-between;align-items:center}
+.pi-doc-row{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);background:#fff}
+.pi-doc-row:last-child{border-bottom:none}
+.pi-doc-row:hover{background:var(--light)}
+.pi-doc-check{width:15px;height:15px;accent-color:var(--red);cursor:pointer;flex:none}
+.pi-doc-name{font-size:12px;font-family:var(--mono);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pi-doc-status{flex:none}
+.pi-doc-action{flex:none}
+.pi-force-toggle{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);cursor:pointer;user-select:none}
+.pi-force-toggle input{accent-color:var(--red);width:15px;height:15px}
+.pi-force-toggle.active{color:#a33012;font-weight:700}
 .footer{background:#000;display:grid;grid-template-columns:repeat(3,1fr);padding:32px 50px;width:100%;margin-top:auto}
 .footer .footer-brand{color:#fff;font-size:26px;font-weight:700}
 .footer .footer-brand .red{color:var(--red)}
@@ -286,7 +324,7 @@ tr.detail-row td{padding:0}
 <header class="header">
   <div class="header-container">
     <div class="header-logo">
-      <span class="logo-mark">Report <span class="red">IQ</span></span>
+      <span class="logo-mark"><span class="red">Co</span>-Analyst</span>
       <span class="logo-divider"></span>
       <span class="logo-sub">AgentCore Search → S3</span>
     </div>
@@ -295,6 +333,7 @@ tr.detail-row td{padding:0}
       <button class="menu-item" id="nav-bulk" onclick="navTo('bulk',this)">Run Query</button>
       <button class="menu-item" id="nav-runs" onclick="navTo('runs',this)">Runs</button>
       <button class="menu-item" id="nav-sources" onclick="navTo('sources',this)">Sources</button>
+      <button class="menu-item" id="nav-questionnaires" onclick="navTo('questionnaires',this)">Questionnaires</button>
       <button class="menu-item" id="nav-pageindex" onclick="navTo('pageindex',this)">Page Index</button>
       <button class="menu-item" id="nav-reports" onclick="navTo('reports',this)">Reports</button>
     </nav>
@@ -313,7 +352,7 @@ tr.detail-row td{padding:0}
 <!-- DASHBOARD -->
 <section class="page active" id="page-dashboard">
   <div class="page-body">
-    <h1 class="page-title">Welcome to Report <span class="red">IQ</span></h1>
+    <h1 class="page-title">Welcome to <span class="red">Co</span>-Analyst</h1>
     <p class="page-subtitle">Submit a JSON payload — the agent finds official company reports, downloads them to S3, and returns documented provenance for every file.</p>
 
     <div class="stat-row">
@@ -434,8 +473,8 @@ tr.detail-row td{padding:0}
 
     <div class="table-wrapper" style="max-height:700px;overflow-y:auto">
       <table>
-        <thead><tr><th style="width:120px">Run ID</th><th>Company</th><th>Started</th><th>Finished</th><th>Downloaded</th><th>Failures</th><th>Status</th></tr></thead>
-        <tbody id="runsTable"><tr><td colspan="7" class="empty-state"><span class="spinner"></span> Loading…</td></tr></tbody>
+        <thead><tr><th style="width:120px">Run ID</th><th>Company</th><th>Started</th><th>Finished</th><th>Downloaded</th><th>Failures</th><th>Status</th><th style="width:70px"></th></tr></thead>
+        <tbody id="runsTable"><tr><td colspan="8" class="empty-state"><span class="spinner"></span> Loading…</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -446,7 +485,7 @@ tr.detail-row td{padding:0}
   <div class="page-body">
     <div class="breadcrumbs"><a onclick="navTo('dashboard',document.getElementById('nav-dashboard'))">Home</a> / Sources</div>
     <h1 class="page-title">Sources</h1>
-    <p class="page-subtitle">Every report downloaded by the agent. Click <strong>⬇ Download</strong> for a presigned S3 URL valid 1 hour. Only files that actually exist in S3 can be downloaded.</p>
+    <p class="page-subtitle">Every report downloaded by the agent. Click <strong>⬇ Download</strong> for a permanent link. Only files that actually exist in S3 can be downloaded.</p>
 
     <div class="toolbar">
       <div class="toolbar-left">
@@ -490,47 +529,157 @@ tr.detail-row td{padding:0}
   </div>
 </section>
 
+<!-- QUESTIONNAIRES -->
+<section class="page" id="page-questionnaires">
+  <div class="page-body">
+    <div class="breadcrumbs"><a onclick="navTo('dashboard',document.getElementById('nav-dashboard'))">Home</a> / Questionnaires</div>
+    <h1 class="page-title">Question<span class="red">naires</span></h1>
+    <p class="page-subtitle">Create and manage questionnaire prompt files. Each file is stored in S3 and used automatically when the answering agent runs.</p>
+
+    <!-- Toolbar: filter + actions -->
+    <div class="toolbar" style="margin-top:28px">
+      <div class="toolbar-left">
+        <input class="form-input" style="max-width:300px;height:40px" id="qnSearch" placeholder="Filter questionnaires…" oninput="qnApplyFilter()">
+      </div>
+      <div class="toolbar-right">
+        <button class="btn" style="height:40px;font-size:15px" onclick="qnLoadList()">↻ Refresh</button>
+        <button class="btn btn-primary" style="height:40px;font-size:15px" onclick="qnNewForm()">+ New Questionnaire</button>
+      </div>
+    </div>
+
+    <!-- New questionnaire form — shown inline below toolbar when + New is clicked -->
+    <div id="qnNewPanel" style="display:none;margin-top:20px">
+      <div class="qn-editor">
+        <div class="qn-editor-header">
+          <span>New questionnaire</span>
+          <button class="btn-link" style="color:#aaa;font-size:18px" onclick="qnCloseNew()">✕</button>
+        </div>
+        <div class="qn-editor-body">
+          <div class="form-field" style="margin-bottom:18px">
+            <label class="form-label">Questionnaire name</label>
+            <p class="form-hint" style="margin-bottom:6px">e.g. "Code Of Conduct" → saved as <span id="qnFilenamePreview" class="mono">.md</span></p>
+            <input class="form-input" id="qnNameInput" placeholder="Code Of Conduct" oninput="qnUpdateFilenamePreview()">
+          </div>
+          <div class="form-field" style="margin-bottom:20px">
+            <label class="form-label">Prompt content <span class="form-hint">(Markdown)</span></label>
+            <textarea id="qnNewContentInput" placeholder="Write your questionnaire prompt here...&#10;&#10;--- QUESTION_BLOCK ---&#10;id: Q1&#10;...&#10;&#10;--- END ---"></textarea>
+          </div>
+          <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+            <button class="btn btn-primary" style="height:44px;font-size:15px" id="qnCreateBtn" onclick="qnCreate()">Save to S3</button>
+            <button class="btn" style="height:44px;font-size:15px" onclick="qnCloseNew()">Cancel</button>
+          </div>
+          <div id="qnNewMsg" style="margin-top:12px;font-size:13px"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Existing questionnaires list -->
+    <h2 class="section-title">Existing questionnaires</h2>
+    <div class="qn-list" id="qnList">
+      <div class="empty-state"><span class="spinner"></span> Loading…</div>
+    </div>
+
+    <!-- Edit panel — shown below list when a questionnaire is clicked -->
+    <div id="qnEditorPanel" style="display:none;margin-top:24px">
+      <div class="qn-editor">
+        <div class="qn-editor-header">
+          <span id="qnEditorTitle">Edit questionnaire</span>
+          <button class="btn-link" style="color:#aaa;font-size:18px" onclick="qnCloseEditor()">✕</button>
+        </div>
+        <div class="qn-editor-body">
+          <div class="form-field" style="margin-bottom:20px">
+            <label class="form-label">Prompt content <span class="form-hint">(Markdown)</span></label>
+            <textarea id="qnContentInput" placeholder="Loading…"></textarea>
+          </div>
+          <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+            <button class="btn btn-primary" style="height:44px;font-size:15px" id="qnSaveBtn" onclick="qnSave()">Save to S3</button>
+            <button class="btn" style="height:44px;font-size:15px" onclick="qnCloseEditor()">Cancel</button>
+            <button class="btn" id="qnDeleteBtn" style="margin-left:auto;height:44px;font-size:15px;border-color:var(--err);color:var(--err)" onclick="qnDelete()">Delete</button>
+          </div>
+          <div id="qnEditorMsg" style="margin-top:12px;font-size:13px"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
 <!-- PAGE INDEX -->
 <section class="page" id="page-pageindex">
   <div class="page-body">
     <div class="breadcrumbs"><a onclick="navTo('dashboard',document.getElementById('nav-dashboard'))">Home</a> / Page Index</div>
-    <h1 class="page-title">Page <span class="red">Index</span></h1>
+    <h1 class="page-title"><span class="red">Co</span>-Analyst <span class="red">Index</span></h1>
     <p class="page-subtitle">Select companies from S3, review their PDFs and indexing status, then run PageIndex to build a structured document index for RAG retrieval.</p>
 
     <div class="toolbar">
       <div class="toolbar-left">
-        <input class="form-input" style="max-width:260px;height:36px" id="piCompanySearch" placeholder="Filter companies…" oninput="filterPiCompanies()">
-        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
-          <input type="checkbox" id="piForceReindex" checked style="accent-color:var(--red);width:15px;height:15px">
-          Force re-index
-        </label>
+        <select class="filter-select" id="piCompanySearch" onchange="filterPiCompanies()" style="min-width:260px">
+          <option value="">All companies</option>
+        </select>
       </div>
       <div class="toolbar-right">
         <span id="piAutoSync" style="font-size:12px;color:var(--muted)"></span>
-        <button class="btn btn-sm" onclick="loadPageIndex()">↻ Refresh</button>
+        <label class="pi-force-toggle" id="piForceLabel" title="Re-index even if already indexed">
+          <input type="checkbox" id="piForceReindex" onchange="piUpdateForceLabel()">
+          Force re-index
+        </label>
+        <button class="btn btn-primary btn-sm" id="piRunBtn" onclick="piRunSelected()" disabled>▶ Run Page Index</button>
+        <button class="btn btn-sm" onclick="loadPageIndex();loadPiRuns()">↻ Refresh</button>
       </div>
     </div>
 
-    <div class="pi-company-panel" style="margin-top:24px">
-      <div class="pi-company-header">
-        <span>Companies in S3</span>
-        <span id="piCompanyCount" style="font-weight:400;font-size:12px;color:#aaa"></span>
-      </div>
-      <div class="pi-company-list" id="piCompanyList" style="max-height:none">
-        <div class="pi-detail-empty"><span class="spinner"></span> Loading…</div>
-      </div>
-      <div class="pi-company-footer">
-        <div style="display:flex;gap:8px">
-          <button class="btn btn-sm" onclick="piSelectAll()">Select all</button>
-          <button class="btn btn-sm" onclick="piClearAll()">Clear</button>
+    <!-- Stacked layout: company list, then document detail below -->
+    <div style="margin-top:24px">
+
+      <!-- Company list -->
+      <div class="pi-company-panel">
+        <div class="pi-company-header">
+          <span>Companies in S3</span>
+          <span id="piCompanyCount" style="font-weight:400;font-size:12px;color:#aaa"></span>
         </div>
-        <span id="piSelectedCount" style="font-size:13px;color:var(--muted)">0 selected</span>
+        <div class="pi-company-list" id="piCompanyList" style="max-height:520px;overflow-y:auto">
+          <div class="pi-detail-empty"><span class="spinner"></span> Loading…</div>
+        </div>
+        <div class="pi-company-footer">
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-sm" onclick="piSelectAll()">Select all</button>
+            <button class="btn btn-sm" onclick="piClearAll()">Clear</button>
+          </div>
+          <span id="piSelectedCount" style="font-size:13px;color:var(--muted)">0 selected</span>
+        </div>
       </div>
-    </div>
-    <div style="margin-top:16px">
-      <button class="btn btn-primary" style="width:100%;justify-content:center" id="piRunBtn" onclick="piRunSelected()" disabled>
-        ▶ Run Page Index
-      </button>
+
+      <!-- Document detail panel (shown below company list when a company is clicked) -->
+      <div id="piDetailPanel" style="display:none;margin-top:20px">
+        <div class="pi-detail-panel">
+          <div class="pi-detail-panel-header">
+            <span id="piDetailTitle">Documents</span>
+            <div style="display:flex;gap:10px;align-items:center">
+              <span id="piDetailDocCount" style="font-weight:400;font-size:12px;color:#aaa"></span>
+              <button class="btn btn-sm btn-primary" id="piReindexSelBtn"
+                onclick="piReindexSelectedDocs()" disabled
+                style="height:30px;padding:0 12px;font-size:12px">
+                ↻ Re-index selected
+              </button>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--border);background:var(--light)">
+            <input type="checkbox" id="piDocSelectAll" class="pi-doc-check"
+              onchange="piToggleAllDocs(this.checked)" title="Select / deselect all">
+            <span style="font-size:12px;color:var(--muted);flex:1">Select all documents</span>
+            <span id="piDocSelCount" style="font-size:12px;color:var(--muted)"></span>
+          </div>
+          <div id="piDocList" style="max-height:420px;overflow-y:auto"></div>
+        </div>
+        <div id="piDocHistory" style="margin-top:16px;display:none">
+          <div style="font-size:13px;font-weight:700;margin-bottom:8px;color:var(--muted)">ALL INDEXED DOCUMENTS</div>
+          <div id="piDocHistoryList" style="border:1px solid var(--border);max-height:240px;overflow-y:auto"></div>
+        </div>
+      </div>
+
+    </div><!-- /stacked -->
+
+    <div style="margin-top:12px">
       <div class="pi-run-queue" id="piRunQueue"></div>
       <div class="pi-progress-bar" id="piProgressBar" style="display:none">
         <div class="pi-progress-fill" id="piProgressFill" style="width:0%"></div>
@@ -544,15 +693,25 @@ tr.detail-row td{padding:0}
       </div>
       <div class="table-wrapper" style="max-height:400px;overflow-y:auto;margin-top:12px">
         <table>
-          <thead><tr><th style="width:110px">Run ID</th><th>Company</th><th>Started</th><th>Finished</th><th>Indexed</th><th>Skipped</th><th>Status</th></tr></thead>
-          <tbody id="piRunsTable"><tr><td colspan="7" class="empty-state muted">No runs yet.</td></tr></tbody>
+          <thead><tr>
+            <th style="width:110px">Run ID</th><th>Company</th>
+            <th>Started</th><th>Finished</th>
+            <th>Indexed</th><th>Skipped</th>
+            <th>Type</th><th>Status</th>
+          </tr></thead>
+          <tbody id="piRunsTable"><tr><td colspan="8" class="empty-state muted">No runs yet.</td></tr></tbody>
         </table>
+      </div>
+      <div id="piRunDetail" style="display:none;margin-top:16px;border:1px solid var(--border)">
+        <div style="background:#000;color:#fff;padding:10px 16px;font-weight:700;font-size:14px;display:flex;justify-content:space-between;align-items:center">
+          <span id="piRunDetailTitle">Run detail</span>
+          <button class="btn-link" style="color:#aaa;font-size:18px" onclick="document.getElementById('piRunDetail').style.display='none'">✕</button>
+        </div>
+        <div id="piRunDetailBody" style="padding:20px"></div>
       </div>
     </div>
   </div>
 </section>
-
-
 <!-- REPORTS -->
 <section class="page" id="page-reports">
   <div class="page-body">
@@ -574,7 +733,17 @@ tr.detail-row td{padding:0}
     </div>
     <!-- company cards -->
     <div id="rpViewCompanies">
-      <div id="rpCompanyGrid" class="rp-company-grid">
+      <div class="toolbar" style="margin-top:20px">
+        <div class="toolbar-left">
+          <select class="filter-select" id="rpCompanyFilter" onchange="rpFilterCompanies()" style="min-width:220px">
+            <option value="">All companies</option>
+          </select>
+        </div>
+        <div class="toolbar-right">
+          <button class="btn btn-sm" onclick="rpDownloadExcel()">⬇ Download Excel</button>
+        </div>
+      </div>
+      <div id="rpCompanyGrid" class="rp-company-grid" style="margin-top:12px">
         <div class="rp-empty"><span class="spinner"></span> Loading&hellip;</div>
       </div>
     </div>
@@ -618,7 +787,7 @@ tr.detail-row td{padding:0}
 </div><!-- main-wrapper -->
 
 <footer class="footer">
-  <div class="footer-brand">Report <span class="red">IQ</span></div>
+  <div class="footer-brand"><span class="red">Co</span>-Analyst</div>
   <div></div>
   <div class="footer-note">EDO Co-Analyst · S&amp;P Global · us-east-1</div>
 </footer>
@@ -637,6 +806,7 @@ function onPageEnter(pageId) {
   if (pageId === 'bulk')      { ensureBulkRunForm(); loadQueries(); }
   if (pageId === 'runs')      { loadRuns(); }
   if (pageId === 'sources')   { loadSources(); }
+  if (pageId === 'questionnaires') { qnLoadList(); }
   if (pageId === 'pageindex') { loadPageIndex(); loadPiRuns(); }
   if (pageId === 'reports')   { rpLoadCompanies(); }
 }
@@ -983,6 +1153,10 @@ async function submitBulkRun(){
         ? ' — running up to '+(res.bulk_company_concurrency||3)+' companies at a time'
           +(res.queued?' with '+res.queued+' initially queued.':'.')
         : '.'));
+    if(res.skipped&&res.skipped.length){
+      toast('warning','Some companies were not started',
+        res.skipped.map(s=>s.company+' — '+s.reason).join('; '));
+    }
     clearPreview();loadQueries();
     if(trigger)setTimeout(()=>{loadDashRuns();},2000);
   }catch(e){}
@@ -1081,7 +1255,11 @@ async function saveQuery(){
   try{
     const url='/api/queries'+(trigger?'?trigger=true':'');
     const res=await apiFetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(obj)});
-    toast('success','Saved!','Query saved for '+company+(res.triggered&&res.run_ids.length?' — Run: '+res.run_ids[0].substring(0,8)+'…':''));
+    if(res.skipped&&res.skipped.length){
+      toast('warning',company+' already running',res.skipped[0].reason);
+    }else{
+      toast('success','Saved!','Query saved for '+company+(res.triggered&&res.run_ids.length?' — Run: '+res.run_ids[0].substring(0,8)+'…':''));
+    }
     clearPreview();loadQueries();
     if(res.triggered)setTimeout(()=>{loadDashRuns();},2000);
   }catch(e){}
@@ -1102,7 +1280,7 @@ async function loadRuns(){
     document.getElementById('runsAutoSync').textContent=hasRunning?'⟳ Auto-syncing every 60s…':'';
     setSyncStatus(hasRunning, hasRunning?'Live':fmtDt(new Date().toISOString()));
   }catch(e){
-    tb.innerHTML='<tr><td colspan="7" class="empty-state">Failed to load</td></tr>';
+    tb.innerHTML='<tr><td colspan="8" class="empty-state">Failed to load</td></tr>';
   }
 }
 function applyRunsFilter(){
@@ -1118,7 +1296,7 @@ function applyRunsFilter(){
 }
 function renderRunsTable(items){
   const tb=document.getElementById('runsTable');
-  if(!items.length){tb.innerHTML='<tr><td colspan="7" class="empty-state">No runs found.</td></tr>';return;}
+  if(!items.length){tb.innerHTML='<tr><td colspan="8" class="empty-state">No runs found.</td></tr>';return;}
   const sorted=[...items].sort((a,b)=>
     (b.started_at||b.queued_at||'').localeCompare(a.started_at||a.queued_at||''));
   let html='';
@@ -1134,10 +1312,27 @@ function renderRunsTable(items){
       <td>${countDownloaded(r)}</td>
       <td>${countFailures(r)}</td>
       <td>${statusBadge(r.status)}${isRunning?' <span class="spinner" style="width:14px;height:14px"></span>':''}${isRunning&&progress?' '+chunkProgressPill(progress)+' '+heartbeatIndicator(progress):''}</td>
+      <td><button style="background:none;border:none;color:var(--err);font-size:16px;line-height:1;cursor:pointer;padding:4px" title="Kill this run and remove it from the list" onclick="killRun('${rid}',event)">✖</button></td>
     </tr>
-    <tr class="detail-row hidden" id="rd-${rid}"><td colspan="7"></td></tr>`;
+    <tr class="detail-row hidden" id="rd-${rid}"><td colspan="8"></td></tr>`;
   });
   tb.innerHTML=html;
+}
+// Kills a run (best-effort — in-flight AgentCore calls already in progress
+// can't be interrupted) and removes its row from DynamoDB/the table. Stops
+// event propagation so clicking the button doesn't also open/close the
+// row's detail panel via the <tr>'s own onclick.
+async function killRun(runId, ev){
+  if(ev){ ev.stopPropagation(); }
+  if(!confirm('Kill this run and remove it from the list? This cannot be undone.')) return;
+  try{
+    await apiFetch('/api/runs/'+encodeURIComponent(runId), { method:'DELETE' });
+    allRuns = allRuns.filter(r=>r.run_id!==runId);
+    applyRunsFilter();
+    toast('success','Killed','Run removed from the list.');
+  }catch(e){
+    // apiFetch already surfaced the error via toast.
+  }
 }
 function toggleRunDetail(rid){
   const row=document.getElementById('rd-'+rid);if(!row)return;
@@ -1182,13 +1377,19 @@ function toggleRunDetail(rid){
     if(progress.trimmed){
       chunkHtml+=`<div class="form-hint" style="margin-bottom:8px">ℹ️ Per-chunk diagnostic detail was trimmed to keep this run's record within DynamoDB's size limit — download/failure counts are still accurate, but per-query rows aren't available below.</div>`;
     }
-    if(progress.recovered){
+    if(progress.recovered && !(progress.perChunk && progress.perChunk.length)){
       chunkHtml+=`<div class="info-box" style="margin-top:0;margin-bottom:14px;font-size:13px">
         ⚡ This run's tracking thread ended before it could report chunk-by-chunk progress
         (e.g. a task restart mid-run). The files below were recovered directly from S3 by
         the reconciler — a per-query breakdown isn't available for this run.
       </div>`;
     } else if(progress.perChunk && progress.perChunk.length){
+      if(progress.recovered){
+        chunkHtml+=`<div class="info-box" style="margin-top:0;margin-bottom:14px;font-size:13px">
+          ⚡ Some results below were recovered directly from S3 after this run's tracking
+          thread ended mid-run — per-query detail is shown where it was already recorded.
+        </div>`;
+      }
       const rowsHtml = progress.perChunk.map(pc=>{
         const results = Array.isArray(pc.results) ? pc.results : null;
         if(results && results.length){
@@ -1203,15 +1404,25 @@ function toggleRunDetail(rid){
             const manualSourceUrl = browserFinishedWithoutDownload && manualUrls.length
               ? manualUrls[0] : '';
             const uploadAction = `<button class="dl-btn upload" onclick="pickUploadForQuery(this,'${escH(rid)}','${escB64(run.company||'')}','${escH(run.query_id||'')}','${escH(String(pc.chunk))}','${escB64(r.query||'')}','${escB64(manualSourceUrl)}')">⬆ Upload file</button>`;
+            // candidates_verified===false means this URL was only harvested
+            // by filename/CDN-domain match and never content-checked against
+            // the target company — it can belong to a different tenant on a
+            // shared CDN (e.g. q4cdn.com hosts hundreds of companies).
+            const isUnverifiedCandidate = r.candidates_verified === false;
             const manualRecoveryAction = manualSourceUrl
               ? `<div class="manual-recovery">
                   <a class="dl-btn manual-link" href="${escH(manualSourceUrl)}" target="_blank" rel="noopener noreferrer" title="Open the best Fargate candidate in your local browser">↗ Manual download</a>
                   ${uploadAction}
-                  <span class="form-hint">1. Download from the official source. 2. Upload the saved file here.</span>
+                  <span class="form-hint">1. Download from the official source. 2. Upload the saved file here.${isUnverifiedCandidate?' ⚠️ Not content-verified — confirm this is actually the target company’s document before uploading.':''}</span>
                 </div>`
               : uploadAction;
+            // The agent can grab the wrong document for a query even though
+            // it "succeeded" — always offer a replace option alongside
+            // Download so a manual upload can correct it (this deletes the
+            // superseded agent-downloaded file from S3 server-side).
+            const replaceAction = `<button class="dl-btn upload" title="Replace with a manually uploaded file if the agent grabbed the wrong document" onclick="pickUploadForQuery(this,'${escH(rid)}','${escB64(run.company||'')}','${escH(run.query_id||'')}','${escH(String(pc.chunk))}','${escB64(r.query||'')}','')">⟳ Replace file</button>`;
             const action = isDl
-              ? `<button class="dl-btn" onclick="downloadFileVerified('${escH(r.s3_key)}',this)">⬇ Download</button>`
+              ? `<div style="display:flex;gap:6px;flex-wrap:wrap"><button class="dl-btn" onclick="downloadFileVerified('${escH(r.s3_key)}',this)">⬇ Download</button>${replaceAction}</div>`
               : isBrowserPending
               ? `<button class="btn btn-sm" onclick="loadRuns()">↻ Check browser</button>`
               : isTimedOutPending
@@ -1225,7 +1436,7 @@ function toggleRunDetail(rid){
               ? `<span class="badge blocked_by_source_waf">source blocked</span>`
               : isTimedOutPending
               ? `<span class="badge timed_out_pending_check">checking…</span>`
-              : `<span class="badge failed">failed</span>`;
+              : `<span class="badge failed"${r.reason?` title="${escH(r.reason)}"`:''}>failed</span>`;
             return `<tr>
               <td class="mono">${idx===0?('#'+escH(String(pc.chunk))):''}</td>
               <td class="mono" style="font-size:12px">${escH(r.query||'')}</td>
@@ -1320,7 +1531,10 @@ async function uploadReportFile(file, btn, runId, company, queryId, chunk, query
     // Do NOT set a Content-Type header here — leaving it unset lets the
     // browser generate the multipart boundary itself for FormData bodies.
     const res = await apiFetch('/api/sources/upload', { method:'POST', body: fd });
-    toast('success','Uploaded', file.name+' saved to S3'+(res.run_patched?' — run updated.':'.'));
+    const suffix = res.replaced_agent_download
+      ? ' — replaced the agent\'s previous download.'
+      : (res.run_patched ? ' — run updated.' : '.');
+    toast('success','Uploaded', file.name+' saved to S3'+suffix);
     await loadRuns();          // refetch with the patched diagnostics
     toggleRunDetail(runId);    // re-open detail so the row now shows Download
     loadStats();
@@ -1474,7 +1688,7 @@ async function downloadFileVerified(s3Key, btn) {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    toast('success','Downloading',s3Key.split('/').pop()+' — link valid 1 hour');
+    toast('success','Downloading',s3Key.split('/').pop());
   } catch(e) {
     toast('error','Download error', String(e.message||e));
   }
@@ -1531,20 +1745,22 @@ function schedulSync() {
   }, 60000); // every 1 minute
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// =============================================================================
 // Page Index
-// ═══════════════════════════════════════════════════════════════════════════════
+// =============================================================================
+
+var piDocSelected = new Set();
 
 async function loadPageIndex() {
   document.getElementById('piCompanyList').innerHTML =
-    '<div class="pi-detail-empty"><span class="spinner"></span> Loading…</div>';
+    '<div class="pi-detail-empty"><span class="spinner"></span> Loading\u2026</div>';
   try {
     const sources = await apiFetch('/api/sources');
     const map = {};
     sources.forEach(s => {
       const co = s.company || 'unknown';
       if (!map[co]) map[co] = { name: co, pdfs: [] };
-      if ((s.file_name || '').toLowerCase().endsWith('.pdf')) {
+      if ((s.file_name || s.s3_key || '').toLowerCase().endsWith('.pdf')) {
         map[co].pdfs.push({
           s3_key:     s.s3_key     || '',
           file_name:  s.file_name  || s.s3_key || '',
@@ -1555,6 +1771,7 @@ async function loadPageIndex() {
     });
     piCompanies = Object.values(map).sort((a,b) => a.name.localeCompare(b.name));
     document.getElementById('piCompanyCount').textContent = piCompanies.length + ' companies';
+    _populatePiDropdown();
     renderPiCompanyList();
     if (piSelectedCompany) {
       const co = piCompanies.find(c => c.name === piSelectedCompany);
@@ -1568,9 +1785,20 @@ async function loadPageIndex() {
 
 function filterPiCompanies() { renderPiCompanyList(); }
 
+function _populatePiDropdown() {
+  const sel = document.getElementById('piCompanySearch');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">All companies</option>' +
+    piCompanies.map(c =>
+      '<option value="' + escH(c.name) + '"' + (c.name === cur ? ' selected' : '') + '>' + escH(c.name) + '</option>'
+    ).join('');
+}
+
 function renderPiCompanyList() {
-  const search = (document.getElementById('piCompanySearch').value || '').toLowerCase();
-  const filtered = piCompanies.filter(c => !search || c.name.toLowerCase().includes(search));
+  const search = document.getElementById('piCompanySearch').value || '';
+  const filtered = search ? piCompanies.filter(c => c.name === search) : piCompanies;
+  _populatePiDropdown();
+
   if (!filtered.length) {
     document.getElementById('piCompanyList').innerHTML =
       '<div class="pi-detail-empty">No companies found.</div>';
@@ -1580,22 +1808,31 @@ function renderPiCompanyList() {
     const checked  = piSelected.has(co.name);
     const isActive = piSelectedCompany === co.name;
     const total    = co.pdfs.length;
-    const indexed  = co.pdfs.filter(p => p.rag_status === 'Indexed').length;
     const isQueued = piRunQueue.includes(co.name);
     const activeRun = piAllRuns.find(r =>
-      (r.company === co.name) && (r.status === 'running' || r.status === 'pending'));
+      r.company === co.name && (r.status === 'running' || r.status === 'pending'));
+    const lastRun = [...piAllRuns]
+      .filter(r => r.company === co.name)
+      .sort((a,b) => (b.started_at||'').localeCompare(a.started_at||''))[0];
+    let runIndexed = 0, runSkipped = 0;
+    if (lastRun) {
+      try { runIndexed = JSON.parse(lastRun.indexed || '[]').length; } catch(e) {}
+      try { runSkipped = JSON.parse(lastRun.skipped || '[]').length; } catch(e) {}
+    }
     const statusHtml = activeRun
-      ? `<span class="badge running" style="font-size:10px;padding:1px 8px">Indexing</span>`
+      ? '<span class="badge running" style="font-size:10px;padding:1px 8px">Indexing</span>'
       : isQueued
-        ? `<span class="badge pending" style="font-size:10px;padding:1px 8px">Queued</span>`
-        : `<span style="font-size:11px;color:var(--muted)">${indexed}/${total} indexed</span>`;
-    return `
-      <div class="pi-company-item${isActive ? ' selected' : ''}" onclick="piSelectCompany('${escH(co.name)}')">
-        <input type="checkbox" ${checked ? 'checked' : ''} onclick="event.stopPropagation();piToggleCheck('${escH(co.name)}',this)">
-        <span class="pi-company-name">${escH(co.name)}</span>
-        ${statusHtml}
-        <span class="pi-company-count">${total} PDF${total!==1?'s':''}</span>
-      </div>`;
+        ? '<span class="badge pending" style="font-size:10px;padding:1px 8px">Queued</span>'
+        : lastRun
+          ? '<span class="badge ' + escH(lastRun.status) + '" style="font-size:10px;padding:1px 8px">' + escH(lastRun.status) + '</span>'
+          : '<span style="font-size:11px;color:var(--muted)">Not indexed</span>';
+    const countHtml = lastRun
+      ? '<span style="font-size:11px;color:var(--muted);font-family:var(--mono)">' + runIndexed + ' indexed \u00b7 ' + runSkipped + ' skipped \u00b7 ' + total + ' PDF' + (total!==1?'s':'') + '</span>'
+      : '<span style="font-size:11px;color:var(--muted)">' + total + ' PDF' + (total!==1?'s':'') + '</span>';
+    return '<div class="pi-company-item' + (isActive ? ' selected' : '') + '" onclick="piSelectCompany(\'' + escH(co.name) + '\')">'
+      + '<input type="checkbox" ' + (checked ? 'checked' : '') + ' onclick="event.stopPropagation();piToggleCheck(\'' + escH(co.name) + '\',this)">'
+      + '<span class="pi-company-name">' + escH(co.name) + '</span>'
+      + statusHtml + countHtml + '</div>';
   }).join('');
   updatePiSelectedCount();
 }
@@ -1617,8 +1854,14 @@ function updatePiSelectedCount() {
   document.getElementById('piRunBtn').disabled = (n === 0 || piRunning);
 }
 
+function piUpdateForceLabel() {
+  const checked = document.getElementById('piForceReindex').checked;
+  document.getElementById('piForceLabel').classList.toggle('active', checked);
+}
+
 function piSelectCompany(name) {
   piSelectedCompany = name;
+  piDocSelected.clear();
   const co = piCompanies.find(c => c.name === name);
   if (co) renderPiDetail(co);
   renderPiCompanyList();
@@ -1630,7 +1873,7 @@ async function loadPiCompanyDetail(name) {
     const co = piCompanies.find(c => c.name === name);
     if (!co) return;
     co.pdfs = sources
-      .filter(s => s.company === name && (s.file_name||'').toLowerCase().endsWith('.pdf'))
+      .filter(s => s.company === name && (s.file_name||s.s3_key||'').toLowerCase().endsWith('.pdf'))
       .map(s => ({
         s3_key: s.s3_key||'', file_name: s.file_name||s.s3_key||'',
         rag_status: s.rag_status||'Pending', indexed_at: s.downloaded_at||'',
@@ -1641,8 +1884,142 @@ async function loadPiCompanyDetail(name) {
 }
 
 function renderPiDetail(co) {
-  // Detail panel removed — no-op kept for compatibility with piSelectCompany
-  // and loadPiCompanyDetail which may still call this function.
+  const panel = document.getElementById('piDetailPanel');
+  panel.style.display = '';
+  document.getElementById('piDetailTitle').textContent = co.name + ' \u2014 Documents';
+  document.getElementById('piDetailDocCount').textContent = co.pdfs.length + ' PDF' + (co.pdfs.length !== 1 ? 's' : '');
+
+  const allIndexedKeys = new Set();
+  piAllRuns
+    .filter(r => r.company === co.name)
+    .forEach(r => {
+      try { JSON.parse(r.indexed || '[]').forEach(i => allIndexedKeys.add(i.s3_key)); } catch(e) {}
+    });
+
+  const docRows = co.pdfs.map(pdf => {
+    const checked   = piDocSelected.has(pdf.s3_key);
+    const fname     = (pdf.file_name || pdf.s3_key || '').split('/').pop() || pdf.s3_key || '';
+    const ragStatus = pdf.rag_status || 'Pending';
+    const badgeCls  = ragStatus === 'Indexed' ? 'Indexed' : ragStatus === 'Failed' ? 'Failed' : 'Pending';
+    return '<div class="pi-doc-row">'
+      + '<input type="checkbox" class="pi-doc-check" data-key="' + escH(pdf.s3_key) + '" '
+      + (checked ? 'checked' : '')
+      + ' onchange="piToggleDoc(\'' + escH(pdf.s3_key) + '\',this)">'
+      + '<span class="pi-doc-name" title="' + escH(pdf.s3_key) + '">' + escH(fname) + '</span>'
+      + '<span class="pi-doc-status"><span class="badge ' + badgeCls + '" style="font-size:10px;padding:2px 8px">' + escH(ragStatus) + '</span></span>'
+      + '<span class="pi-doc-action"><button class="btn btn-sm" style="height:26px;padding:0 10px;font-size:11px" '
+      + 'onclick="piReindexSingleDoc(\'' + escH(co.name) + '\',\'' + escH(pdf.s3_key) + '\')" '
+      + 'title="Force re-index this document">\u21bb</button></span>'
+      + '</div>';
+  }).join('');
+
+  document.getElementById('piDocList').innerHTML = docRows ||
+    '<div class="pi-detail-empty muted" style="padding:20px">No PDFs found.</div>';
+  _updateDocSelCount();
+
+  const histPanel = document.getElementById('piDocHistory');
+  if (allIndexedKeys.size > 0) {
+    histPanel.style.display = '';
+    document.getElementById('piDocHistoryList').innerHTML = [...allIndexedKeys].map(key => {
+      const fname     = key.split('/').pop() || key;
+      const pdf       = co.pdfs.find(p => p.s3_key === key);
+      const ragStatus = pdf ? (pdf.rag_status || 'Pending') : 'Indexed';
+      const badgeCls  = ragStatus === 'Indexed' ? 'Indexed' : ragStatus === 'Failed' ? 'Failed' : 'Pending';
+      return '<div class="pi-doc-row">'
+        + '<span class="pi-doc-name" title="' + escH(key) + '">' + escH(fname) + '</span>'
+        + '<span class="badge ' + badgeCls + '" style="font-size:10px;padding:2px 8px">' + escH(ragStatus) + '</span>'
+        + '</div>';
+    }).join('');
+  } else {
+    histPanel.style.display = 'none';
+  }
+}
+
+function piToggleDoc(s3Key, cb) {
+  if (cb.checked) piDocSelected.add(s3Key); else piDocSelected.delete(s3Key);
+  _updateDocSelCount();
+}
+
+function piToggleAllDocs(checked) {
+  const co = piCompanies.find(c => c.name === piSelectedCompany);
+  if (!co) return;
+  co.pdfs.forEach(pdf => {
+    if (checked) piDocSelected.add(pdf.s3_key);
+    else piDocSelected.delete(pdf.s3_key);
+  });
+  document.querySelectorAll('#piDocList .pi-doc-check').forEach(cb => { cb.checked = checked; });
+  _updateDocSelCount();
+}
+
+function _updateDocSelCount() {
+  const n = piDocSelected.size;
+  document.getElementById('piDocSelCount').textContent = n > 0 ? n + ' selected' : '';
+  document.getElementById('piReindexSelBtn').disabled = (n === 0);
+  const co    = piCompanies.find(c => c.name === piSelectedCompany);
+  const total = co ? co.pdfs.length : 0;
+  const allCb = document.getElementById('piDocSelectAll');
+  if (allCb) {
+    allCb.checked       = total > 0 && n === total;
+    allCb.indeterminate = n > 0 && n < total;
+  }
+}
+
+async function piReindexSingleDoc(company, s3Key) {
+  try {
+    const res = await apiFetch('/api/pageindex', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ company, s3_keys: [s3Key], force: true }),
+    });
+    toast('info', 'Re-index started', s3Key.split('/').pop() + ' queued.');
+    piActiveRunIds.add(res.run_id);
+    await loadPiRuns();
+    renderPiCompanyList();
+    _piPollUntilDone(res.run_id, company);
+  } catch(e) {}
+}
+
+async function piReindexSelectedDocs() {
+  if (!piSelectedCompany || piDocSelected.size === 0) return;
+  const force = document.getElementById('piForceReindex').checked;
+  const keys  = [...piDocSelected];
+  try {
+    const res = await apiFetch('/api/pageindex', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ company: piSelectedCompany, s3_keys: keys, force }),
+    });
+    toast('info', 'Re-index started',
+      keys.length + ' document' + (keys.length > 1 ? 's' : '') + ' queued for ' + piSelectedCompany);
+    piActiveRunIds.add(res.run_id);
+    await loadPiRuns();
+    renderPiCompanyList();
+    _piPollUntilDone(res.run_id, piSelectedCompany);
+  } catch(e) {}
+}
+
+function _piPollUntilDone(runId, company) {
+  const iv = setInterval(async () => {
+    try {
+      await loadPiRuns();
+      const run = piAllRuns.find(r => r.run_id === runId);
+      if (!run || (run.status !== 'running' && run.status !== 'pending')) {
+        clearInterval(iv);
+        piActiveRunIds.delete(runId);
+        await loadPageIndex();
+        renderPiCompanyList();
+        const co = piCompanies.find(c => c.name === company);
+        if (co) renderPiDetail(co);
+        if (run && run.status === 'complete') {
+          let cnt = 0;
+          try { cnt = JSON.parse(run.indexed || '[]').length; } catch(e) {}
+          toast('success', 'Done', company + ' \u2014 ' + cnt + ' document(s) indexed.');
+        } else if (run) {
+          toast('error', 'Run failed', run.error_msg || 'Check runs table for details.');
+        }
+      }
+    } catch(e) { clearInterval(iv); }
+  }, 15000);
 }
 
 async function piRunSelected() {
@@ -1662,11 +2039,11 @@ async function piRunSelected() {
   let done = 0;
   while (piRunQueue.length > 0) {
     const name = piRunQueue[0];
-    document.getElementById('piRunQueue').textContent = `Processing ${done+1} of ${total}: ${name}`;
+    document.getElementById('piRunQueue').textContent = 'Processing ' + (done+1) + ' of ' + total + ': ' + name;
     try {
       const runId = await piTriggerRun(name, force);
       piActiveRunIds.add(runId);
-      toast('info','Run triggered', name + ' — waiting for completion…');
+      toast('info','Run triggered', name + ' \u2014 waiting for completion\u2026');
       await piWaitForRun(runId);
       piActiveRunIds.delete(runId);
       done++;
@@ -1679,6 +2056,10 @@ async function piRunSelected() {
     await loadPageIndex();
     await loadPiRuns();
     renderPiCompanyList();
+    if (piSelectedCompany === name) {
+      const co = piCompanies.find(c => c.name === name);
+      if (co) renderPiDetail(co);
+    }
     document.getElementById('piProgressFill').style.width = (Math.round(done/total*100)) + '%';
   }
   piRunning = false;
@@ -1687,7 +2068,7 @@ async function piRunSelected() {
   document.getElementById('piProgressBar').style.display = 'none';
   document.getElementById('piProgressFill').style.width = '0%';
   updatePiSelectedCount();
-  toast('success','Page Index complete','PageIndex completed for all selected companies. Starting answering agent…');
+  toast('success','Page Index complete','PageIndex completed for all selected companies. Starting answering agent\u2026');
   for (const name of [...piSelected]) {
     try {
       const res = await apiFetch('/api/answering-agent/run', {
@@ -1695,24 +2076,12 @@ async function piRunSelected() {
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({company: name}),
       });
-      toast('info', 'Answering agent started', name + ' — run ' + res.run_id.substring(0,8) + '…');
+      toast('info', 'Answering agent started', name + ' \u2014 run ' + res.run_id.substring(0,8) + '\u2026');
       rpPollRun(res.run_id);
     } catch(e) {
       toast('error', 'Answering agent failed to start', name + ': ' + (e.message||e));
     }
   }
-}
-
-async function piRunSingle(name) {
-  const force = document.getElementById('piForceReindex').checked;
-  try {
-    await piTriggerRun(name, force);
-    toast('success','Run started','PageIndex run triggered for ' + name);
-    await loadPiRuns();
-    renderPiCompanyList();
-    const co = piCompanies.find(c => c.name === name);
-    if (co) renderPiDetail(co);
-  } catch(e) {}
 }
 
 async function piTriggerRun(name, force) {
@@ -1744,7 +2113,7 @@ async function loadPiRuns() {
 function renderPiRunsTable() {
   const tb = document.getElementById('piRunsTable');
   if (!piAllRuns.length) {
-    tb.innerHTML = '<tr><td colspan="7" class="empty-state muted">No runs yet.</td></tr>';
+    tb.innerHTML = '<tr><td colspan="8" class="empty-state muted">No runs yet.</td></tr>';
     return;
   }
   const sorted = [...piAllRuns].sort((a,b) => (b.started_at||'').localeCompare(a.started_at||''));
@@ -1752,17 +2121,85 @@ function renderPiRunsTable() {
     let indexed = 0, skipped = 0;
     try { indexed = JSON.parse(r.indexed || '[]').length; } catch(e) {}
     try { skipped = JSON.parse(r.skipped || '[]').length; } catch(e) {}
-    const isRunning = r.status === 'running' || r.status === 'pending';
-    return `<tr style="${isRunning ? 'background:#f0f6ff' : ''}">
-      <td class="mono" style="font-size:12px" title="${escH(r.run_id)}">${escH(r.run_id.substring(0,8))}…</td>
-      <td><strong>${escH(r.company||'')}</strong></td>
-      <td>${fmtDt(r.started_at)}</td>
-      <td>${fmtDt(r.finished_at)}</td>
-      <td style="color:#147327;font-weight:700">${indexed}</td>
-      <td style="color:var(--muted)">${skipped}</td>
-      <td>${statusBadge(r.status)}${isRunning ? ' <span class="spinner" style="width:14px;height:14px"></span>' : ''}</td>
-    </tr>`;
+    const isRunning   = r.status === 'running' || r.status === 'pending';
+    const isSelective = r.selective_run;
+    const isForce     = r.force;
+    const typeBadge   = isSelective
+      ? '<span class="badge Pending" style="font-size:10px;padding:2px 8px">' + (isForce ? 'Selective Force' : 'Selective') + '</span>'
+      : isForce
+        ? '<span class="badge failed" style="font-size:10px;padding:2px 8px">Full Force</span>'
+        : '<span style="font-size:11px;color:var(--muted)">Normal</span>';
+    return '<tr class="expandable" style="' + (isRunning ? 'background:#f0f6ff' : '') + '" data-run-id="' + escH(r.run_id) + '">'
+      + '<td class="mono" style="font-size:12px" title="' + escH(r.run_id) + '">' + escH(r.run_id.substring(0,8)) + '…</td>'
+      + '<td><strong>' + escH(r.company||'') + '</strong></td>'
+      + '<td>' + fmtDt(r.started_at) + '</td>'
+      + '<td>' + fmtDt(r.finished_at) + '</td>'
+      + '<td style="color:#147327;font-weight:700">' + indexed + '</td>'
+      + '<td style="color:var(--muted)">' + skipped + '</td>'
+      + '<td>' + typeBadge + '</td>'
+      + '<td>' + statusBadge(r.status) + (isRunning ? ' <span class="spinner" style="width:14px;height:14px"></span>' : '') + '</td>'
+      + '</tr>';
   }).join('');
+}
+
+// Delegated click — avoids inline onclick quoting issues with run IDs
+document.addEventListener('click', function(e) {
+  const tr = e.target.closest('#piRunsTable tr[data-run-id]');
+  if (tr) piShowRunDetail(tr.dataset.runId);
+});
+
+function piShowRunDetail(runId) {
+  const run = piAllRuns.find(r => r.run_id === runId);
+  if (!run) return;
+
+  let indexedList = [], skippedList = [], selectedKeys = [];
+  try { indexedList  = JSON.parse(run.indexed       || '[]'); } catch(e) {}
+  try { skippedList  = JSON.parse(run.skipped       || '[]'); } catch(e) {}
+  try { selectedKeys = JSON.parse(run.selected_keys || '[]'); } catch(e) {}
+
+  let typeBanner = '';
+  if (run.selective_run && selectedKeys.length) {
+    typeBanner = '<div style="background:#e6efff;border:1px solid var(--info);padding:10px 14px;margin-bottom:16px;font-size:13px">'
+      + '<strong>' + (run.force ? 'Selective Force Re-index' : 'Selective Index') + '</strong>'
+      + ' — ' + selectedKeys.length + ' document' + (selectedKeys.length > 1 ? 's' : '') + ' targeted:'
+      + '<div style="margin-top:6px;font-family:var(--mono);font-size:11px;color:var(--muted)">'
+      + selectedKeys.map(k => escH(k.split('/').pop() || k)).join('<br>')
+      + '</div></div>';
+  } else if (run.force) {
+    typeBanner = '<div style="background:#fdebe6;border:1px solid var(--err);padding:8px 14px;margin-bottom:16px;font-size:13px">'
+      + '<strong>Full Force Re-index</strong> — all company documents were wiped and reindexed.</div>';
+  }
+
+  const mkRow = (badge, cls, key, reason) =>
+    '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">'
+    + '<span class="badge ' + cls + '" style="font-size:11px;padding:2px 8px;flex:none">' + badge + '</span>'
+    + '<span class="mono" style="font-size:12px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escH(key||'') + '">' + escH(key || '—') + '</span>'
+    + (reason ? '<span style="font-size:11px;color:var(--err);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escH(reason) + '</span>' : '')
+    + '</div>';
+
+  const indexedHtml = indexedList.length
+    ? indexedList.map(i => mkRow('Indexed', 'Indexed', i.s3_key, '')).join('')
+    : '<div class="muted" style="font-size:13px;padding:8px 0">No indexed files.</div>';
+
+  const skippedHtml = skippedList.length
+    ? skippedList.map(i => mkRow(
+        i.reason === 'already_indexed' ? 'Skipped' : 'Failed',
+        i.reason === 'already_indexed' ? 'Pending' : 'Failed',
+        i.s3_key,
+        i.reason !== 'already_indexed' ? i.reason : ''
+      )).join('')
+    : '<div class="muted" style="font-size:13px;padding:8px 0">No skipped files.</div>';
+
+  document.getElementById('piRunDetailTitle').textContent =
+    run.company + ' — ' + run.run_id.substring(0,8) + '…';
+  document.getElementById('piRunDetailBody').innerHTML =
+    typeBanner
+    + '<h3 style="font-size:14px;font-weight:700;margin-bottom:8px">Indexed (' + indexedList.length + ')</h3>'
+    + indexedHtml
+    + '<h3 style="font-size:14px;font-weight:700;margin:20px 0 8px">Skipped / Failed (' + skippedList.length + ')</h3>'
+    + skippedHtml;
+  document.getElementById('piRunDetail').style.display = '';
+  document.getElementById('piRunDetail').scrollIntoView({behavior:'smooth', block:'nearest'});
 }
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
@@ -1821,6 +2258,8 @@ async function rpLoadCompanies() {
       grid.innerHTML = '<div class="rp-empty">No results yet. Run the answering agent for a company first.</div>';
       return;
     }
+    rpPopulateCompanyFilter();
+    // Add header row before delegating to filter renderer.
     grid.innerHTML =
       '<div style="display:flex;align-items:center;padding:10px 20px;background:#000;color:#fff;font-size:13px;font-weight:700">'
         + '<span style="flex:1">Company</span>'
@@ -1828,23 +2267,52 @@ async function rpLoadCompanies() {
         + '<span style="min-width:150px">Categories</span>'
         + '<span style="min-width:110px">Status</span>'
       + '</div>'
-      + companies.map(co => {
-        const status = co.status === 'running'
-          ? '<span class="badge running" style="font-size:11px">Running</span>'
-          : co.status === 'complete'
-            ? '<span class="badge complete" style="font-size:11px">Complete</span>'
-            : '<span class="badge pending" style="font-size:11px">' + escH(co.status || 'pending') + '</span>';
-        const cats = co.md_total ? co.md_done + '/' + co.md_total + ' categories' : '—';
-        return '<div class="rp-company-card" onclick="rpLoadCategories(\'' + escH(co.company_slug) + '\',\'' + escH(co.company) + '\')">'
-          + '<div class="rp-co-name">' + escH(co.company) + '</div>'
-          + '<div class="rp-co-meta" style="min-width:180px">' + (co.last_run_at ? fmtDt(co.last_run_at) : '—') + '</div>'
-          + '<div class="rp-co-meta" style="min-width:150px">' + escH(cats) + '</div>'
-          + '<div style="min-width:110px">' + status + '</div>'
-          + '</div>';
-      }).join('');
+      + '<div id="rpCompanyRows"></div>';
+    rpFilterCompaniesInner();
   } catch(e) {
     grid.innerHTML = '<div class="rp-empty">Failed to load companies.</div>';
   }
+}
+
+function rpPopulateCompanyFilter() {
+  const sel = document.getElementById('rpCompanyFilter');
+  const current = sel.value;
+  sel.innerHTML = '<option value="">All companies</option>'
+    + rpState.companies.map(co =>
+        '<option value="' + escH(co.company_slug) + '">' + escH(co.company) + '</option>'
+      ).join('');
+  sel.value = current;
+}
+
+function rpFilterCompanies() {
+  rpFilterCompaniesInner();
+}
+
+function rpFilterCompaniesInner() {
+  const rows = document.getElementById('rpCompanyRows');
+  if (!rows) return;
+  const slug    = document.getElementById('rpCompanyFilter').value;
+  const visible = slug
+    ? rpState.companies.filter(co => co.company_slug === slug)
+    : rpState.companies;
+  if (!visible.length) {
+    rows.innerHTML = '<div class="rp-empty">No companies match.</div>';
+    return;
+  }
+  rows.innerHTML = visible.map(co => {
+    const status = co.status === 'running'
+      ? '<span class="badge running" style="font-size:11px">Running</span>'
+      : co.status === 'complete'
+        ? '<span class="badge complete" style="font-size:11px">Complete</span>'
+        : '<span class="badge pending" style="font-size:11px">' + escH(co.status || 'pending') + '</span>';
+    const cats = co.md_total ? co.md_done + '/' + co.md_total + ' categories' : '—';
+    return '<div class="rp-company-card" onclick="rpLoadCategories(\'' + escH(co.company_slug) + '\',\'' + escH(co.company) + '\')">'
+      + '<div class="rp-co-name">' + escH(co.company) + '</div>'
+      + '<div class="rp-co-meta" style="min-width:180px">' + (co.last_run_at ? fmtDt(co.last_run_at) : '—') + '</div>'
+      + '<div class="rp-co-meta" style="min-width:150px">' + escH(cats) + '</div>'
+      + '<div style="min-width:110px">' + status + '</div>'
+      + '</div>';
+  }).join('');
 }
 
 async function rpTriggerRun() {
@@ -1915,11 +2383,15 @@ async function rpLoadCategories(slug, company) {
       '<div style="display:flex;align-items:center;padding:10px 20px;background:#000;color:#fff;font-size:13px;font-weight:700">'
         + '<span style="flex:1">Category</span>'
         + '<span style="min-width:130px">Questions</span>'
+        + '<span style="min-width:110px"></span>'
       + '</div>'
       + rpState.currentCats.map(cat => {
         return '<div class="rp-cat-card" onclick="rpLoadQA(\'' + escH(slug) + '\',\'' + escH(cat.md_file) + '\',\'' + escH(cat.category) + '\')">'
           + '<div class="rp-cat-name">' + escH(cat.category) + '</div>'
           + '<div class="rp-cat-count" style="min-width:130px">' + escH(String(cat.question_count)) + ' questions</div>'
+          + '<button class="btn btn-sm" style="flex:none;white-space:nowrap;min-width:110px" title="Re-run answering agent for this questionnaire only"'
+          + ' onclick="event.stopPropagation();rpRerunCategory(\'' + escH(slug) + '\',\'' + escH(cat.md_file) + '\',\'' + escH(cat.category) + '\',this)">'
+          + '▶ Re-run</button>'
           + '</div>';
       }).join('');
   } catch(e) {
@@ -2367,6 +2839,320 @@ function rpToggleDetail(row) {
   }
 }
 
+
+// ─── Questionnaires ───────────────────────────────────────────────────────────
+const qnState = { files: [], editing: null };
+
+async function qnLoadList() {
+  const list = document.getElementById('qnList');
+  list.innerHTML = '<div class="empty-state"><span class="spinner"></span> Loading…</div>';
+  try {
+    const files = await apiFetch('/api/answering-agent/questionnaires');
+    qnState.files = files;
+    qnRenderList();
+  } catch(e) {
+    list.innerHTML = '<div class="empty-state">Failed to load questionnaires.</div>';
+  }
+}
+
+function qnRenderList() {
+  const list   = document.getElementById('qnList');
+  const filter = (document.getElementById('qnSearch').value || '').toLowerCase();
+  const visible = qnState.files.filter(f =>
+    !filter || f.category.toLowerCase().includes(filter) || f.filename.toLowerCase().includes(filter)
+  );
+  if (!visible.length) {
+    list.innerHTML = '<div class="empty-state">'
+      + (qnState.files.length ? 'No questionnaires match your filter.' : 'No questionnaires yet. Click <strong>+ New Questionnaire</strong> to create one.')
+      + '</div>';
+    return;
+  }
+  list.innerHTML = visible.map(f =>
+    '<div class="qn-item" id="qnItem_' + escH(f.filename) + '" onclick="qnOpenEditor(\'' + escH(f.filename) + '\')">'
+      + '<div style="flex:1">'
+        + '<div class="qn-name">' + escH(f.category) + '</div>'
+        + '<div class="qn-file">' + escH(f.filename) + '</div>'
+      + '</div>'
+      + '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="flex:none;color:var(--muted)"><path d="M6 12l4-4-4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>'
+    + '</div>'
+  ).join('');
+}
+
+function qnApplyFilter() { qnRenderList(); }
+
+function qnNewForm() {
+  document.getElementById('qnNewPanel').style.display = '';
+  document.getElementById('qnNameInput').value = '';
+  document.getElementById('qnFilenamePreview').textContent = '.md';
+  document.getElementById('qnNewContentInput').value = '';
+  document.getElementById('qnNewMsg').textContent = '';
+  // Close edit panel if open.
+  qnCloseEditor();
+  document.getElementById('qnNameInput').focus();
+}
+
+function qnCloseNew() {
+  document.getElementById('qnNewPanel').style.display = 'none';
+}
+
+function qnUpdateFilenamePreview() {
+  const name = document.getElementById('qnNameInput').value.trim();
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  document.getElementById('qnFilenamePreview').textContent = slug ? slug + '.md' : '.md';
+}
+
+async function qnCreate() {
+  const btn     = document.getElementById('qnCreateBtn');
+  const msg     = document.getElementById('qnNewMsg');
+  const name    = document.getElementById('qnNameInput').value.trim();
+  const content = document.getElementById('qnNewContentInput').value;
+  msg.textContent = '';
+  if (!name) {
+    msg.style.color = 'var(--err)';
+    msg.textContent = 'Please enter a questionnaire name.';
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  try {
+    const data = await apiFetch('/api/answering-agent/questionnaires', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ name, content }),
+    });
+    toast('success', 'Created', data.filename + ' saved to S3.');
+    qnCloseNew();
+    await qnLoadList();
+    // Auto-open the new file in the editor.
+    qnOpenEditor(data.filename);
+  } catch(e) {
+    msg.style.color = 'var(--err)';
+    msg.textContent = e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save to S3';
+  }
+}
+
+async function qnOpenEditor(filename) {
+  document.querySelectorAll('.qn-item').forEach(el => el.classList.remove('selected'));
+  const item = document.getElementById('qnItem_' + filename);
+  if (item) item.classList.add('selected');
+
+  document.getElementById('qnEditorPanel').style.display = '';
+  document.getElementById('qnEditorTitle').textContent = filename;
+  document.getElementById('qnDeleteBtn').dataset.filename = filename;
+  document.getElementById('qnEditorMsg').textContent = '';
+  document.getElementById('qnContentInput').value = 'Loading…';
+  // Scroll editor into view.
+  document.getElementById('qnEditorPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  try {
+    const data = await apiFetch('/api/answering-agent/questionnaires/' + encodeURIComponent(filename));
+    qnState.editing = filename;
+    document.getElementById('qnContentInput').value = data.content;
+  } catch(e) {
+    document.getElementById('qnContentInput').value = '';
+    document.getElementById('qnEditorMsg').innerHTML = '<span style="color:var(--err)">Failed to load file.</span>';
+  }
+}
+
+async function qnSave() {
+  const btn     = document.getElementById('qnSaveBtn');
+  const msg     = document.getElementById('qnEditorMsg');
+  const content = document.getElementById('qnContentInput').value;
+  msg.textContent = '';
+  if (!qnState.editing) return;
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  try {
+    await apiFetch('/api/answering-agent/questionnaires/' + encodeURIComponent(qnState.editing), {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ content }),
+    });
+    toast('success', 'Saved', qnState.editing + ' updated in S3.');
+    msg.style.color = 'green';
+    msg.textContent = 'Saved successfully.';
+  } catch(e) {
+    msg.style.color = 'var(--err)';
+    msg.textContent = e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save to S3';
+  }
+}
+
+async function qnDelete() {
+  const filename = document.getElementById('qnDeleteBtn').dataset.filename;
+  if (!filename) return;
+  if (!confirm('Delete ' + filename + '? This cannot be undone.')) return;
+  try {
+    await apiFetch('/api/answering-agent/questionnaires/' + encodeURIComponent(filename), { method: 'DELETE' });
+    toast('success', 'Deleted', filename + ' removed from S3.');
+    qnCloseEditor();
+    qnLoadList();
+  } catch(e) {
+    toast('error', 'Delete failed', e.message);
+  }
+}
+
+function qnCloseEditor() {
+  document.getElementById('qnEditorPanel').style.display = 'none';
+  document.querySelectorAll('.qn-item').forEach(el => el.classList.remove('selected'));
+  qnState.editing = null;
+}
+
+// ─── Reports: company filter ──────────────────────────────────────────────────
+// ─── Reports: re-run single category ─────────────────────────────────────────
+async function rpRerunCategory(slug, mdFile, category, btn) {
+  if (!confirm('Re-run answering agent for "' + category + '"?\nThis will overwrite existing answers for this questionnaire.')) return;
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Running…';
+  try {
+    const res = await apiFetch('/api/answering-agent/run', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ company: rpState.currentCompany, md_file: mdFile }),
+    });
+    toast('info', 'Re-run started', category + ' queued.');
+    // Poll until done then refresh categories.
+    const poll = setInterval(async () => {
+      try {
+        const run = await apiFetch('/api/answering-agent/runs/' + res.run_id);
+        if (run.status !== 'running') {
+          clearInterval(poll);
+          btn.disabled = false;
+          btn.textContent = orig;
+          if (run.status === 'complete') {
+            toast('success', 'Complete', category + ' answers updated.');
+            rpLoadCategories(slug, rpState.currentCompany);
+          } else {
+            toast('error', 'Re-run failed', run.error_msg || 'Check logs.');
+          }
+        }
+      } catch(e) { clearInterval(poll); btn.disabled = false; btn.textContent = orig; }
+    }, 8000);
+  } catch(e) {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+}
+
+// ─── Reports: download Excel ──────────────────────────────────────────────────
+async function rpDownloadExcel() {
+  const filterSlug = document.getElementById('rpCompanyFilter').value;
+  const companies  = filterSlug
+    ? rpState.companies.filter(co => co.company_slug === filterSlug)
+    : rpState.companies;
+
+  if (!companies.length) {
+    toast('warning', 'Nothing to export', 'No companies loaded.');
+    return;
+  }
+
+  toast('info', 'Preparing export', 'Fetching all results, this may take a moment…');
+
+  const rows = [];
+  for (const co of companies) {
+    let cats = [];
+    try {
+      const data = await apiFetch('/api/answering-agent/companies/' + encodeURIComponent(co.company_slug));
+      cats = data.categories || [];
+    } catch(e) { continue; }
+
+    for (const cat of cats) {
+      let results = [];
+      try {
+        const catSlug = cat.md_file.replace('.md','').replace(/_/g,'-');
+        const data = await apiFetch('/api/answering-agent/companies/'
+          + encodeURIComponent(co.company_slug) + '/' + encodeURIComponent(catSlug));
+        results = data.results || [];
+      } catch(e) { continue; }
+
+      for (const r of results) {
+        // Parse answer payload.
+        let answer = r.answer || {};
+        if (typeof answer === 'string') { try { answer = JSON.parse(answer); } catch(e) { answer = {}; } }
+
+        // Extract document metadata.
+        const docMeta     = answer.document_metadata || {};
+        const fiscalYear  = docMeta.validated_fiscal_year || '';
+
+        // Extract first extracted_fields entry.
+        const fields = Array.isArray(answer.extracted_fields) ? answer.extracted_fields : [];
+        const field  = fields[0] || {};
+        const metCriteria     = field.met_criteria    || '';
+        const justification   = field.justification   || '';
+        const confScore       = field.confidence_score != null ? field.confidence_score : '';
+        const needsReview     = field.needs_review     != null ? String(field.needs_review) : '';
+        const src             = field.source           || {};
+        const evidenceSnippet = src.evidence_snippet   || '';
+        const pageNum         = src.page_number        || '';
+
+        // First citation for document name and link.
+        const cits     = r.citations || [];
+        const firstCit = cits[0]     || {};
+        const docName  = firstCit.doc_name || '';
+        const docLink  = firstCit.s3_uri   || '';
+
+        rows.push([
+          co.company,
+          cat.category,
+          r.question_id    || '',
+          r.question_label || r.question_id || '',
+          metCriteria,
+          justification,
+          evidenceSnippet,
+          pageNum,
+          docName,
+          docLink,
+          confScore,
+          needsReview,
+          fiscalYear,
+        ]);
+      }
+    }
+  }
+
+  if (!rows.length) {
+    toast('warning', 'No data', 'No results found for the selected companies.');
+    return;
+  }
+
+  const header = [
+    'Company Name',
+    'Questionnaire',
+    'Question ID',
+    'Question Label',
+    'Met Criteria',
+    'Justification',
+    'Evidence Snippet',
+    'Page Number',
+    'Document',
+    'Document Link',
+    'Confidence Score',
+    'Needs Review',
+    'Fiscal Year',
+  ];
+  const csvRows = [header, ...rows].map(row =>
+    row.map(cell => {
+      const s = String(cell == null ? '' : cell).replace(/"/g, '""');
+      return /[,"\n\r]/.test(s) ? '"' + s + '"' : s;
+    }).join(',')
+  );
+  const blob = new Blob(['\uFEFF' + csvRows.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'uat_export_' + new Date().toISOString().slice(0,10) + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast('success', 'Downloaded', rows.length + ' rows exported.');
+}
 
 loadStats();
 loadDashRuns();

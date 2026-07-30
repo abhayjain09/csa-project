@@ -426,8 +426,12 @@ def edgar_lookup(company_ctx: dict, report_class: str, year: int | None) -> dict
 
     if forms == ["_fts_best_effort"]:
         if not EDGAR_SUSTAINABILITY_FTS:
-            _log("[edgar] no standard form for sustainability report; skipping "
-                 "(set EDGAR_SUSTAINABILITY_FTS=true to attempt full-text search)")
+            _log(f"[edgar] no standard EDGAR form for {report_class!r}; "
+                 f"skipping (set EDGAR_SUSTAINABILITY_FTS=true to attempt "
+                 f"full-text search — despite the name, this flag now gates "
+                 f"full-text search for any class opted into the "
+                 f"_fts_best_effort registries sentinel, not just "
+                 f"sustainability report)")
             return None
         return _edgar_fts(company_ctx, report_class, year)
 
@@ -519,14 +523,23 @@ def edgar_lookup(company_ctx: dict, report_class: str, year: int | None) -> dict
 
 
 def _edgar_fts(company_ctx: dict, report_class: str, year: int | None) -> dict | None:
-    """Best-effort EDGAR full-text search (only reached when explicitly enabled).
+    """Best-effort EDGAR full-text search (only reached when explicitly enabled,
+    and only for classes report_specs.py opts in via the "_fts_best_effort"
+    registries sentinel — see registries_for()).
     EDGAR FTS endpoints/behaviour should be verified on first deploy against
     real responses; kept deliberately narrow and still verify_fn-gated upstream.
     """
     name = company_ctx.get("name") or ""
     if not name:
         return None
-    q = quote(f'"{name}" sustainability report')
+    # Query on the ACTUAL requested class, not a hardcoded string. This used
+    # to always search for the literal phrase "sustainability report"
+    # regardless of report_class — harmless while sustainability report was
+    # the only class using this sentinel (its class name happened to be that
+    # exact phrase), but silently wrong for any other class opted in later,
+    # which would search EDGAR for sustainability report content instead of
+    # its own.
+    q = quote(f'"{name}" {report_class}')
     url = f"https://efts.sec.gov/LATEST/search-index?q={q}"
     try:
         res = _http_json(url, {"User-Agent": EDGAR_USER_AGENT})

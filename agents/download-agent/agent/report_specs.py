@@ -69,33 +69,48 @@ REPORT_SPECS: dict[str, dict] = {
         # EDGAR has no standard sustainability form -> best-effort only.
         "registries": {"edgar": ["_fts_best_effort"]},
         "html_render_eligible": False,
+        "fallback_min_confidence": "medium",
         "validation_prompt": (
             "The document must BE a standalone Sustainability / ESG / BRSR / "
             "CSRD-ESRS report for {company}. A Strategic Report, an Annual "
             "Report, an ESG factbook or supplement, a CDP score report, a "
             "green/SDG-bond report, an assurance statement, or a standalone "
-            "Impact Report is NOT a match. For a corporate-group request, "
-            "reject a sustainability report limited to one subsidiary, "
-            "country, region, site, facility, mine, plant, project, or "
-            "operation."
+            "Impact Report is NOT a match — UNLESS that document contains a "
+            "genuine, dedicated, substantive Sustainability/ESG section (not "
+            "a passing mention) and no standalone report exists, in which "
+            "case that section satisfies this class. For a corporate-group "
+            "request, reject a sustainability report limited to one "
+            "subsidiary, country, region, site, facility, mine, plant, "
+            "project, or operation."
         ),
     },
     "impact report": {
         "year_required": False,
         "registries": {},
         "html_render_eligible": False,
+        "fallback_min_confidence": "medium",
         "validation_prompt": (
             "The document must BE a standalone Impact Report (social/purpose/"
             "ESG impact report) for {company}. A full Sustainability/ESG "
             "report, an Annual Report, or an ESG databook/spreadsheet is NOT "
             "a match unless it is explicitly titled and structured as an "
-            "Impact Report."
+            "Impact Report — OR it contains a genuine, dedicated, "
+            "substantive Impact Report section (not a passing mention) and "
+            "no standalone Impact Report exists, in which case that section "
+            "satisfies this class."
         ),
     },
     "ghg emission report": {
         "year_required": False,
         "registries": {},
         "html_render_eligible": False,
+        # The prompt below explicitly invites a sustainability-report-section
+        # fallback when no standalone report exists — see
+        # fallback_min_confidence_for()'s docstring for why that fallback
+        # needs a lower confidence bar than the global default to actually be
+        # reachable (a section-of-a-larger-document pick is rated "medium" by
+        # the LLM, not "high", and was being silently discarded).
+        "fallback_min_confidence": "medium",
         "validation_prompt": (
             "The document must BE {company}'s standalone GHG/Greenhouse Gas "
             "Emissions report (Scope 1/2/3 emissions inventory, carbon "
@@ -124,6 +139,7 @@ REPORT_SPECS: dict[str, dict] = {
         "year_required": True,
         "registries": {},
         "html_render_eligible": False,
+        "fallback_min_confidence": "medium",
         "validation_prompt": (
             "The document must BE a Directors' Remuneration Report for "
             "{company}{year_clause}. A full Annual Report that merely contains "
@@ -135,6 +151,7 @@ REPORT_SPECS: dict[str, dict] = {
         "year_required": False,
         "registries": {},
         "html_render_eligible": True,
+        "fallback_min_confidence": "medium",
         "validation_prompt": (
             "The document must BE {company}'s official Code of Conduct / Code of "
             "Business Conduct and Ethics. It may apply company-wide or to the "
@@ -142,62 +159,94 @@ REPORT_SPECS: dict[str, dict] = {
             "officers. A Supplier/Vendor Code of Conduct, a code limited only "
             "to non-executive or independent directors, a director appointment "
             "or familiarisation document, or a governance overview page is NOT "
-            "a match."
+            "a match — UNLESS that document contains a genuine, dedicated, "
+            "substantive Code of Conduct section (not a passing mention) and "
+            "no standalone Code of Conduct exists, in which case that section "
+            "satisfies this class."
         ),
     },
     "supplier code of conduct": {
         "year_required": False,
         "registries": {},
         "html_render_eligible": True,
+        "fallback_min_confidence": "medium",
         "validation_prompt": (
             "The document must BE {company}'s Supplier / Vendor / Third-Party "
             "Code of Conduct (or Responsible Sourcing / Supply Chain code). The "
-            "company's general employee Code of Conduct is NOT a match."
+            "company's general employee Code of Conduct is NOT a match — "
+            "UNLESS that document contains a genuine, dedicated, substantive "
+            "Supplier/Vendor Code of Conduct section (not a passing mention) "
+            "and no standalone supplier code exists, in which case that "
+            "section satisfies this class."
         ),
     },
     "tax strategy and governance": {
         "year_required": False,
         "registries": {},
         "html_render_eligible": True,
+        "fallback_min_confidence": "medium",
         "validation_prompt": (
             "The document must BE {company}'s Tax Strategy / Tax Policy / Tax "
-            "Governance document. A general annual report tax note is NOT a match."
+            "Governance document. A general annual report tax note is NOT a "
+            "match — UNLESS that document contains a genuine, dedicated, "
+            "substantive Tax Strategy/Governance section (not a passing "
+            "mention) and no standalone tax strategy document exists, in "
+            "which case that section satisfies this class."
         ),
     },
     "whistleblowing mechanism": {
         "year_required": False,
         "registries": {},
         "html_render_eligible": True,
+        "fallback_min_confidence": "medium",
         "validation_prompt": (
             "The document must BE {company}'s Whistleblowing / Speak-Up / "
             "Whistleblower policy. A document that merely mentions a "
-            "whistleblowing channel in a section is NOT a match."
+            "whistleblowing channel in a section is NOT a match — UNLESS that "
+            "section is genuinely dedicated and substantive (states the "
+            "mechanism, scope, and protections, not a passing reference) and "
+            "no standalone policy exists, in which case that section "
+            "satisfies this class."
         ),
     },
     "occupational health & safety policy": {
         "year_required": False,
         "registries": {},
         "html_render_eligible": True,
+        "fallback_min_confidence": "medium",
         "validation_prompt": (
             "The document must BE {company}'s Occupational Health & Safety "
             "(OHS/HSE/HSSE) policy. A sustainability report section on safety "
-            "is NOT a match."
+            "is NOT a match — UNLESS that section is genuinely dedicated and "
+            "substantive (not a passing mention) and no standalone policy "
+            "exists, in which case that section satisfies this class."
         ),
     },
     "environmental policy": {
         "year_required": False,
         "registries": {},
         "html_render_eligible": True,
+        "fallback_min_confidence": "medium",
         "validation_prompt": (
             "The document must BE {company}'s Environmental / Environmental "
             "Management policy. A sustainability report, ESG supplement, or CDP "
-            "report is NOT a match."
+            "report is NOT a match — UNLESS that document contains a genuine, "
+            "dedicated, substantive Environmental Policy section (not a "
+            "passing mention) and no standalone policy exists, in which case "
+            "that section satisfies this class."
         ),
     },
     "insider trading policy": {
         "year_required": False,
-        "registries": {},
+        # Foreign private issuers (20-F filers) commonly file this as an
+        # exhibit to their annual report rather than posting it on their own
+        # IR site — same best-effort EDGAR full-text-search fallback already
+        # used for sustainability report (see registries_for()/edgar_lookup),
+        # tried only after the web/browser tiers exhaust (_discovery_route
+        # appends "registry" last for classes not in REGISTRY_FIRST_CLASSES).
+        "registries": {"edgar": ["_fts_best_effort"]},
         "html_render_eligible": True,
+        "fallback_min_confidence": "medium",
         "validation_prompt": (
             "The document must BE {company}'s Insider Trading / Securities "
             "Trading / Share Dealing policy governing employee/director "
@@ -210,6 +259,7 @@ REPORT_SPECS: dict[str, dict] = {
         "year_required": False,
         "registries": {},
         "html_render_eligible": True,
+        "fallback_min_confidence": "medium",
         "validation_prompt": (
             "The document must BE {company}'s Anti-Bribery & Corruption (ABC) "
             "policy. A code of conduct that mentions bribery in a section is "
@@ -220,6 +270,7 @@ REPORT_SPECS: dict[str, dict] = {
         "year_required": False,
         "registries": {},
         "html_render_eligible": True,
+        "fallback_min_confidence": "medium",
         "validation_prompt": (
             "The document must BE {company}'s Conflicts of Interest policy. A "
             "code of conduct or ethics policy that merely mentions conflicts "
@@ -229,8 +280,12 @@ REPORT_SPECS: dict[str, dict] = {
     },
     "discrimination and harassment policy": {
         "year_required": False,
-        "registries": {},
+        # Same best-effort EDGAR full-text-search fallback as sustainability
+        # report and insider trading policy above — some issuers file this as
+        # a 20-F/10-K exhibit rather than publishing it on their own site.
+        "registries": {"edgar": ["_fts_best_effort"]},
         "html_render_eligible": True,
+        "fallback_min_confidence": "medium",
         "validation_prompt": (
             "The document must BE {company}'s Discrimination and Harassment / "
             "Anti-Discrimination / Anti-Harassment / Equal Opportunity policy. "
@@ -242,6 +297,7 @@ REPORT_SPECS: dict[str, dict] = {
         "year_required": False,
         "registries": {},
         "html_render_eligible": True,
+        "fallback_min_confidence": "medium",
         "validation_prompt": (
             "The document must BE {company}'s Biodiversity / Nature policy. A "
             "sustainability report section on biodiversity is NOT a match "
@@ -252,27 +308,36 @@ REPORT_SPECS: dict[str, dict] = {
         "year_required": False,
         "registries": {},
         "html_render_eligible": True,
+        "fallback_min_confidence": "medium",
         "validation_prompt": (
             "The document must BE {company}'s Human Rights policy or "
             "statement. A Human Rights Due Diligence report, or a "
-            "sustainability report section on human rights, is NOT a match."
+            "sustainability report section on human rights, is NOT a match — "
+            "UNLESS that section is genuinely dedicated and substantive (not "
+            "a passing mention) and no standalone policy exists, in which "
+            "case that section satisfies this class."
         ),
     },
     "human rights due diligence": {
         "year_required": False,
         "registries": {},
         "html_render_eligible": True,
+        "fallback_min_confidence": "medium",
         "validation_prompt": (
             "The document must BE {company}'s Human Rights Due Diligence "
             "report or human rights impact assessment. A general Human "
             "Rights policy statement with no due-diligence process/findings "
-            "is NOT a match."
+            "is NOT a match — UNLESS a larger document contains a genuine, "
+            "dedicated, substantive due-diligence process/findings section "
+            "(not a passing mention) and no standalone report exists, in "
+            "which case that section satisfies this class."
         ),
     },
     "risk management policy": {
         "year_required": False,
         "registries": {},
         "html_render_eligible": True,
+        "fallback_min_confidence": "medium",
         "validation_prompt": (
             "The document must BE {company}'s Risk Management policy or "
             "Enterprise Risk Management framework. An annual report's risk "
@@ -321,6 +386,25 @@ def html_render_eligible(canonical: str | None) -> bool:
     standalone company policies where a webpage is a legitimate substitute for
     a document opt in (see module docstring)."""
     return bool(spec_for(canonical).get("html_render_eligible"))
+
+
+def fallback_min_confidence_for(canonical: str | None) -> str | None:
+    """Per-class override of agent.py's global MIN_SELECTION_CONFIDENCE gate.
+
+    Several classes' validation_prompt explicitly instructs the LLM to accept
+    a broader document's relevant SECTION (e.g. a Sustainability Report's GHG
+    section) as a fallback "unless no standalone report exists" — but a
+    section-of-a-larger-document answer is inherently a softer, less certain
+    call than a document that IS titled/structured as the requested class, so
+    the LLM naturally rates it "medium" confidence, not "high". Under a
+    deployed MIN_SELECTION_CONFIDENCE=high (the default), that medium-
+    confidence fallback was being rejected outright — the exact "high bar
+    makes an intentional fallback unreachable" problem BROWSER_PAGE_RENDER_
+    MIN_CONFIDENCE (agent.py) already solves for a different code path.
+    Returns None (use the global default) for every class NOT listed here —
+    this only loosens the bar for classes that explicitly invite a fallback.
+    """
+    return spec_for(canonical).get("fallback_min_confidence")
 
 
 def validation_prompt(canonical: str | None, company: str = "", year=None) -> str:

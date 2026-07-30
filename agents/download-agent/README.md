@@ -18,22 +18,12 @@ The per-document route is:
 1. Direct Google URL search restricted to the established official domain.
 2. Official sitemap and relevant landing-page crawl.
 3. In-depth same-domain static crawl.
-4. A bounded targeted Google recovery pass uses the validated legal company
-   name, canonical document class/aliases, requested year, ticker, and a useful
-   path hint from the broad search. It suppresses URLs already sampled in the
-   first Google pass and reranks results using explicit company identity
-   evidence.
-5. AgentCore Browser first retries exact ranked official PDF URLs in its live
+4. AgentCore Browser first retries exact ranked official PDF URLs in its live
    session, then handles JavaScript, archive navigation, and download controls.
-6. For annual reports and proxy statements, validated SEC EDGAR lookup only
+5. For annual reports and proxy statements, validated SEC EDGAR lookup only
    when the official-company path found nothing; Companies House is the
    equivalent fallback for applicable UK annual reports.
-7. Other configured registry integrations also run only as a final fallback.
-
-The recovery pass is enabled by default. It can be disabled with
-`ENABLE_TARGETED_SEARCH_RECOVERY=false`; `TARGETED_SEARCH_MAX_QUERIES` controls
-its query cap (default `3`). Both are code-side defaults, so the existing
-50-variable AgentCore runtime environment map does not need another entry.
+6. Other configured registry integrations also run only as a final fallback.
 
 When an exact official candidate is still denied with a WAF response, the agent
 returns `blocked_by_source_waf` plus bounded candidate URLs. The Report IQ portal
@@ -204,10 +194,9 @@ Documents are stored under a class-scoped company prefix to prevent one
 sidecar/class mapping from overwriting another.
 
 After direct URL search, the runtime checks official sitemap and landing-page
-links, performs a bounded same-domain static crawl, makes one small
-identity-anchored Google recovery pass, and only then opens the rendered
-investor-relations path in AgentCore Browser. Static/search discovery preserves
-verification capacity for the browser. A known document CDN is
+links, performs a bounded same-domain static crawl, and only then opens the
+rendered investor-relations path in AgentCore Browser. Static discovery
+preserves verification capacity for the browser. A known document CDN is
 accepted only when its link was harvested from the requested company's official
 browser page; the CDN list is never sufficient evidence by itself. Deployment
 defaults are controlled by `LATEST_COMPLETED_FISCAL_YEAR_LAG`,

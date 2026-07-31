@@ -1,4 +1,4 @@
-"""report_specs.py — unified per-report-class specification layer (v40).
+"""report_specs.py — unified per-report-class specification layer (v48).
 
 One place that answers, for every document class the agent handles:
 
@@ -33,6 +33,35 @@ file adds the per-class validation contract + registry routing.
 
 Canonical class names MUST match the keys of _DOC_CLASS_RULES in agent.py.
 """
+
+# The product contract: a full company run attempts every class below exactly
+# once, in this stable order.  Keep display wording in the UI, payload builder,
+# and runtime derived from this catalog rather than maintaining another count.
+ALL_REPORT_CLASSES: tuple[str, ...] = (
+    "code of conduct",
+    "anti-bribery and corruption policy",
+    "conflicts of interest policy",
+    "insider trading policy",
+    "discrimination and harassment policy",
+    "supplier code of conduct",
+    "whistleblowing mechanism",
+    "sustainability report",
+    "ghg emission report",
+    "annual report",
+    "environmental policy",
+    "environment, health & safety policy",
+    "biodiversity policy",
+    "impact report",
+    "human rights policy",
+    "human rights due diligence",
+    "modern slavery statement",
+    "remuneration report",
+    "proxy statement",
+    "risk management policy",
+    "tax strategy and governance",
+    "wolfsberg questionnaire",
+    "occupational health & safety policy",
+)
 
 # ── EDGAR form types by class. "_fts_best_effort" is a sentinel meaning
 #    "EDGAR has no dedicated form for this class; only attempt full-text
@@ -222,6 +251,20 @@ REPORT_SPECS: dict[str, dict] = {
             "exists, in which case that section satisfies this class."
         ),
     },
+    "environment, health & safety policy": {
+        "year_required": False,
+        "registries": {},
+        "html_render_eligible": True,
+        "fallback_min_confidence": "medium",
+        "validation_prompt": (
+            "The document must BE {company}'s combined Environment, Health "
+            "and Safety (EHS/HSE/QHSE/HSSE/SHE) policy. A health-and-safety-only "
+            "policy or environment-only policy is NOT a match. A larger official "
+            "document is acceptable only when it contains a genuine, dedicated, "
+            "substantive combined EHS policy section and no standalone combined "
+            "EHS policy exists."
+        ),
+    },
     "environmental policy": {
         "year_required": False,
         "registries": {},
@@ -333,6 +376,20 @@ REPORT_SPECS: dict[str, dict] = {
             "which case that section satisfies this class."
         ),
     },
+    "modern slavery statement": {
+        "year_required": False,
+        "registries": {},
+        "html_render_eligible": True,
+        "fallback_min_confidence": "medium",
+        "validation_prompt": (
+            "The document must BE {company}'s Modern Slavery Act statement, "
+            "Transparency in Supply Chains statement, or equivalent statutory "
+            "slavery and human-trafficking statement. A general Human Rights "
+            "policy, supplier code, or due-diligence report is NOT a match unless "
+            "it contains a genuine, dedicated statutory modern-slavery statement "
+            "and no standalone statement exists."
+        ),
+    },
     "risk management policy": {
         "year_required": False,
         "registries": {},
@@ -358,6 +415,12 @@ REPORT_SPECS: dict[str, dict] = {
         ),
     },
 }
+
+if len(ALL_REPORT_CLASSES) != 23 or set(ALL_REPORT_CLASSES) != set(REPORT_SPECS):
+    raise RuntimeError(
+        "The all-reports catalog must contain exactly the same 23 canonical "
+        "classes as REPORT_SPECS"
+    )
 
 _GENERIC_SPEC = {
     "year_required": False,

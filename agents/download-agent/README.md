@@ -166,6 +166,38 @@ aws bedrock-agentcore invoke-agent-runtime \
 The `s3_key` / `s3_uri` of each downloaded report is the answer you asked for.
 The same rows are written to the DynamoDB provenance table.
 
+## Download the complete 23-report catalog
+
+Use a structured company payload and let the runtime create the canonical 23
+work items. This avoids UI/query-list drift and gives every class a stable ID:
+
+```json
+{
+  "company": {"name": "Microsoft", "domain": "microsoft.com"},
+  "download_all_reports": true,
+  "browser_enabled": true
+}
+```
+
+Or invoke it directly:
+
+```bash
+python scripts/invoke_local.py "$(terraform output -raw agent_runtime_arn)" \
+  --company="Microsoft" --domain=microsoft.com --workers=3 --region=us-east-1
+```
+
+The helper deliberately submits bounded parallel one-class jobs (default 3,
+maximum 6) so 23 browser-heavy searches do not exceed one runtime invocation's
+wall-clock limit. The runtime's `download_all_reports` input remains useful for
+environments with a sufficiently long execution window.
+
+The response includes `manifest` (one outcome for every requested class),
+`missing_report_classes`, `counts.requested`, `counts.complete`, and a top-level
+`complete` boolean. A full run always *attempts* all 23. It reports unavailable
+or blocked documents honestly; it cannot manufacture a report a company has
+never published. Re-run only the missing classes after correcting a domain,
+enabling browser access, or handling a source WAF.
+
 ## Latest annual-report behavior
 
 An Annual Report is labeled by its completed fiscal year, not by the calendar

@@ -29,6 +29,31 @@ if "boto3" not in sys.modules:
     sys.modules["boto3"] = boto3_stub
 
 import registry_tier  # noqa: E402
+import report_specs  # noqa: E402
+
+
+class ReportCatalogTests(unittest.TestCase):
+    def test_full_catalog_has_exactly_23_unique_supported_classes(self):
+        self.assertEqual(len(report_specs.ALL_REPORT_CLASSES), 23)
+        self.assertEqual(len(set(report_specs.ALL_REPORT_CLASSES)), 23)
+        self.assertEqual(
+            set(report_specs.ALL_REPORT_CLASSES),
+            set(report_specs.REPORT_SPECS),
+        )
+
+    def test_previously_missing_classes_are_distinct(self):
+        self.assertIn(
+            "environment, health & safety policy",
+            report_specs.ALL_REPORT_CLASSES,
+        )
+        self.assertIn(
+            "occupational health & safety policy",
+            report_specs.ALL_REPORT_CLASSES,
+        )
+        self.assertIn(
+            "modern slavery statement",
+            report_specs.ALL_REPORT_CLASSES,
+        )
 
 
 def _seed_sec_cache():
@@ -44,7 +69,7 @@ def _seed_sec_cache():
 
 
 def _load_pairing_function():
-    path = REPO_ROOT / "reportiq-ecs/app/backend/app.py"
+    path = REPO_ROOT / "co-analyst-application/app/backend/app.py"
     tree = ast.parse(path.read_text(encoding="utf-8"))
     node = next(
         item for item in tree.body
@@ -59,7 +84,7 @@ def _load_pairing_function():
 
 
 def _load_worker_validation_helpers():
-    path = REPO_ROOT / "reportiq-ecs/app/backend/browser_worker.py"
+    path = REPO_ROOT / "co-analyst-application/app/backend/browser_worker.py"
     tree = ast.parse(path.read_text(encoding="utf-8"))
     wanted = {
         "_normalize_text", "_company_matches", "_class_matches",
@@ -92,7 +117,7 @@ def _load_worker_validation_helpers():
 
 
 def _load_bulk_queue_helpers(dynamo, executor, invoke_fn):
-    path = REPO_ROOT / "reportiq-ecs/app/backend/app.py"
+    path = REPO_ROOT / "co-analyst-application/app/backend/app.py"
     tree = ast.parse(path.read_text(encoding="utf-8"))
     wanted = {"_queue_bulk_invocations", "_chunk_web_queries"}
     nodes = [
@@ -122,7 +147,7 @@ def _load_bulk_queue_helpers(dynamo, executor, invoke_fn):
 
 
 def _load_structured_payload_helpers():
-    path = REPO_ROOT / "reportiq-ecs/app/backend/app.py"
+    path = REPO_ROOT / "co-analyst-application/app/backend/app.py"
     tree = ast.parse(path.read_text(encoding="utf-8"))
     wanted_functions = {"_infer_report_class", "_build_chunk_payload"}
     nodes = []
@@ -161,7 +186,7 @@ def _load_pdf_integrity_helper(relative_path: str, function_name: str):
 
 
 def _load_manual_source_url_helper():
-    path = REPO_ROOT / "reportiq-ecs/app/backend/app.py"
+    path = REPO_ROOT / "co-analyst-application/app/backend/app.py"
     tree = ast.parse(path.read_text(encoding="utf-8"))
     node = next(
         item for item in tree.body
@@ -176,7 +201,7 @@ def _load_manual_source_url_helper():
 
 
 def _load_worker_terminal_helper(jobs_table):
-    path = REPO_ROOT / "reportiq-ecs/app/backend/browser_worker.py"
+    path = REPO_ROOT / "co-analyst-application/app/backend/browser_worker.py"
     tree = ast.parse(path.read_text(encoding="utf-8"))
     node = next(
         item for item in tree.body
@@ -265,7 +290,7 @@ def _load_page_render_helpers():
 
 
 def _load_vertex_helpers():
-    path = REPO_ROOT / "infra/agentcore-report/vertex_search/lambda.py"
+    path = REPO_ROOT / "agents/download-agent/vertex_search/lambda.py"
     tree = ast.parse(path.read_text(encoding="utf-8"))
     wanted = {"_parse_first_json_object", "_clean_identity_hint"}
     nodes = [
@@ -280,7 +305,7 @@ def _load_vertex_helpers():
 
 
 def _load_confidence_function():
-    path = REPO_ROOT / "infra/agentcore-report/agent/agent.py"
+    path = REPO_ROOT / "agents/download-agent/agent/agent.py"
     tree = ast.parse(path.read_text(encoding="utf-8"))
     node = next(
         item for item in tree.body
@@ -297,13 +322,14 @@ def _load_confidence_function():
 
 
 def _load_routing_helpers():
-    path = REPO_ROOT / "infra/agentcore-report/agent/agent.py"
+    path = REPO_ROOT / "agents/download-agent/agent/agent.py"
     tree = ast.parse(path.read_text(encoding="utf-8"))
     wanted = {
         "_scope_to_official_domain",
         "_official_search_queries",
         "_discovery_route",
         "_latest_search_query_variants",
+        "_registrable",
     }
     nodes = [
         item for item in tree.body
@@ -332,7 +358,7 @@ def _load_routing_helpers():
 
 
 def _load_language_and_scope_helpers():
-    path = REPO_ROOT / "infra/agentcore-report/agent/agent.py"
+    path = REPO_ROOT / "agents/download-agent/agent/agent.py"
     tree = ast.parse(path.read_text(encoding="utf-8"))
     wanted_assignments = {
         "_NON_ENGLISH_LANGUAGE_CODES",
@@ -375,7 +401,7 @@ def _load_language_and_scope_helpers():
 
 
 def _load_document_link_helpers():
-    path = REPO_ROOT / "infra/agentcore-report/agent/agent.py"
+    path = REPO_ROOT / "agents/download-agent/agent/agent.py"
     tree = ast.parse(path.read_text(encoding="utf-8"))
     wanted = {"_registrable", "_is_official_source_page", "_doc_links"}
     nodes = [
@@ -529,7 +555,7 @@ class BrowserWorkerValidationTests(unittest.TestCase):
             stale, [latest], False))
 
     def test_transport_integrity_failure_remains_retryable(self):
-        path = REPO_ROOT / "infra/agentcore-report/agent/agent.py"
+        path = REPO_ROOT / "agents/download-agent/agent/agent.py"
         tree = ast.parse(path.read_text(encoding="utf-8"))
         function = next(
             item for item in tree.body
@@ -594,7 +620,13 @@ class StructuredPayloadTests(unittest.TestCase):
             "Anti-Corruption and Bribery Policy":
                 "anti-bribery and corruption policy",
             "Environment, Health and Safety Policy":
+                "environment, health & safety policy",
+            "Health and Safety Policy":
                 "occupational health & safety policy",
+            "Modern Slavery Statement":
+                "modern slavery statement",
+            "Human Due Diligence":
+                "human rights due diligence",
             "Tax Strategy and Policy Document":
                 "tax strategy and governance",
             "Supplier Code of Conduct":
@@ -616,7 +648,7 @@ class PdfIntegrityTests(unittest.TestCase):
 
     def test_agent_rejects_html_disguised_as_pdf(self):
         validate = _load_pdf_integrity_helper(
-            "infra/agentcore-report/agent/agent.py",
+            "agents/download-agent/agent/agent.py",
             "_document_integrity_error",
         )
         error = validate(
@@ -628,7 +660,7 @@ class PdfIntegrityTests(unittest.TestCase):
 
     def test_agent_accepts_parseable_pdf(self):
         validate = _load_pdf_integrity_helper(
-            "infra/agentcore-report/agent/agent.py",
+            "agents/download-agent/agent/agent.py",
             "_document_integrity_error",
         )
         self.assertEqual(
@@ -642,7 +674,7 @@ class PdfIntegrityTests(unittest.TestCase):
 
     def test_portal_manual_upload_uses_same_pdf_gate(self):
         validate = _load_pdf_integrity_helper(
-            "reportiq-ecs/app/backend/app.py",
+            "co-analyst-application/app/backend/app.py",
             "_pdf_integrity_error",
         )
         self.assertTrue(validate(
@@ -677,15 +709,15 @@ class BrowserWorkerPatchTests(unittest.TestCase):
 
 class FrontendDownloadTests(unittest.TestCase):
     def test_citation_uses_verified_download_flow_not_json_endpoint(self):
-        path = REPO_ROOT / "reportiq-ecs/app/static/index.html"
+        path = REPO_ROOT / "co-analyst-application/app/static/index.html"
         source = path.read_text(encoding="utf-8")
         self.assertNotIn(
             'href="/api/sources/download-url?key=', source)
-        self.assertIn(
-            "downloadFileVerified(decB64(", source)
+        self.assertIn("function rpSafeOfficialUrl(value)", source)
+        self.assertIn("official document &#8599;</a>", source)
 
     def test_terminal_fargate_failure_offers_manual_download_and_upload(self):
-        path = REPO_ROOT / "reportiq-ecs/app/static/index.html"
+        path = REPO_ROOT / "co-analyst-application/app/static/index.html"
         source = path.read_text(encoding="utf-8")
         self.assertIn("browserFinishedWithoutDownload", source)
         self.assertIn("↗ Manual download", source)

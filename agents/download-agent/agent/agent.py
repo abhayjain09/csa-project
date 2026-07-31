@@ -1,4 +1,9 @@
-"""Report download agent (single AgentCore Runtime) — v47.
+"""Report download agent (single AgentCore Runtime) — v48.
+
+v48 makes the 23-report product contract executable: a company-only payload
+with ``download_all_reports: true`` expands to the canonical catalog, EHS and
+OHS are distinct classes, Modern Slavery is supported, and every response has
+an explicit completeness manifest.
 
 v47 makes undated requests latest-first across current/prior fiscal labels,
 prefers English/default-language documents, follows safe document links from
@@ -81,7 +86,7 @@ import registry_tier
 
 app = BedrockAgentCoreApp()
 
-CODE_VERSION = os.environ.get("CODE_VERSION", "v46")
+CODE_VERSION = os.environ.get("CODE_VERSION", "v48")
 
 # Tier 2 (official registry fallback) master switch. registry_tier.py reads its
 # own EDGAR_* / CH_* configuration from the environment.
@@ -688,8 +693,6 @@ _DOC_CLASS_RULES: dict[str, dict] = {
                 "health, safety and wellbeing policy",
                 "hsse policy",
                 "safety policy statement",
-                "environment, health and safety policy",
-                "ehs policy",
             ],
             "india": [
                 "health and safety policy",
@@ -698,8 +701,6 @@ _DOC_CLASS_RULES: dict[str, dict] = {
                 "she policy",
                 "qhse policy",
                 "hsse policy",
-                "environment, health and safety policy",
-                "ehs policy",
             ],
             "us": [
                 "health and safety policy",
@@ -708,8 +709,32 @@ _DOC_CLASS_RULES: dict[str, dict] = {
                 "she policy",
                 "health, safety and wellbeing policy",
                 "hsse policy",
+            ],
+        },
+        "reject": [],
+    },
+    "environment, health & safety policy": {
+        "aliases_by_region": {
+            "uk_europe": [
                 "environment, health and safety policy",
-                "ehs policy",
+                "environmental health and safety policy",
+                "environment health and safety policy",
+                "ehs policy", "hse policy", "qhse policy", "hsse policy",
+                "she policy",
+            ],
+            "india": [
+                "environment, health and safety policy",
+                "environmental health and safety policy",
+                "environment health and safety policy",
+                "ehs policy", "hse policy", "qhse policy", "hsse policy",
+                "she policy",
+            ],
+            "us": [
+                "environment, health and safety policy",
+                "environmental health and safety policy",
+                "environment health and safety policy",
+                "ehs policy", "hse policy", "qhse policy", "hsse policy",
+                "she policy",
             ],
         },
         "reject": [],
@@ -722,15 +747,11 @@ _DOC_CLASS_RULES: dict[str, dict] = {
                 "sustainability policy",
                 "climate change policy",
                 "climate action policy",
-                "environment, health and safety policy",
-                "ehs policy",
             ],
             "india": [
                 "environment policy",
                 "environmental management policy",
                 "sustainability policy",
-                "environment, health and safety policy",
-                "ehs policy",
             ],
             "us": [
                 "environment policy",
@@ -738,8 +759,6 @@ _DOC_CLASS_RULES: dict[str, dict] = {
                 "sustainability policy",
                 "climate change policy",
                 "climate action policy",
-                "environment, health and safety policy",
-                "ehs policy",
             ],
         },
         "reject": [],
@@ -927,6 +946,25 @@ _DOC_CLASS_RULES: dict[str, dict] = {
             ],
         },
         "reject": [],
+    },
+    "modern slavery statement": {
+        "aliases_by_region": {
+            "uk_europe": [
+                "modern slavery statement", "modern slavery act statement",
+                "slavery and human trafficking statement",
+                "transparency in supply chains statement",
+            ],
+            "india": [
+                "modern slavery statement",
+                "slavery and human trafficking statement",
+            ],
+            "us": [
+                "modern slavery statement",
+                "california transparency in supply chains statement",
+                "slavery and human trafficking statement",
+            ],
+        },
+        "reject": ["human rights policy", "human rights due diligence"],
     },
     "risk management policy": {
         "aliases_by_region": {
@@ -5746,9 +5784,19 @@ def _invoke_sync(payload: dict) -> dict:
     if region_override is None:
         region_override = _infer_alias_region_from_domain(company_ctx.get("domain"))
 
-    # ── Build work items from structured `reports` OR legacy web_query<N> ──
+    # ── Build work items from structured `reports`, the canonical all-23
+    #    mode, OR legacy web_query<N>.  Company-only expansion is intentionally
+    #    opt-in so old callers that accidentally omit queries still fail loud. ──
     work_items: list[dict] = []
     reports = (payload or {}).get("reports")
+    download_all_reports = bool((payload or {}).get("download_all_reports"))
+    if download_all_reports and not reports:
+        reports = [
+            {"report_class": report_class,
+             "request_id": f"all:{index:02d}"}
+            for index, report_class in enumerate(
+                report_specs.ALL_REPORT_CLASSES, start=1)
+        ]
     if isinstance(reports, list) and reports:
         _dom = company_ctx.get("domain") or ""
         for _report_index, _r in enumerate(reports, start=1):
@@ -5822,6 +5870,7 @@ def _invoke_sync(payload: dict) -> dict:
         "v39_filing_fallback_all_classes": FILING_FALLBACK_ALL_CLASSES,
         "alias_region": region_override,
         "work_item_count": len(work_items),
+        "download_all_reports": download_all_reports,
         "document_preferences": {
             "preferred_language": _default_preferred_language,
             "prefer_latest": _default_prefer_latest,
@@ -6420,6 +6469,28 @@ def _invoke_sync(payload: dict) -> dict:
         except Exception:  # noqa: BLE001
             pass
 
+    # One row per requested class, including failures. This is the stable
+    # machine-readable handoff callers need to retry only what is missing.
+    result_by_request_id = {
+        str(item.get("request_id")): item for item in query_results
+        if isinstance(item, dict) and item.get("request_id")
+    }
+    manifest = []
+    for item in work_items:
+        outcome = result_by_request_id.get(str(item["request_id"]), {})
+        status = str(outcome.get("status") or "failed")
+        manifest.append({
+            "request_id": item["request_id"],
+            "report_class": item.get("report_class"),
+            "status": status,
+            "downloaded": status in {"downloaded", "already_in_s3"},
+            "s3_key": outcome.get("s3_key"),
+            "source_url": outcome.get("source_url"),
+            "reason": outcome.get("reason"),
+        })
+    missing_report_classes = [
+        item["report_class"] for item in manifest if not item["downloaded"]
+    ]
     diag["gateway_debug"] = _GW_DEBUG or None
     return {
         "run_id": run_id,
@@ -6433,7 +6504,13 @@ def _invoke_sync(payload: dict) -> dict:
             "duplicates": len(duplicates),
             "not_found": len(failures),
             "queries": len(query_results),
+            "requested": len(manifest),
+            "complete": sum(1 for item in manifest if item["downloaded"]),
+            "missing": len(missing_report_classes),
         },
+        "complete": bool(manifest) and not missing_report_classes,
+        "manifest": manifest,
+        "missing_report_classes": missing_report_classes,
         "diagnostics": diag,
     }
 

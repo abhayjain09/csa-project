@@ -2879,13 +2879,15 @@ _REPORT_CLASS_ALIASES = (
         "whistleblowing policy", "whistleblower policy",
         "speak up policy", "ethics hotline policy",
     )),
-    ("occupational health & safety policy", (
+    ("environment, health & safety policy", (
         "environment health and safety policy",
         "environmental health and safety policy",
         "environment health safety policy",
+        "ehs policy", "hse policy", "qhse policy", "hsse policy",
+    )),
+    ("occupational health & safety policy", (
         "occupational health and safety policy",
         "health and safety policy",
-        "ehs policy", "hse policy",
     )),
     ("tax strategy and governance", (
         "tax strategy and policy document", "tax strategy and governance",
@@ -2923,6 +2925,15 @@ _REPORT_CLASS_ALIASES = (
     ("biodiversity policy", ("biodiversity policy",)),
     ("impact report", ("impact report",)),
     ("human rights policy", ("human rights policy",)),
+    ("human rights due diligence", (
+        "human due diligence", "human rights due diligence",
+        "human rights impact assessment",
+    )),
+    ("modern slavery statement", (
+        "modern slavery statement", "modern slavery act statement",
+        "slavery and human trafficking statement",
+        "transparency in supply chains statement",
+    )),
     ("remuneration report", ("remuneration report", "compensation report")),
     ("risk management policy", ("risk management policy",)),
     ("wolfsberg questionnaire", ("wolfsberg questionnaire",)),

@@ -1,1 +1,0 @@
-No visual-system deviations are planned. The architecture image replaces the inherited image placeholder, while typography, white background, spacing, rounded image mask, page marker, and title/body positions remain inherited from Simple Light Mode slide 8.

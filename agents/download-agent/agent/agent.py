@@ -1748,7 +1748,8 @@ def _company_evidence_in_text(text: str, company: str,
 
 def _llm_select_best(query: str, candidates: list[dict], company: str = "",
                      company_aliases: list[str] | None = None,
-                     model_id: str | None = None) -> dict:
+                     model_id: str | None = None,
+                     standalone_only: bool = False) -> dict:
     if _bedrock is None or not candidates:
         return {
             "selected_url": candidates[0]["url"] if candidates else None,
@@ -1819,6 +1820,16 @@ def _llm_select_best(query: str, candidates: list[dict], company: str = "",
             _spec_lines.append(_sp)
     _spec_contract = (("- Per-class validation contract: " + " ".join(_spec_lines)
                        + "\n") if _spec_lines else "")
+    _standalone_contract = (
+        "- Standalone-only rule (overrides any broader-section fallback in "
+        "the per-class contract): the candidate document must itself BE the "
+        "requested document class. A section inside an Annual Report, 10-K, "
+        "Sustainability Report, Code of Conduct, or other broader document "
+        "must be rejected here even when substantive. The caller evaluates "
+        "such section references separately only after standalone discovery "
+        "has exhausted every tier.\n"
+        if standalone_only else ""
+    )
 
     prompt = (
         f"Query: {query}\n"
@@ -1833,6 +1844,7 @@ def _llm_select_best(query: str, candidates: list[dict], company: str = "",
         + year_rule
         + company_rule
         + _spec_contract
+        + _standalone_contract
         + "- Language rule: prefer the English document (including an "
         "unqualified/default-language URL) over Spanish, French, German, "
         "Portuguese, Japanese, Chinese, or any other localized variant when "
@@ -3477,7 +3489,8 @@ def _make_browser_verify_fn(query: str, budget: "_QueryBudget | None" = None,
                              company: str = "", reserve_verifies: int = 0,
                              preferred_language: str = "en",
                              company_aliases: list[str] | None = None,
-                             min_confidence: str | None = None):
+                             min_confidence: str | None = None,
+                             standalone_only: bool = False):
     """verify_fn(candidate_doc) -> bool. Fail-closed class+company check scoped to one candidate.
 
     min_confidence: the report class's configured fallback bar (see
@@ -3584,7 +3597,8 @@ def _make_browser_verify_fn(query: str, budget: "_QueryBudget | None" = None,
         if budget is not None:
             budget.note_verify()
         vdec = _llm_select_best(query, [info], company=company,
-                                company_aliases=company_aliases)
+                                company_aliases=company_aliases,
+                                standalone_only=standalone_only)
         cand["_verify_decision"] = vdec
         is_page_render_candidate = (
             cand.get("via") == "browser_page_render_candidate")
@@ -3610,7 +3624,8 @@ def _make_browser_verify_fn(query: str, budget: "_QueryBudget | None" = None,
                     budget.note_deep_scan()
                 deep_vdec = _llm_select_best(query, [deep_info], company=company,
                                              company_aliases=company_aliases,
-                                             model_id=DEEP_SCAN_MODEL_ID)
+                                             model_id=DEEP_SCAN_MODEL_ID,
+                                             standalone_only=standalone_only)
                 deep_ok = _confident(deep_vdec, query, min_confidence=_eff_min_confidence)
                 if deep_ok:
                     print(f"[browser] content-scan fallback ACCEPTED ({url}): "
@@ -5021,7 +5036,8 @@ def _find_best_document(search_queries: list[str], limit: int, company: str = ""
                         company_ctx: dict | None = None,
                         preferred_language: str = "en",
                         company_aliases: list[str] | None = None,
-                        class_synonyms: list[str] | None = None) -> dict:
+                        class_synonyms: list[str] | None = None,
+                        standalone_only: bool = False) -> dict:
     """Search all query variants via a bounded PARALLEL fan-out, merge/dedupe by
     URL, rank + HEAD-filter, sample top candidates, then ONE grouped LLM
     selection across all of them (fail-closed)."""
@@ -5213,8 +5229,10 @@ def _find_best_document(search_queries: list[str], limit: int, company: str = ""
                     "confidence": "low",
                     "reason": f"query-budget:{budget.why_stopped(reserve_verifies)}"}
     else:
-        decision = _llm_select_best(primary, candidate_infos, company=company,
-                                    company_aliases=company_aliases)
+        decision = _llm_select_best(
+            primary, candidate_infos, company=company,
+            company_aliases=company_aliases,
+            standalone_only=standalone_only)
         if budget is not None:
             budget.note_verify()
 
@@ -5877,6 +5895,7 @@ def _invoke_sync(payload: dict) -> dict:
                 "prefer_latest": bool(
                     _r.get("prefer_latest", _default_prefer_latest)
                 ) and _yr is None,
+                "standalone_only": bool(_r.get("standalone_only", False)),
             })
     else:
         _query_ids = ((payload or {}).get("web_query_ids") or {})
@@ -5901,6 +5920,7 @@ def _invoke_sync(payload: dict) -> dict:
                 "year": None,
                 "preferred_language": _default_preferred_language,
                 "prefer_latest": _default_prefer_latest,
+                "standalone_only": False,
             })
 
     if not work_items:
@@ -6029,6 +6049,7 @@ def _invoke_sync(payload: dict) -> dict:
         known_year = _item.get("year")
         preferred_language = _item.get("preferred_language") or "en"
         prefer_latest = bool(_item.get("prefer_latest", True))
+        standalone_only = bool(_item.get("standalone_only", False))
         prepared = _prepare_query(str(raw))
         prepared, inferred_year = _apply_latest_completed_fiscal_year(
             prepared, known_class=known_class, known_year=known_year)
@@ -6063,18 +6084,22 @@ def _invoke_sync(payload: dict) -> dict:
         # rejecting the exact fallback document the class config permits.
         _reg_class = known_class or (
             matched_classes[0] if matched_classes else None)
-        _fallback_min_confidence = report_specs.fallback_min_confidence_for(_reg_class)
+        _fallback_min_confidence = (
+            None if standalone_only
+            else report_specs.fallback_min_confidence_for(_reg_class))
         prebrowser_verify_fn = _make_browser_verify_fn(
             prepared, budget=_budget, company=company_raw,
             reserve_verifies=browser_reserve,
             preferred_language=preferred_language,
             company_aliases=company_aliases,
-            min_confidence=_fallback_min_confidence)
+            min_confidence=_fallback_min_confidence,
+            standalone_only=standalone_only)
         browser_verify_fn = _make_browser_verify_fn(
             prepared, budget=_budget, company=company_raw,
             preferred_language=preferred_language,
             company_aliases=company_aliases,
-            min_confidence=_fallback_min_confidence)
+            min_confidence=_fallback_min_confidence,
+            standalone_only=standalone_only)
 
         base_log: dict = {
             "raw": str(raw).strip(),
@@ -6085,6 +6110,7 @@ def _invoke_sync(payload: dict) -> dict:
             "known_year": effective_year,
             "preferred_language": preferred_language,
             "prefer_latest": prefer_latest,
+            "standalone_only": standalone_only,
             "matched_classes": matched_classes,
             "status": "pending",
             "resolved_via": None,
@@ -6241,7 +6267,8 @@ def _invoke_sync(payload: dict) -> dict:
                 report_class=_reg_class, year=_reg_year,
                 company_ctx=company_ctx, preferred_language=preferred_language,
                 company_aliases=company_aliases,
-                class_synonyms=class_synonyms or None)
+                class_synonyms=class_synonyms or None,
+                standalone_only=standalone_only)
             browser_candidates = list(found.get("browser_candidates") or [])
             browser_landing_pages = [
                 candidate.get("url", "")
@@ -6259,8 +6286,7 @@ def _invoke_sync(payload: dict) -> dict:
             base_log["decision_reason"] = decision.get("reason")
 
             if (_confident(decision, prepared,
-                          min_confidence=report_specs.fallback_min_confidence_for(
-                              _reg_class))
+                          min_confidence=_fallback_min_confidence)
                     and decision.get("selected_url")):
                 sel = decision["selected_url"]
                 body, ctype = _material_for(sel, found)

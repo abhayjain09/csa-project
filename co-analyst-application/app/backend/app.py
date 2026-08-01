@@ -60,14 +60,14 @@ Patches in this revision (1-6, plus 7-8 below):
   6. CHUNKED INVOKE. A company's 23 web_query* fields are no longer sent in one
      giant invoke (which timed out, risked the double-invoke path, and produced
      irrelevant/near-neighbour fetches from a 23-class candidate set). They are
-     split into chunks of AGENT_CHUNK_SIZE (default 4 -> ~6 chunks) and invoked
-     with a BOUNDED thread pool (AGENT_CHUNK_CONCURRENCY, default 2 in flight).
+     split into chunks of AGENT_CHUNK_SIZE (default 1) and invoked with a
+     BOUNDED thread pool (AGENT_CHUNK_CONCURRENCY, default 3 in flight).
      Each chunk renumbers its queries web_query1.. so the agent always sees a
      small, normal payload. There is still exactly ONE reportiq-runs row per
      company: downloaded results are merged + deduped by s3_key across chunks
      and the row is flushed after each chunk so the UI shows the list grow.
-     Per-chunk read timeout is 300s (a 4-query chunk cannot run long enough to
-     hit it), which structurally removes the timeout->double-invoke path.
+     The per-chunk read timeout is configured separately below and remains
+     above the agent's own per-query deadline.
   7. PER-QUERY RESULT TRACKING + MANUAL UPLOAD FALLBACK.
      Each chunk's diagnostics now include a `results` list — one entry per
      query in that chunk with either a matched downloaded file or a
@@ -201,12 +201,43 @@ QUESTIONNAIRES_BUCKET    = os.environ.get("QUESTIONNAIRES_BUCKET",   REPORTS_BUC
 AGENT_READ_TIMEOUT = int(os.environ.get("AGENT_READ_TIMEOUT", "1620"))
 
 # Chunking: how many web_query* fields per AgentCore invoke, and how many
-# invokes may run concurrently. concurrency=2 is the "mix of both" — faster
-# than pure sequential, capped low enough to avoid WebSearch 429 throttling.
+# invokes may run concurrently. The default of 3 is faster than sequential
+# execution while remaining bounded to reduce WebSearch/AgentCore throttling.
 AGENT_CHUNK_SIZE        = int(os.environ.get("AGENT_CHUNK_SIZE",        "1"))
 AGENT_CHUNK_CONCURRENCY = int(os.environ.get("AGENT_CHUNK_CONCURRENCY", "3"))
 BULK_COMPANY_CONCURRENCY = max(
     1, int(os.environ.get("BULK_COMPANY_CONCURRENCY", "4")))
+
+# A full-company run has one explicit dependency: acquire the Annual Report
+# before launching independent searches. Annual Report analysis is deliberately
+# deferred until those searches finish, and is limited to their clean misses.
+# Only classes whose
+# product contract permits a substantive section of a broader report as the
+# final fallback are eligible for an Annual Report reference. Authoritative
+# standalone filings such as Proxy Statements and Wolfsberg Questionnaires are
+# deliberately excluded.
+ANNUAL_REPORT_REFERENCE_CLASSES = (
+    "code of conduct",
+    "anti-bribery and corruption policy",
+    "conflicts of interest policy",
+    "insider trading policy",
+    "discrimination and harassment policy",
+    "supplier code of conduct",
+    "whistleblowing mechanism",
+    "sustainability report",
+    "ghg emission report",
+    "environmental policy",
+    "environment, health & safety policy",
+    "occupational health & safety policy",
+    "biodiversity policy",
+    "impact report",
+    "human rights policy",
+    "human rights due diligence",
+    "modern slavery statement",
+    "remuneration report",
+    "risk management policy",
+    "tax strategy and governance",
+)
 
 # One executor per backend process. A single bulk request is handled by one
 # process, so ten submitted companies occupy at most three worker threads while
@@ -1037,6 +1068,8 @@ def _pair_queries_with_results(chunk_queries: list, downloaded: list,
                     "The official source blocked automated access."),
                 "browser_job_id": match.get("browser_job_id", ""),
                 "candidate_urls": match.get("candidate_urls") or [],
+                "candidates_verified": match.get("candidates_verified"),
+                "annual_report_reference_eligible": False,
                 "report_class": match.get("report_class"),
                 "official_domain": match.get("official_domain"),
             })
@@ -1069,14 +1102,22 @@ def _pair_queries_with_results(chunk_queries: list, downloaded: list,
                 # cosmetic, for an "(already in S3)" note in the UI.
                 "duplicate":  bool(match.get("duplicate")
                                    or match.get("status") == "duplicate"),
+                "annual_report_reference_eligible": False,
             })
         else:
             reason = (match or {}).get("reason") or "no exact agent result mapping"
+            clean_discovery_miss = bool(
+                match and match.get("status") in {
+                    "failed", "no_document_found"})
             results.append({
                 "request_id": request_id,
                 "query": q,
                 "status": "failed",
                 "reason": reason,
+                # This explicit bit prevents transport/storage/mapping errors
+                # that happen to render as "failed" from being mistaken for a
+                # clean discovery miss by the later Annual Report fallback.
+                "annual_report_reference_eligible": clean_discovery_miss,
             })
     return results
 
@@ -2978,6 +3019,33 @@ def _chunk_web_queries(query_record: dict, size: int) -> list:
     return [queries[i:i + size] for i in range(0, len(queries), size)]
 
 
+def _partition_annual_report_phase(query_record: dict, company: str,
+                                   size: int) -> tuple[list, list]:
+    """Return isolated Annual Report chunks followed by ordinary chunks.
+
+    Annual Report queries are always single-query chunks so no unrelated
+    discovery starts in the same AgentCore invocation before the report has
+    been stored and analysed.
+    """
+    ordered_queries = [
+        query
+        for chunk in _chunk_web_queries(query_record, size)
+        for query in chunk
+    ]
+    annual_chunks = [[query] for query in ordered_queries
+                     if _infer_report_class(query, company) == "annual report"]
+    remaining_queries = [
+        query for query in ordered_queries
+        if _infer_report_class(query, company) != "annual report"
+    ]
+    chunk_size = max(1, size)
+    remaining_chunks = [
+        remaining_queries[index:index + chunk_size]
+        for index in range(0, len(remaining_queries), chunk_size)
+    ]
+    return annual_chunks, remaining_chunks
+
+
 def _build_chunk_payload(company: str, run_id: str, search_query: str,
                          chunk_queries: list, chunk_index: int) -> dict:
     """
@@ -3010,6 +3078,10 @@ def _build_chunk_payload(company: str, run_id: str, search_query: str,
             "query": str(q),
             "request_id": request_id,
             "report_class": _infer_report_class(str(q), company),
+            # The application performs embedded-section fallback only after
+            # every standalone discovery tier fails, using the independently
+            # generated Annual Report coverage manifest.
+            "standalone_only": True,
         }
         years = [
             int(value) for value in re.findall(
@@ -3021,6 +3093,227 @@ def _build_chunk_payload(company: str, run_id: str, search_query: str,
         report["prefer_latest"] = not bool(years)
         payload["reports"].append(report)
     return payload
+
+
+def _annual_report_manifest_key(company: str) -> str:
+    return f"{_agent_slug(company)}/_manifests/annual-report-coverage.json"
+
+
+def _annual_report_key_from_chunk(result: dict, company: str) -> str:
+    """Return the successfully downloaded Annual Report key from one chunk."""
+    for item in result.get("results") or []:
+        if not isinstance(item, dict) or item.get("status") != "downloaded":
+            continue
+        if _infer_report_class(item.get("query", ""), company) == "annual report":
+            return str(item.get("s3_key") or "")
+    return ""
+
+
+def _annual_report_failed_classes(per_chunk_results: list,
+                                  company: str) -> list[str]:
+    """Return unique clean-miss classes that need Annual Report analysis.
+
+    This runs only after standalone searches finish. A chunk-level error and
+    every typed pending/blocked/error result are excluded; PageIndex therefore
+    receives no work for successful downloads or failures that still require
+    retry/manual recovery.
+    """
+    classes = []
+    for chunk in per_chunk_results or []:
+        if not isinstance(chunk, dict) or chunk.get("error"):
+            continue
+        for item in chunk.get("results") or []:
+            if (not isinstance(item, dict)
+                    or item.get("status") != "failed"
+                    or item.get(
+                        "annual_report_reference_eligible") is not True):
+                continue
+            report_class = _infer_report_class(
+                str(item.get("query") or ""), company)
+            if (report_class in ANNUAL_REPORT_REFERENCE_CLASSES
+                    and report_class not in classes):
+                classes.append(report_class)
+    return classes
+
+
+def _create_annual_report_coverage_manifest(
+    company: str,
+    annual_report_s3_key: str,
+    requested_classes: list[str],
+    s3=None,
+) -> dict | None:
+    """Index the Annual Report in the separate PageIndex runtime and persist
+    a durable coverage manifest. Fail closed: an analysis or validation error
+    returns None and can never convert a failed standalone search to a
+    reference result.
+    """
+    if not annual_report_s3_key:
+        return None
+    eligible = [
+        value for value in dict.fromkeys(
+            str(item or "").strip().lower() for item in requested_classes
+        )
+        if value in ANNUAL_REPORT_REFERENCE_CLASSES
+    ]
+    if not eligible:
+        return None
+
+    payload = json.dumps({
+        "bucket": REPORTS_BUCKET,
+        "s3_key": annual_report_s3_key,
+        "label": PurePosixPath(annual_report_s3_key).name,
+        "mode": "annual_report_coverage",
+        "report_classes": eligible,
+    }).encode("utf-8")
+    try:
+        raw = _invoke_agentcore(
+            PAGEINDEX_RUNTIME_ARN, PAGEINDEX_QUALIFIER, payload)
+        result = json.loads(raw.decode("utf-8")) if raw else {}
+        if result.get("status") != "ok":
+            raise RuntimeError(result.get("error") or "coverage runtime failed")
+
+        headings = result.get("headings") or []
+        raw_coverage = result.get("coverage") or {}
+        coverage = {}
+        for report_class, match in raw_coverage.items():
+            canonical = str(report_class or "").strip().lower()
+            if canonical not in eligible or not isinstance(match, dict):
+                continue
+            if (match.get("match") != "substantive_section"
+                    or match.get("confidence") != "high"):
+                continue
+            try:
+                page_start = int(match.get("page_start"))
+                page_end = int(match.get("page_end"))
+            except (TypeError, ValueError):
+                continue
+            if page_start < 1 or page_end < page_start:
+                continue
+            coverage[canonical] = {
+                "match": "substantive_section",
+                "heading": str(match.get("heading") or "")[:500],
+                "page_start": page_start,
+                "page_end": page_end,
+                "confidence": "high",
+                "evidence": str(match.get("evidence") or "")[:1000],
+            }
+
+        s3 = s3 or get_s3()
+        head = s3.head_object(
+            Bucket=REPORTS_BUCKET, Key=annual_report_s3_key)
+        provenance = {}
+        try:
+            provenance = get_dynamo().Table(PROVENANCE_TABLE).get_item(
+                Key={
+                    "company": _agent_slug(company),
+                    "s3_key": annual_report_s3_key,
+                }
+            ).get("Item") or {}
+        except Exception as exc:
+            log.warning(
+                "[annual-coverage] provenance enrichment failed for %s: %s",
+                annual_report_s3_key, exc)
+        annual_year = provenance.get("year")
+        try:
+            annual_year = int(annual_year) if annual_year is not None else None
+        except (TypeError, ValueError):
+            annual_year = None
+        manifest_key = _annual_report_manifest_key(company)
+        manifest = {
+            "schema_version": 1,
+            "company": company,
+            "company_slug": _agent_slug(company),
+            "annual_report_s3_key": annual_report_s3_key,
+            "annual_report_s3_uri": (
+                f"s3://{REPORTS_BUCKET}/{annual_report_s3_key}"),
+            "annual_report_etag": str(head.get("ETag") or "").strip('"'),
+            "annual_report_sha256": (
+                provenance.get("hash")
+                or (head.get("Metadata") or {}).get("sha256")
+                or ""),
+            "annual_report_year": annual_year,
+            "annual_report_source_url": (
+                provenance.get("source_url")
+                or (head.get("Metadata") or {}).get("source_url")
+                or ""),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "extractor": "pageindex-annual-report-coverage",
+            "manifest_s3_key": manifest_key,
+            "headings": headings,
+            "coverage": coverage,
+        }
+        s3.put_object(
+            Bucket=REPORTS_BUCKET,
+            Key=manifest_key,
+            Body=json.dumps(manifest, ensure_ascii=False).encode("utf-8"),
+            ContentType="application/json",
+        )
+        log.info(
+            "[annual-coverage] stored %d headings / %d references -> s3://%s/%s",
+            len(headings), len(coverage), REPORTS_BUCKET, manifest_key)
+        return manifest
+    except Exception as exc:
+        log.error(
+            "[annual-coverage] failed closed for %s (%s): %s",
+            annual_report_s3_key, type(exc).__name__, exc)
+        return None
+
+
+def _apply_annual_report_references(result: dict, company: str,
+                                    manifest: dict | None) -> dict:
+    """Replace honest standalone-search misses with typed section references.
+
+    Transport errors, timeouts, WAF blocks and browser retries remain untouched:
+    those paths did not exhaust discovery cleanly and therefore are not eligible
+    for the final-tier Annual Report fallback.
+    """
+    if not manifest or result.get("error"):
+        return result
+    coverage = manifest.get("coverage") or {}
+    referenced_classes = set()
+    updated_results = []
+    for item in result.get("results") or []:
+        if (not isinstance(item, dict)
+                or item.get("status") != "failed"
+                or item.get("annual_report_reference_eligible") is not True):
+            updated_results.append(item)
+            continue
+        report_class = _infer_report_class(item.get("query", ""), company)
+        match = coverage.get(report_class)
+        if not isinstance(match, dict):
+            updated_results.append(item)
+            continue
+        referenced_classes.add(report_class)
+        referenced = {
+            **item,
+            "status": "referenced_in_existing_document",
+            "report_class": report_class,
+            "referenced_s3_key": manifest["annual_report_s3_key"],
+            "referenced_s3_uri": manifest["annual_report_s3_uri"],
+            "manifest_s3_key": manifest.get("manifest_s3_key"),
+            "heading": match.get("heading"),
+            "page_start": match.get("page_start"),
+            "page_end": match.get("page_end"),
+            "confidence": "high",
+            "evidence": match.get("evidence"),
+            "reason": (
+                "No standalone document was found after all discovery tiers; "
+                "a verified substantive section exists in the stored Annual "
+                "Report."),
+        }
+        referenced.pop("annual_report_reference_eligible", None)
+        updated_results.append(referenced)
+    result["results"] = updated_results
+    if referenced_classes:
+        result["failures"] = [
+            item for item in (result.get("failures") or [])
+            if _infer_report_class(
+                (item or {}).get("query", "") if isinstance(item, dict) else "",
+                company,
+            ) not in referenced_classes
+        ]
+        result["annual_report_references"] = len(referenced_classes)
+    return result
 
 
 def _invoke_one_chunk(chunk_index: int, chunk_queries: list, company: str,
@@ -3177,8 +3470,12 @@ def _do_invoke_inner(run_id: str, query_record: dict):
     search_q = query_record.get("search_query", "")
     now_iso  = datetime.now(timezone.utc).isoformat()
 
-    # PATCH #6: split the 23 web_query* fields into chunks of AGENT_CHUNK_SIZE.
-    chunks       = _chunk_web_queries(query_record, AGENT_CHUNK_SIZE)
+    # Annual Report is a real dependency for a full-company run, not merely a
+    # higher-priority item in the same executor queue. Isolate it into phase 1;
+    # all other chunks remain phase 2 and retain bounded parallelism.
+    annual_chunks, remaining_chunks = _partition_annual_report_phase(
+        query_record, company, AGENT_CHUNK_SIZE)
+    chunks = annual_chunks + remaining_chunks
     chunks_total = len(chunks)
     queued_run = runs_tbl.get_item(
         Key={"run_id": run_id}).get("Item", {})
@@ -3192,7 +3489,8 @@ def _do_invoke_inner(run_id: str, query_record: dict):
     base_payload = {"company": company, "run_id": run_id,
                     "search_query": search_q,
                     "chunk_size": AGENT_CHUNK_SIZE,
-                    "chunks_total": chunks_total}
+                    "chunks_total": chunks_total,
+                    "annual_report_phase": bool(annual_chunks)}
 
     # Claim the run atomically before doing any work. Two callables can race
     # to invoke the SAME run_id when a queued run is resubmitted by
@@ -3449,14 +3747,41 @@ def _do_invoke_inner(run_id: str, query_record: dict):
             if not _is_run_killed(run_id):
                 _flush_run_row(final=False)   # live update — UI shows the list grow
 
-    # ── Invoke chunks with bounded concurrency ("mix of both") ────────────────
-    workers = max(1, min(AGENT_CHUNK_CONCURRENCY, chunks_total))
+    def _record_future_error(exc: Exception):
+        log.error("[run %s] chunk future crashed: %s", run_id[:8], exc)
+        with lock:
+            chunks_done[0] += 1
+            per_chunk_diag.append({"chunk": "?", "queries": [], "results": [],
+                                   "downloaded": 0, "failures": 0,
+                                   "error": str(exc)[:500],
+                                   "agent_diagnostics": {}})
+            if not _is_run_killed(run_id):
+                _flush_run_row(final=False)
+
+    # ── Phase 1: acquire the Annual Report before all other searches ──
+    annual_report_s3_key = ""
+    for index, chunk in enumerate(annual_chunks, start=1):
+        if _is_run_killed(run_id):
+            break
+        try:
+            result = _invoke_one_chunk(
+                index, chunk, company, run_id, query_id, search_q)
+            _handle_result(result)
+            annual_report_s3_key = (
+                _annual_report_key_from_chunk(result, company)
+                or annual_report_s3_key)
+        except Exception as exc:
+            _record_future_error(exc)
+
+    # ── Phase 2: standalone searches in bounded parallelism ─────────────────
+    phase2_start = len(annual_chunks) + 1
+    workers = max(1, min(AGENT_CHUNK_CONCURRENCY, len(remaining_chunks) or 1))
     with ThreadPoolExecutor(max_workers=workers) as ex:
         futures = [
             ex.submit(
-                _invoke_one_chunk, i + 1, ch, company, run_id, query_id,
-                search_q)
-            for i, ch in enumerate(chunks)
+                _invoke_one_chunk, phase2_start + offset, chunk,
+                company, run_id, query_id, search_q)
+            for offset, chunk in enumerate(remaining_chunks)
         ]
         for fut in as_completed(futures):
             if _is_run_killed(run_id):
@@ -3467,15 +3792,77 @@ def _do_invoke_inner(run_id: str, query_record: dict):
                 break
             try:
                 _handle_result(fut.result())
-            except Exception as e:
-                log.error("[run %s] chunk future crashed: %s", run_id[:8], e)
-                with lock:
-                    chunks_done[0] += 1
-                    per_chunk_diag.append({"chunk": "?", "queries": [], "results": [],
-                                           "downloaded": 0, "failures": 0,
-                                           "error": str(e)[:500], "agent_diagnostics": {}})
-                    if not _is_run_killed(run_id):
-                        _flush_run_row(final=False)
+            except Exception as exc:
+                _record_future_error(exc)
+
+    # ── Phase 3: PageIndex once, for clean standalone misses only ────────
+    # Successful, WAF-blocked, pending, timed-out and errored searches never
+    # become PageIndex topics. This keeps independent report discovery off the
+    # PageIndex critical path and avoids classifying sections nobody needs.
+    if _is_run_killed(run_id):
+        failed_reference_classes = []
+        annual_coverage_manifest = None
+    else:
+        failed_reference_classes = _annual_report_failed_classes(
+            per_chunk_diag, company)
+        annual_coverage_manifest = _create_annual_report_coverage_manifest(
+            company,
+            annual_report_s3_key,
+            failed_reference_classes,
+        )
+
+    converted_request_ids = set()
+    converted_queries = set()
+    if annual_coverage_manifest:
+        for chunk in per_chunk_diag:
+            before_failures = sum(
+                1 for item in (chunk.get("results") or [])
+                if isinstance(item, dict)
+                and item.get("status") == "failed"
+                and item.get("annual_report_reference_eligible") is True
+            )
+            updated = _apply_annual_report_references(
+                {
+                    "error": chunk.get("error"),
+                    "results": chunk.get("results") or [],
+                    "failures": [],
+                },
+                company,
+                annual_coverage_manifest,
+            )
+            chunk["results"] = updated.get("results") or []
+            references = [
+                item for item in chunk["results"]
+                if isinstance(item, dict)
+                and item.get("status") == "referenced_in_existing_document"
+            ]
+            for item in references:
+                if item.get("request_id"):
+                    converted_request_ids.add(str(item["request_id"]))
+                if item.get("query"):
+                    converted_queries.add(str(item["query"]))
+            converted_count = min(before_failures, len(references))
+            if converted_count:
+                chunk["failures"] = max(
+                    0, int(chunk.get("failures") or 0) - converted_count)
+
+        if converted_request_ids or converted_queries:
+            all_failures[:] = [
+                item for item in all_failures
+                if not (
+                    isinstance(item, dict)
+                    and (
+                        (item.get("request_id")
+                         and str(item["request_id"])
+                         in converted_request_ids)
+                        or (not item.get("request_id")
+                            and str(item.get("query") or "")
+                            in converted_queries)
+                    )
+                )
+            ]
+            if not _is_run_killed(run_id):
+                _flush_run_row(final=False)
 
     if _consume_run_kill(run_id):
         log.info("[run %s] killed mid-run — stopping without a final write",

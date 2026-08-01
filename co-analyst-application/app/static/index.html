@@ -129,6 +129,7 @@ tr.detail-row td{padding:0}
 .badge.ok,.badge.complete,.badge.downloaded{background:#e7f8e9;color:#147327;border:1px solid #2bde3f}
 .badge.running{background:#e6efff;color:#0d4ea6;border:1px solid var(--info);animation:blink 1.5s ease-in-out infinite}
 .badge.browser_retry_pending,.badge.browser_retry_queued,.badge.blocked_by_source_waf,.badge.timed_out_pending_check{background:#fff4d6;color:#805800;border:1px solid #d6a900}
+.badge.referenced_in_existing_document{background:#e8f2ff;color:#174b85;border:1px solid #79a9dc}
 .badge.pending,.badge.queued{background:var(--light);color:var(--muted);border:1px solid var(--border)}
 .badge.failed,.badge.no_results{background:#fdebe6;color:#a33012;border:1px solid var(--err)}
 .badge.indexed{background:#e7f8e9;color:#147327;border:1px solid #2bde3f}
@@ -1074,6 +1075,7 @@ function removeBulkRunRow(btn){
   syncBulkPreview();
 }
 var BULK_DOC_QUERIES=[
+  'Annual Report',
   'Code of Conduct',
   'Anti-Corruption and Bribery Policy',
   'Conflicts of Interest Policy',
@@ -1083,7 +1085,6 @@ var BULK_DOC_QUERIES=[
   'Whistleblowing Policy',
   'Sustainability Report',
   'GHG Emission Report',
-  'Annual Report',
   'Environment Policy',
   'Environment, Health and Safety Policy',
   'Biodiversity Policy',
@@ -1356,7 +1357,7 @@ function toggleRunDetail(rid){
       return `<div style="margin:6px 0;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <span class="mono" style="font-size:12px;flex:1;min-width:200px;overflow:hidden;text-overflow:ellipsis" title="${escH(key)}">${escH(key)}</span>
         ${url?`<a href="${escH(url)}" target="_blank" class="url-ref">source ↗</a>`:''}
-        ${key?`<button class="dl-btn" onclick="downloadFileVerified('${escH(key)}',this)">⬇ Download</button>`:''}
+        ${key?`<button class="dl-btn" onclick="downloadFileVerified(decB64('${escB64(key)}'),this)">⬇ Download</button>`:''}
       </div>`;
     }).join('');
   }
@@ -1395,13 +1396,20 @@ function toggleRunDetail(rid){
         if(results && results.length){
           return results.map((r,idx)=>{
             const isDl = r.status==='downloaded' && r.s3_key;
+            const isAnnualRef = r.status==='referenced_in_existing_document'
+              && r.referenced_s3_key;
             const isBrowserPending = r.status==='browser_retry_queued';
             const isWafBlocked = r.status==='blocked_by_source_waf';
             const isTimedOutPending = r.status==='timed_out_pending_check';
             const manualUrls = safeManualSourceUrls(r);
             const browserFinishedWithoutDownload = !!r.browser_job_id
               && !isBrowserPending && !isDl;
-            const manualSourceUrl = browserFinishedWithoutDownload && manualUrls.length
+            // A WAF result is never eligible for the Annual Report section
+            // fallback. Keep its exact candidate URL available for manual
+            // recovery immediately, including while the longer browser retry
+            // is still queued/running or when that worker is disabled.
+            const manualSourceUrl = (isWafBlocked || isBrowserPending
+                || browserFinishedWithoutDownload) && manualUrls.length
               ? manualUrls[0] : '';
             const uploadAction = `<button class="dl-btn upload" onclick="pickUploadForQuery(this,'${escH(rid)}','${escB64(run.company||'')}','${escH(run.query_id||'')}','${escH(String(pc.chunk))}','${escB64(r.query||'')}','${escB64(manualSourceUrl)}')">⬆ Upload file</button>`;
             // candidates_verified===false means this URL was only harvested
@@ -1411,7 +1419,7 @@ function toggleRunDetail(rid){
             const isUnverifiedCandidate = r.candidates_verified === false;
             const manualRecoveryAction = manualSourceUrl
               ? `<div class="manual-recovery">
-                  <a class="dl-btn manual-link" href="${escH(manualSourceUrl)}" target="_blank" rel="noopener noreferrer" title="Open the best Fargate candidate in your local browser">↗ Manual download</a>
+                  <a class="dl-btn manual-link" href="${escH(manualSourceUrl)}" target="_blank" rel="noopener noreferrer" title="Open the official-source candidate in your local browser">↗ Manual download</a>
                   ${uploadAction}
                   <span class="form-hint">1. Download from the official source. 2. Upload the saved file here.${isUnverifiedCandidate?' ⚠️ Not content-verified — confirm this is actually the target company’s document before uploading.':''}</span>
                 </div>`
@@ -1422,14 +1430,18 @@ function toggleRunDetail(rid){
             // superseded agent-downloaded file from S3 server-side).
             const replaceAction = `<button class="dl-btn upload" title="Replace with a manually uploaded file if the agent grabbed the wrong document" onclick="pickUploadForQuery(this,'${escH(rid)}','${escB64(run.company||'')}','${escH(run.query_id||'')}','${escH(String(pc.chunk))}','${escB64(r.query||'')}','')">⟳ Replace file</button>`;
             const action = isDl
-              ? `<div style="display:flex;gap:6px;flex-wrap:wrap"><button class="dl-btn" onclick="downloadFileVerified('${escH(r.s3_key)}',this)">⬇ Download</button>${replaceAction}</div>`
+              ? `<div style="display:flex;gap:6px;flex-wrap:wrap"><button class="dl-btn" onclick="downloadFileVerified(decB64('${escB64(r.s3_key)}'),this)">⬇ Download</button>${replaceAction}</div>`
+              : isAnnualRef
+              ? `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button class="dl-btn" onclick="downloadFileVerified(decB64('${escB64(r.referenced_s3_key)}'),this)">⬇ Annual report</button><span class="form-hint">${escH(r.heading||'Relevant section')}${r.page_start?' · pp. '+escH(String(r.page_start))+(r.page_end&&r.page_end!==r.page_start?'–'+escH(String(r.page_end)):''):''}</span></div>`
               : isBrowserPending
-              ? `<button class="btn btn-sm" onclick="loadRuns()">↻ Check browser</button>`
+              ? `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button class="btn btn-sm" onclick="loadRuns()">↻ Check browser</button>${manualRecoveryAction}</div>`
               : isTimedOutPending
               ? `<button class="btn btn-sm" onclick="loadRuns()">↻ Check status</button>`
               : manualRecoveryAction;
             const badge = isDl
               ? `<span class="badge downloaded">downloaded</span>${r.duplicate?' <span class="form-hint">(already in S3)</span>':''}${r.manual_upload?' <span class="form-hint">(manual)</span>':''}`
+              : isAnnualRef
+              ? `<span class="badge referenced_in_existing_document"${r.evidence?` title="${escH(r.evidence)}"`:''}>in annual report</span>`
               : isBrowserPending
               ? `<span class="badge browser_retry_queued">browser retry</span>`
               : isWafBlocked
@@ -1640,7 +1652,7 @@ function renderSourcesTable(items){
       <td class="mono" style="font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escH(s.s3_key||'')}">${escH(s.s3_key||'')}</td>
       <td>${fmtDt(s.downloaded_at)}</td>
       <td><span class="badge ${s.rag_status||'Pending'}">${escH(s.rag_status||'Pending')}</span></td>
-      <td>${s.s3_key?`<button class="dl-btn" onclick="downloadFileVerified('${escH(s.s3_key)}',this)">⬇ Download</button>`:'—'}</td>
+      <td>${s.s3_key?`<button class="dl-btn" onclick="downloadFileVerified(decB64('${escB64(s.s3_key)}'),this)">⬇ Download</button>`:'—'}</td>
     </tr>`).join('');
 }
 
@@ -1657,7 +1669,7 @@ async function loadS3List(){
         <td class="mono" style="font-size:12px">${escH(o.key)}</td>
         <td class="muted">${fmtBytes(o.size)}</td>
         <td class="muted">${fmtDt(o.last_modified)}</td>
-        <td><button class="dl-btn" onclick="downloadFileVerified('${escH(o.key)}',this)">⬇ Download</button></td>
+        <td><button class="dl-btn" onclick="downloadFileVerified(decB64('${escB64(o.key)}'),this)">⬇ Download</button></td>
       </tr>`).join('');
   }catch(e){
     tb.innerHTML='<tr><td colspan="4" class="empty-state">Error loading S3</td></tr>';

@@ -38,6 +38,7 @@ Canonical class names MUST match the keys of _DOC_CLASS_RULES in agent.py.
 # once, in this stable order.  Keep display wording in the UI, payload builder,
 # and runtime derived from this catalog rather than maintaining another count.
 ALL_REPORT_CLASSES: tuple[str, ...] = (
+    "annual report",
     "code of conduct",
     "anti-bribery and corruption policy",
     "conflicts of interest policy",
@@ -47,7 +48,6 @@ ALL_REPORT_CLASSES: tuple[str, ...] = (
     "whistleblowing mechanism",
     "sustainability report",
     "ghg emission report",
-    "annual report",
     "environmental policy",
     "environment, health & safety policy",
     "biodiversity policy",

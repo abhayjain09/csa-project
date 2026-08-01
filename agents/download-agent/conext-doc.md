@@ -70,6 +70,96 @@ Trigger: a real query for Bilibili's "sustainability report" correctly failed cl
 - **Real-data check, not just synthetic fixtures**: fetched the actual `bilibili-inc-2025-annual-report_en.pdf` (2.1MB, 186 pages) via WebFetch and ran the real `_pdf_text_sample`/`_candidate_document_year` functions (AST-extracted from the live `agent.py`, not reimplemented/mocked) against the real bytes. Page 1 reads "BILIBILI INC. ... 2025 ANNUAL REPORT"; every page repeats "Bilibili Inc. 2025 Annual Report" as a header — comfortably inside the 4-page sample window. `_candidate_document_year` returned `2025` correctly both with the real filename and with the year stripped out of the URL/title to simulate a hashed-path company.
 - **NOT verified**: an actual live invocation of this agent's `_invoke_sync` end-to-end against a real company (no AWS/Bedrock/Vertex credentials or `bilibili.com`/`sec.gov` network access from the dev sandbox this was built in). The route-ordering and year-fallback logic is proven correct in isolation and against real document bytes; whether it changes the *final selected document* for Bilibili (or any other company) in a live run — i.e., does the site's `bilibili-inc-2025-annual-report_en.pdf` actually get proposed as a candidate by Tier 1 search and pass the class-verification LLM check before falling through — is unconfirmed. Add this as the first live smoke test after deploy (see updated rollout list below).
 
+## Annual-report-first dependency + section-reference fallback
+Full-company runs now treat the Annual Report as a real phase dependency rather
+than another item in the concurrent queue. The application isolates and invokes
+the Annual Report first. As soon as it is stored, all remaining standalone
+report searches start with bounded concurrency. PageIndex is deliberately
+deferred until those searches finish and is invoked once, only for explicitly
+typed clean misses. It then scans every page's bookmarks and layout headings
+(with best-effort OCR for image-only pages), classifies high-confidence
+substantive sections for those failed classes, and writes:
+
+`s3://<reports-bucket>/<company>/_manifests/annual-report-coverage.json`
+
+The remaining report classes run concurrently with `standalone_only=true`.
+This overrides the downloader's historic broader-document-section acceptance so
+an Annual Report cannot be copied into class-scoped S3 as if it were a standalone
+Code of Conduct or policy. Only after a standalone search returns an honest,
+clean miss may the application consult the manifest and return
+`referenced_in_existing_document`, including the Annual Report S3 key, exact
+heading, page range, grounded evidence, and confidence. WAF blocks, timeouts,
+transport errors, invented headings, medium/low-confidence matches, Proxy
+Statements, and Wolfsberg Questionnaires never enter this fallback.
+
+A `blocked_by_source_waf` or `browser_retry_queued` result keeps its bounded
+HTTPS candidate URLs and manual-upload path. The portal shows **Manual
+download** for the official-source candidate even while the longer browser
+retry is pending (and when that worker is disabled). It never replaces this
+state with an Annual Report reference; a person can open the candidate locally,
+verify it, and upload the saved standalone document as before.
+
+The portal renders this status as **in annual report** with a download action for
+the stored Annual Report and the relevant heading/pages. The original Annual
+Report retains its single provenance row; section references live in the run
+result and coverage manifest, avoiding collisions in the existing
+`company + s3_key` provenance key schema.
+
+Local verification for this addition: Python compilation passed for the
+downloader, report catalog, PageIndex runtime, application backend, and focused
+tests. The combined regression suite now passes **95/95 tests**. This session
+also corrected the test helpers' obsolete `infra/agentcore-report` and
+`reportiq-ecs` paths, which had previously hidden 35 tests behind
+`FileNotFoundError`. Live AWS/Bedrock/S3 behavior still requires deployment and
+an end-to-end smoke run.
+
+### Exact execution order
+For a normal full-company run the effective sequence is now:
+
+1. Clean the company's prior run data once, using the existing cleanup policy.
+2. Invoke only the Annual Report request. For an undated request, try the
+   official company site first and retain SEC/other configured official
+   registries as fallback.
+3. Store the verified Annual Report and its normal metadata/provenance.
+4. Immediately launch the other requested document classes with existing
+   bounded concurrency, setting `standalone_only=true` on every structured
+   report. Successful reports, WAF/manual cases, pending retries, timeouts, and
+   runtime/storage errors retain their original typed results.
+5. After every standalone search finishes, collect only results explicitly
+   marked as clean discovery misses. If there are none, skip PageIndex entirely.
+6. Invoke PageIndex exactly once in `annual_report_coverage` mode, passing only
+   the eligible failed classes. It scans the entire Annual Report PDF, not only
+   its TOC: embedded bookmarks, layout/font headings, topic-relevant plain-text
+   headings, section-opening content, and best-effort OCR are used.
+7. Persist all detected heading notes plus only high-confidence coverage
+   matches in the S3 coverage manifest.
+8. Check those clean misses once against the manifest and convert only validated
+   matches to typed Annual Report section references.
+
+### Result contract
+A successful standalone document remains `downloaded`. A section fallback is
+not reported as a download or duplicate; it has its own status:
+
+```json
+{
+  "status": "referenced_in_existing_document",
+  "report_class": "code of conduct",
+  "referenced_s3_key": "apple/annual-report/apple-2025.pdf",
+  "manifest_s3_key": "apple/_manifests/annual-report-coverage.json",
+  "heading": "Business Conduct and Ethics",
+  "page_start": 72,
+  "page_end": 78,
+  "confidence": "high",
+  "evidence": "Grounded explanation from the indexed section"
+}
+```
+
+The manifest also records the Annual Report year, source URL, SHA-256/ETag,
+extractor name, generation time, every heading note, and the validated coverage
+map. It is intentionally not written as one provenance row per referenced class:
+the provenance table is keyed by `company + s3_key`, so multiple classes that
+point to the same Annual Report would collide.
+
 ## Performance regression fix — `_candidate_document_year` memoization (this write-up, found via live bulk-run report)
 **User-reported symptom**: after the site-first-routing + PDF-content-year-fallback change above landed, a 23-report batch run went from completing ~4 reports in 30-40 minutes to completing only ~2 reports in ~2 hours. User confirmed annual report itself was fine — the regression hit other classes.
 
@@ -89,18 +179,46 @@ Trigger: a real query for Bilibili's "sustainability report" correctly failed cl
 If verification fails or the LLM step errors out at any point, the result is `no_document_found` — the agent never stores an uncertain match. "An honest miss beats a wrong store."
 
 ## Deployment status — NOT yet deployed as of this writing
-**Branch note (this write-up):** the prior session's fixes described below (timeout ladder, crawl efficiency, content-over-filename, synonym injection, bulk-concurrency) are **no longer sitting uncommitted on `feature/download-agent-fix`** — they're already present in `agent.py` on the current working branch (`feature/questionnare_added`; confirmed by grepping for `QUERY_MAX_SECONDS`, `_IR_NOISE_MARKERS`, `"purpose report"` — all present). `feature/download-agent-fix` still exists as a remote branch but this doc's code references now track whatever branch you're actually running `git status` on — re-confirm the branch before following the rollout steps below. Only `agent.py` and `tests/test_accuracy_guards.py` are modified as of this write-up (the site-first-routing + PDF-content-year change above) — no terraform/main.tf changes this round, so the deploy is a plain image rebuild, not an infra apply.
+**Current worktree note:** the annual-report-first implementation is local and
+has not been deployed. It changes three independently deployed services and
+their shared result contract:
 
-Verification this session (both the original timeout/crawl-efficiency pass AND today's site-first-routing addition) was structural + real-data, not live-AWS: `python -m py_compile`, the unit test suite (83 tests as of this write-up, same 35 pre-existing stale-path errors as baseline — see "Known open issues" — zero new failures across both sessions), `terraform fmt`, a bash syntax check on the CLI heredoc, and (new this session) a real downloaded PDF run through the actual `_pdf_text_sample`/`_candidate_document_year` functions. **Nothing here is live-verified against the deployed AgentCore runtime.** Recommended rollout order:
+- `agents/download-agent`: standalone-only verification support and Annual
+  Report first in the canonical catalog.
+- `agents/pageindex-agent`: complete-document `annual_report_coverage` mode.
+- `co-analyst-application`: three-phase orchestration, coverage-manifest
+  persistence, typed reference results, and portal rendering.
+
+It also updates regression/focused tests and this context document. No new
+Terraform resource is required for this feature, but existing IAM must be
+confirmed to let the application invoke PageIndex and write the manifest under
+the reports bucket. Rebuild/deploy all three services. Deploying only the
+application will call a mode an old PageIndex runtime does not understand;
+deploying only the downloader will not produce or consume coverage manifests.
+
+Current verification is local only: compilation and frontend JavaScript syntax
+checks pass, `git diff --check` is clean, and the combined suite passes 95/95.
+Earlier Bilibili PDF/year checks remain valid, but the new three-service workflow
+has not been live-verified against AWS. Recommended rollout order:
 1. `cd agents/download-agent && terraform plan` BEFORE bumping the image tag — confirm the `ignore_changes = all` resource proposes no unexpected replace/destroy, isolated from the image/code diff. (Expect an empty/no-op plan this round — no `.tf` files changed.)
 2. Confirm `us.anthropic.claude-haiku-4-5-20251001-v1:0` is enabled in the target Bedrock account.
 3. `./scripts/deploy.sh <next_tag>` — watch the CLI output for either "update-agent-runtime ok" (lifecycle flag accepted) or the WARN+retry fallback (older CLI); confirm the runtime version advanced by exactly **1**.
-4. **Live test target**: re-run a query that previously false-failed near the old ~900s mark (CBRE or Freeport-McMoRan "Sustainability Report" — both confirmed via DynamoDB inspection this session to have failed with `"AgentCore did not respond within the client read timeout, and no matching document appeared in provenance within 18 minutes afterward"`). Confirm it now completes and returns a real result (found or honest `no_document_found`) instead of a false timeout.
-5. Watch for `[find] budget stop` / verify-exhaustion log lines dropping on big IR sites (CBRE, FCX) — confirms the crawl-efficiency fix is actually reducing wasted work, not just tolerating it via the longer deadline.
-6. Confirm Cisco's Sustainability Report resolves via the "Purpose Report" alias / content-over-filename fix.
-7. **New this session** — run an *undated* "Bilibili Inc. annual report" query end-to-end and confirm it now stores `ir.bilibili.com/media/.../bilibili-inc-2025-annual-report_en.pdf` (or whatever the current year's site PDF is) rather than the SEC EDGAR 20-F htm, and that the stored `.metadata.json` sidecar's year field is correct. Then re-run the SAME query with an explicit year (`"Bilibili 2023 annual report"`) and confirm it still goes EDGAR-first as before — this is the one behavior split that's never been exercised against the live pipeline.
-8. **New this session — re-time the 23-report batch that surfaced the perf regression.** Confirm it's back to roughly the 30-40 min / ~4-report-success baseline the user had before, not the ~2 hour / ~2-report-success regression caused by the un-memoized `_candidate_document_year` calls (see "Performance regression fix" section above).
-9. Deploy `co-analyst-application` (the orchestrator) **separately** — different repo/ECS service — for the `AGENT_READ_TIMEOUT`/`HEARTBEAT_STALE_MINUTES` changes and the bulk-concurrency fix (next section) to take effect.
+4. Rebuild and deploy `agents/pageindex-agent`; confirm the runtime accepts
+   `mode=annual_report_coverage` before deploying the caller.
+5. Rebuild and deploy `co-analyst-application` after both runtimes are live.
+6. Run one full-company smoke test. Confirm the Annual Report chunk finishes
+   before other document chunks start, the other chunks finish before the one
+   PageIndex invocation starts, and the coverage manifest exists only when at
+   least one eligible clean miss requires analysis.
+7. Use a company with no standalone Code of Conduct but a real dedicated Annual
+   Report section. Confirm the UI shows `in annual report`, exact heading/pages,
+   and downloads the Annual Report without creating a second policy PDF/provenance row.
+8. Confirm a passing mention does not produce a reference, and confirm a WAF
+   block/timeout remains blocked or pending rather than becoming a reference.
+9. Re-run an undated Bilibili Annual Report query and an explicit-year query to
+   confirm the intended site-first/latest versus registry-first/year split.
+10. Re-time the 23-report batch and watch PageIndex, Vertex, AgentCore, and
+    browser-worker quotas before increasing concurrency.
 
 ## Companion service: co-analyst-application (orchestrator/portal)
 `co-analyst-application/app/backend/app.py` queues each document request as a "chunk" and invokes this agent's Bedrock AgentCore runtime via boto3.
@@ -130,7 +248,8 @@ Driven by a 7-company × ~22-class test workbook, overall accuracy was 46.2% (Pr
 - **Still not re-verified live**: the 7-company matrix hasn't been re-run since these fixes to confirm ≥90% — that's the only real proof, and it hasn't happened yet, compounded now by this session's additional changes on top.
 
 ## Known open issues right now
-- `tests/test_accuracy_guards.py`'s `_load_*_helper` functions point at stale paths (`infra/agentcore-report/...`, `reportiq-ecs/...`) that don't exist in this repo layout — pre-existing, unrelated to any session's changes, **35 test errors every run**, not yet fixed. Any future test-run check should filter these out rather than treat them as real regressions (verified this session: zero *new* failures added on top of this baseline, multiple times).
+- The former 35 stale-path test errors are fixed; the combined downloader and
+  annual-report-workflow suite passes 95/95 locally.
 - Terraform IAM changes (`s3:DeleteObject`, `dynamodb:DeleteItem` for `CLEAN_RERUN_DELETE_EXISTING`) are written but not applied.
 - `co-analyst-application`'s `_refresh_timed_out_queries` reconciliation path is untested against live AWS.
 - The language gate only enforces "must be English" when English is requested — no positive-match enforcement for an explicitly-requested non-English language yet.

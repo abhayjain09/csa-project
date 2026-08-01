@@ -3818,49 +3818,59 @@ def _get_pdf_page_count_and_toc(bucket: str, s3_key: str, s3) -> tuple:
     Stream a PDF from S3 and return (page_count, toc_items).
     toc_items is a list of {"title": ..., "page": ...} dicts extracted
     from embedded PDF bookmarks — empty list if no bookmarks found.
-    Never raises — returns (0, []) on any error.
+    PyMuPDF primary for page count (more reliable on complex PDFs),
+    pypdf fallback. Never raises — returns (0, []) on any error.
     """
     try:
-        obj    = s3.get_object(Bucket=bucket, Key=s3_key)
-        body   = obj["Body"].read()
-        reader = PdfReader(BytesIO(body), strict=False)
-        page_count = len(reader.pages)
+        obj  = s3.get_object(Bucket=bucket, Key=s3_key)
+        body = obj["Body"].read()
 
-        # If pypdf returns 0 pages try PyMuPDF as fallback
-        if page_count == 0:
+        # Page count — PyMuPDF primary, pypdf fallback
+        page_count = 0
+        try:
+            import fitz
+            fitz_doc   = fitz.open(stream=body, filetype="pdf")
+            page_count = fitz_doc.page_count
+            fitz_doc.close()
+            log.info("[pageindex] PyMuPDF page_count=%d for %s", page_count, s3_key)
+        except Exception as fitz_err:
+            log.warning("[pageindex] PyMuPDF failed (%s) — falling back to pypdf for %s",
+                        fitz_err, s3_key)
             try:
-                import fitz
-                fitz_doc   = fitz.open(stream=body, filetype="pdf")
-                page_count = fitz_doc.page_count
-                fitz_doc.close()
-                log.info("[pageindex] pypdf returned 0 — PyMuPDF page_count=%d for %s",
-                         page_count, s3_key)
-            except Exception as fitz_err:
-                # Both parsers failed — assume large document so chunked
-                # path triggers and extract_toc mode handles structure.
+                reader     = PdfReader(BytesIO(body), strict=False)
+                page_count = len(reader.pages)
+                if page_count == 0:
+                    raise ValueError("pypdf returned 0 pages")
+                log.info("[pageindex] pypdf page_count=%d for %s", page_count, s3_key)
+            except Exception as pypdf_err:
                 log.warning(
-                    "[pageindex] both pypdf and PyMuPDF failed for %s (%s) "
-                    "— assuming page_count=300", s3_key, fitz_err
+                    "[pageindex] both PyMuPDF and pypdf failed for %s (%s) "
+                    "— assuming page_count=300", s3_key, pypdf_err
                 )
                 page_count = 300
 
+        # TOC from embedded PDF bookmarks — always use pypdf for this
+        # (PyMuPDF outline API is different and pypdf is reliable here)
         toc_items = []
-        def _walk_outline(outline, reader):
-            for item in outline:
-                if isinstance(item, list):
-                    _walk_outline(item, reader)
-                else:
-                    try:
-                        page_num = reader.get_destination_page_number(item) + 1
-                        toc_items.append({
-                            "title": item.title,
-                            "page":  page_num,
-                        })
-                    except Exception:
-                        pass
-
-        if reader.outline:
-            _walk_outline(reader.outline, reader)
+        try:
+            reader = PdfReader(BytesIO(body), strict=False)
+            def _walk_outline(outline, reader):
+                for item in outline:
+                    if isinstance(item, list):
+                        _walk_outline(item, reader)
+                    else:
+                        try:
+                            page_num = reader.get_destination_page_number(item) + 1
+                            toc_items.append({
+                                "title": item.title,
+                                "page":  page_num,
+                            })
+                        except Exception:
+                            pass
+            if reader.outline:
+                _walk_outline(reader.outline, reader)
+        except Exception as toc_err:
+            log.warning("[pageindex] TOC extraction failed for %s: %s", s3_key, toc_err)
 
         log.info("[pageindex] s3_key=%s page_count=%d toc_items=%d",
                  s3_key, page_count, len(toc_items))

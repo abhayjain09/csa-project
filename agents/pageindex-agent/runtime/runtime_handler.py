@@ -234,17 +234,38 @@ def handler(payload: dict) -> dict:
     # os.makedirs internally. Keep CWD unchanged; /tmp is always present.
     try:
         import PyPDF2
+        # PyMuPDF primary for page count — more reliable for complex PDFs.
+        # PyPDF2 fallback if PyMuPDF fails.
         try:
-            full_reader = PyPDF2.PdfReader(pdf_buf)
-            page_count  = len(full_reader.pages)
+            import fitz
+            pdf_buf.seek(0)
+            fitz_doc   = fitz.open(stream=pdf_buf.read(), filetype="pdf")
+            page_count = fitz_doc.page_count
+            fitz_doc.close()
+            pdf_buf.seek(0)
+            log.info("[pageindex] PyMuPDF page_count=%d for %s", page_count, label)
+        except Exception as fitz_err:
+            log.warning("[pageindex] PyMuPDF failed (%s) — falling back to PyPDF2", fitz_err)
+            pdf_buf.seek(0)
+            try:
+                full_reader = PyPDF2.PdfReader(pdf_buf)
+                page_count  = len(full_reader.pages)
+                if page_count == 0:
+                    raise ValueError("PyPDF2 returned 0 pages")
+                pdf_buf.seek(0)
+                log.info("[pageindex] PyPDF2 page_count=%d for %s", page_count, label)
+            except Exception as pypdf2_err:
+                log.warning("[pageindex] both PyMuPDF and PyPDF2 failed (%s) — assuming 300",
+                            pypdf2_err)
+                page_count = 300
+                pdf_buf.seek(0)
 
-            # If PyPDF2 returns 0 pages try PyMuPDF as fallback
-            if page_count == 0:
-                raise ValueError("PyPDF2 returned 0 pages")
-
-            # If a page range was supplied extract only those pages into
-            # a new BytesIO buffer so page_index_main sees a smaller PDF.
-            if page_start and page_end:
+        # If a page range was supplied extract only those pages into
+        # a new BytesIO buffer so page_index_main sees a smaller PDF.
+        if page_start and page_end:
+            try:
+                pdf_buf.seek(0)
+                full_reader = PyPDF2.PdfReader(pdf_buf)
                 from pypdf import PdfWriter
                 writer = PdfWriter()
                 for p in range(page_start - 1, min(page_end, page_count)):
@@ -258,26 +279,11 @@ def handler(payload: dict) -> dict:
                 page_count = page_end - page_start + 1
                 log.info("[pageindex] chunk pages %d-%d (%d pages)",
                          page_start, page_end, page_count)
-            else:
-                pdf_buf.seek(0)
-
-        except Exception as pypdf2_err:
-            log.warning("[pageindex] PyPDF2 failed (%s) — trying PyMuPDF", pypdf2_err)
+            except Exception as chunk_err:
+                log.error("[pageindex] chunk extraction failed: %s", chunk_err)
+                raise
+        else:
             pdf_buf.seek(0)
-            try:
-                import fitz
-                fitz_doc   = fitz.open(stream=pdf_buf.read(), filetype="pdf")
-                page_count = fitz_doc.page_count
-                fitz_doc.close()
-                pdf_buf.seek(0)
-                log.info("[pageindex] PyMuPDF page_count=%d", page_count)
-            except Exception as fitz_err:
-                log.warning(
-                    "[pageindex] both PyPDF2 and PyMuPDF failed "
-                    "(%s) — assuming page_count=300", fitz_err
-                )
-                page_count = 300
-                pdf_buf.seek(0)
 
         log.info("[pageindex] page_count=%d label=%s", page_count, label)
         opt = _build_opt(page_count)

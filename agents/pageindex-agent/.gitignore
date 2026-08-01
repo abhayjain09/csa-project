@@ -14,10 +14,6 @@ infra/*_override.tf.json
 # If you want to track it, remove this line and ensure no secrets are in it
 infra/terraform.tfvars
 
-# PageIndex library — cloned separately, not part of this repo
-pageindex-lib/*
-!pageindex-lib/README.md
-
 # Python
 __pycache__/
 *.py[cod]

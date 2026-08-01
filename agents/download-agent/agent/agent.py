@@ -138,6 +138,20 @@ REGISTRY_FIRST_CLASSES = {
         "REGISTRY_FIRST_CLASSES", "annual report,proxy statement").split(",")
     if c.strip()
 }
+# For these registry-first classes, an UNDATED request ("give me the annual
+# report", no explicit year) should prefer the company's own site copy over
+# the registry filing when both exist for the same latest fiscal year — the
+# site PDF is the polished, branded document a user actually wants, while
+# EDGAR/Companies House stays authoritative for a SPECIFIC year request
+# (site archives are often pruned to the last 2-3 years, EDGAR never is).
+# Site discovery still falls through to the registry at the end of the route
+# (see the "final fallback" registry_resolve call) if the site has nothing.
+SITE_FIRST_WHEN_LATEST_CLASSES = {
+    c.strip().lower()
+    for c in os.environ.get(
+        "SITE_FIRST_WHEN_LATEST_CLASSES", "annual report").split(",")
+    if c.strip()
+}
 
 DEEP_STATIC_CRAWL = os.environ.get("DEEP_STATIC_CRAWL", "true").lower() != "false"
 DEEP_STATIC_MAX_DEPTH = int(os.environ.get("DEEP_STATIC_MAX_DEPTH", "3"))
@@ -1347,11 +1361,19 @@ def _official_search_queries(query: str, company_ctx: dict,
 
 
 def _discovery_route(report_class: str | None,
-                     registry_eligible: bool) -> list[str]:
-    """Return the authoritative per-class discovery order."""
+                     registry_eligible: bool,
+                     prefer_site_first: bool = False) -> list[str]:
+    """Return the authoritative per-class discovery order.
+
+    prefer_site_first demotes an otherwise registry-first class to the tail
+    of the route (still tried as the final fallback) — used for undated
+    "latest" requests on classes in SITE_FIRST_WHEN_LATEST_CLASSES so the
+    company's own site copy is tried before EDGAR/Companies House.
+    """
     canonical = (report_class or "").strip().lower()
     route: list[str] = []
-    if registry_eligible and canonical in REGISTRY_FIRST_CLASSES:
+    if (registry_eligible and canonical in REGISTRY_FIRST_CLASSES
+            and not prefer_site_first):
         route.append("registry")
     route.extend([
         "direct_search",
@@ -1549,7 +1571,24 @@ def _extract_year_intent(text: str) -> set[int]:
 
 
 def _candidate_document_year(candidate: dict | str | None) -> int | None:
-    """Best visible year for comparing already class-verified documents."""
+    """Best visible year for comparing already class-verified documents.
+
+    Checks URL/title/report/source_page text first, then — for a dict
+    candidate carrying downloaded bytes — falls back to a year mentioned in
+    the document's own first pages (same source _hit_recency_year already
+    trusts for search-hit ranking). Some companies name the file generically
+    ("annual-report.pdf") or serve it from a hashed CDN path with no year
+    anywhere in the metadata, so content is the only place the year lives.
+
+    Callers (_prefer_newer_document, _needs_latest_document_upgrade) re-check
+    the same resolved candidate several times per report as discovery moves
+    through official_crawl -> deep_crawl -> browser, so the result is
+    memoized on the candidate dict — otherwise every re-check of a
+    year-less candidate re-hashes and re-parses its (possibly multi-MB) PDF
+    body, which measurably slowed down non-annual-report classes.
+    """
+    if isinstance(candidate, dict) and "_detected_year" in candidate:
+        return candidate["_detected_year"]
     if isinstance(candidate, dict):
         text = " ".join(str(candidate.get(key) or "") for key in (
             "url", "title", "report", "source_page",
@@ -1560,7 +1599,19 @@ def _candidate_document_year(candidate: dict | str | None) -> int | None:
         year for year in _extract_year_intent(text)
         if 1990 <= year <= CURRENT_YEAR + 1
     ]
-    return max(plausible) if plausible else None
+    year: int | None = None
+    if plausible:
+        year = max(plausible)
+    elif isinstance(candidate, dict) and candidate.get("body"):
+        content_years = [
+            year for year in _extract_year_intent(_pdf_text_sample(candidate["body"]))
+            if 1990 <= year <= CURRENT_YEAR + 1
+        ]
+        if content_years:
+            year = max(content_years)
+    if isinstance(candidate, dict):
+        candidate["_detected_year"] = year
+    return year
 
 
 def _prefer_newer_document(current: dict | None,
@@ -6120,7 +6171,13 @@ def _invoke_sync(payload: dict) -> dict:
             and report_specs.registries_for(_reg_class)
             and _registry_identity_allowed
         )
-        route = _discovery_route(_reg_class, _registry_eligible)
+        _prefer_site_first = bool(
+            latest_discovery_mode
+            and (_reg_class or "").strip().lower()
+            in SITE_FIRST_WHEN_LATEST_CLASSES
+        )
+        route = _discovery_route(
+            _reg_class, _registry_eligible, prefer_site_first=_prefer_site_first)
         attempted_stages: list[str] = []
         base_log["route"] = route
         base_log["official_domain"] = domain
@@ -6129,8 +6186,14 @@ def _invoke_sync(payload: dict) -> dict:
         registry_attempted = False
 
         # Deterministic annual/proxy registries run first when a validated
-        # company identifier is available. Other classes retain the official
-        # website path before their best-effort registry fallback.
+        # company identifier is available AND the request pins a specific
+        # year (or the class opts out of SITE_FIRST_WHEN_LATEST_CLASSES).
+        # An undated "latest" request on an opted-in class demotes registry
+        # to the tail of route (_prefer_site_first above) so the site's own
+        # copy is tried first; it still falls back to the registry query at
+        # the end of this function if the site has nothing. Other classes
+        # retain the official website path before their best-effort registry
+        # fallback regardless.
         if route and route[0] == "registry":
             attempted_stages.append("registry")
             registry_attempted = True

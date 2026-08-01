@@ -19,7 +19,7 @@ RUN pip install -r requirements.txt
 # browser binary and no OS-level browser dependencies are needed here.
 
 
-COPY agent.py report_specs.py registry_tier.py ./
+COPY agent.py report_specs.py registry_tier.py annual_coverage.py ./
 
 # BedrockAgentCoreApp serves /invocations and /ping on 8080.
 EXPOSE 8080

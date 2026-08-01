@@ -74,11 +74,12 @@ Trigger: a real query for Bilibili's "sustainability report" correctly failed cl
 Full-company runs now treat the Annual Report as a real phase dependency rather
 than another item in the concurrent queue. The application isolates and invokes
 the Annual Report first. As soon as it is stored, all remaining standalone
-report searches start with bounded concurrency. PageIndex is deliberately
-deferred until those searches finish and is invoked once, only for explicitly
-typed clean misses. It then scans every page's bookmarks and layout headings
-(with best-effort OCR for image-only pages), classifies high-confidence
-substantive sections for those failed classes, and writes:
+report searches start with bounded concurrency. A separate Download Agent
+`annual_report_coverage` invocation is deliberately deferred until those
+searches finish and is called once, only for explicitly typed clean misses. It
+uses the downloader's existing `pypdf` dependency to scan embedded bookmarks,
+grounded printed-TOC entries, and topic-bearing headings across all text pages,
+then classifies high-confidence substantive sections and writes:
 
 `s3://<reports-bucket>/<company>/_manifests/annual-report-coverage.json`
 
@@ -106,8 +107,11 @@ result and coverage manifest, avoiding collisions in the existing
 `company + s3_key` provenance key schema.
 
 Local verification for this addition: Python compilation passed for the
-downloader, report catalog, PageIndex runtime, application backend, and focused
-tests. The combined regression suite now passes **95/95 tests**. This session
+downloader, its separate coverage module, report catalog, application backend,
+and focused tests. The Annual Report additions were removed from the PageIndex
+runtime; it retains its pre-feature behavior and is not part of this workflow.
+The combined regression
+suite now passes **97/97 tests**. This session
 also corrected the test helpers' obsolete `infra/agentcore-report` and
 `reportiq-ecs` paths, which had previously hidden 35 tests behind
 `FileNotFoundError`. Live AWS/Bedrock/S3 behavior still requires deployment and
@@ -126,11 +130,13 @@ For a normal full-company run the effective sequence is now:
    report. Successful reports, WAF/manual cases, pending retries, timeouts, and
    runtime/storage errors retain their original typed results.
 5. After every standalone search finishes, collect only results explicitly
-   marked as clean discovery misses. If there are none, skip PageIndex entirely.
-6. Invoke PageIndex exactly once in `annual_report_coverage` mode, passing only
-   the eligible failed classes. It scans the entire Annual Report PDF, not only
-   its TOC: embedded bookmarks, layout/font headings, topic-relevant plain-text
-   headings, section-opening content, and best-effort OCR are used.
+   marked as clean discovery misses. If there are none, skip coverage analysis.
+6. Invoke the Download Agent exactly once in `annual_report_coverage` mode,
+   passing only the eligible failed classes. This separate invocation never
+   enters cleanup or discovery. It scans the entire Annual Report's extractable
+   text using embedded bookmarks, grounded printed-TOC titles, topic-relevant
+   headings, and section-opening content. Image-only pages fail closed because
+   no OCR dependency is added to the downloader.
 7. Persist all detected heading notes plus only high-confidence coverage
    matches in the S3 coverage manifest.
 8. Check those clean misses once against the manifest and convert only validated
@@ -180,44 +186,43 @@ If verification fails or the LLM step errors out at any point, the result is `no
 
 ## Deployment status — NOT yet deployed as of this writing
 **Current worktree note:** the annual-report-first implementation is local and
-has not been deployed. It changes three independently deployed services and
+has not been deployed. It changes two independently deployed services and
 their shared result contract:
 
 - `agents/download-agent`: standalone-only verification support and Annual
-  Report first in the canonical catalog.
-- `agents/pageindex-agent`: complete-document `annual_report_coverage` mode.
+  Report first in the canonical catalog, plus the isolated
+  `annual_report_coverage` module/invocation mode.
 - `co-analyst-application`: three-phase orchestration, coverage-manifest
   persistence, typed reference results, and portal rendering.
 
 It also updates regression/focused tests and this context document. No new
-Terraform resource is required for this feature, but existing IAM must be
-confirmed to let the application invoke PageIndex and write the manifest under
-the reports bucket. Rebuild/deploy all three services. Deploying only the
-application will call a mode an old PageIndex runtime does not understand;
-deploying only the downloader will not produce or consume coverage manifests.
+Terraform resource or IAM permission is required: the application already
+invokes the Download Agent, and that runtime already reads/writes the reports
+bucket. Rebuild/deploy only these two services. The PageIndex agent must not be
+rebuilt for this feature; its source is restored to the pre-feature version.
 
 Current verification is local only: compilation and frontend JavaScript syntax
-checks pass, `git diff --check` is clean, and the combined suite passes 95/95.
-Earlier Bilibili PDF/year checks remain valid, but the new three-service workflow
+checks pass, `git diff --check` is clean, and the combined suite passes 97/97.
+Earlier Bilibili PDF/year checks remain valid, but the new two-service workflow
 has not been live-verified against AWS. Recommended rollout order:
 1. `cd agents/download-agent && terraform plan` BEFORE bumping the image tag — confirm the `ignore_changes = all` resource proposes no unexpected replace/destroy, isolated from the image/code diff. (Expect an empty/no-op plan this round — no `.tf` files changed.)
-2. Confirm `us.anthropic.claude-haiku-4-5-20251001-v1:0` is enabled in the target Bedrock account.
+2. Confirm the configured selection and deep-scan Bedrock models are enabled in
+   the target account; Annual Report coverage uses `DEEP_SCAN_MODEL_ID`.
 3. `./scripts/deploy.sh <next_tag>` — watch the CLI output for either "update-agent-runtime ok" (lifecycle flag accepted) or the WARN+retry fallback (older CLI); confirm the runtime version advanced by exactly **1**.
-4. Rebuild and deploy `agents/pageindex-agent`; confirm the runtime accepts
-   `mode=annual_report_coverage` before deploying the caller.
-5. Rebuild and deploy `co-analyst-application` after both runtimes are live.
-6. Run one full-company smoke test. Confirm the Annual Report chunk finishes
+4. Rebuild and deploy `co-analyst-application` after the Download Agent runtime
+   version is live. Do not deploy PageIndex for this feature.
+5. Run one full-company smoke test. Confirm the Annual Report chunk finishes
    before other document chunks start, the other chunks finish before the one
-   PageIndex invocation starts, and the coverage manifest exists only when at
-   least one eligible clean miss requires analysis.
-7. Use a company with no standalone Code of Conduct but a real dedicated Annual
+   Download Agent coverage invocation starts, and the coverage manifest exists
+   only when at least one eligible clean miss requires analysis.
+6. Use a company with no standalone Code of Conduct but a real dedicated Annual
    Report section. Confirm the UI shows `in annual report`, exact heading/pages,
    and downloads the Annual Report without creating a second policy PDF/provenance row.
-8. Confirm a passing mention does not produce a reference, and confirm a WAF
+7. Confirm a passing mention does not produce a reference, and confirm a WAF
    block/timeout remains blocked or pending rather than becoming a reference.
-9. Re-run an undated Bilibili Annual Report query and an explicit-year query to
+8. Re-run an undated Bilibili Annual Report query and an explicit-year query to
    confirm the intended site-first/latest versus registry-first/year split.
-10. Re-time the 23-report batch and watch PageIndex, Vertex, AgentCore, and
+9. Re-time the 23-report batch and watch Download Agent, Vertex, AgentCore, and
     browser-worker quotas before increasing concurrency.
 
 ## Companion service: co-analyst-application (orchestrator/portal)
@@ -249,7 +254,7 @@ Driven by a 7-company × ~22-class test workbook, overall accuracy was 46.2% (Pr
 
 ## Known open issues right now
 - The former 35 stale-path test errors are fixed; the combined downloader and
-  annual-report-workflow suite passes 95/95 locally.
+  annual-report-workflow suite passes 97/97 locally.
 - Terraform IAM changes (`s3:DeleteObject`, `dynamodb:DeleteItem` for `CLEAN_RERUN_DELETE_EXISTING`) are written but not applied.
 - `co-analyst-application`'s `_refresh_timed_out_queries` reconciliation path is untested against live AWS.
 - The language gate only enforces "must be English" when English is requested — no positive-match enforcement for an explicitly-requested non-English language yet.

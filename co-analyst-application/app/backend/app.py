@@ -3114,9 +3114,9 @@ def _annual_report_failed_classes(per_chunk_results: list,
     """Return unique clean-miss classes that need Annual Report analysis.
 
     This runs only after standalone searches finish. A chunk-level error and
-    every typed pending/blocked/error result are excluded; PageIndex therefore
-    receives no work for successful downloads or failures that still require
-    retry/manual recovery.
+    every typed pending/blocked/error result are excluded; the coverage
+    invocation therefore receives no work for successful downloads or failures
+    that still require retry/manual recovery.
     """
     classes = []
     for chunk in per_chunk_results or []:
@@ -3142,10 +3142,10 @@ def _create_annual_report_coverage_manifest(
     requested_classes: list[str],
     s3=None,
 ) -> dict | None:
-    """Index the Annual Report in the separate PageIndex runtime and persist
-    a durable coverage manifest. Fail closed: an analysis or validation error
-    returns None and can never convert a failed standalone search to a
-    reference result.
+    """Invoke the Download Agent's separate Annual Report analysis mode and
+    persist a durable coverage manifest. The existing PageIndex runtime is not
+    involved. Fail closed: an analysis or validation error returns None and can
+    never convert a failed standalone search to a reference result.
     """
     if not annual_report_s3_key:
         return None
@@ -3167,7 +3167,7 @@ def _create_annual_report_coverage_manifest(
     }).encode("utf-8")
     try:
         raw = _invoke_agentcore(
-            PAGEINDEX_RUNTIME_ARN, PAGEINDEX_QUALIFIER, payload)
+            AGENT_RUNTIME_ARN, AGENT_QUALIFIER, payload)
         result = json.loads(raw.decode("utf-8")) if raw else {}
         if result.get("status") != "ok":
             raise RuntimeError(result.get("error") or "coverage runtime failed")
@@ -3237,7 +3237,9 @@ def _create_annual_report_coverage_manifest(
                 or (head.get("Metadata") or {}).get("source_url")
                 or ""),
             "generated_at": datetime.now(timezone.utc).isoformat(),
-            "extractor": "pageindex-annual-report-coverage",
+            "extractor": str(
+                result.get("extractor")
+                or "download-agent-annual-coverage-v1"),
             "manifest_s3_key": manifest_key,
             "headings": headings,
             "coverage": coverage,
@@ -3795,10 +3797,10 @@ def _do_invoke_inner(run_id: str, query_record: dict):
             except Exception as exc:
                 _record_future_error(exc)
 
-    # ── Phase 3: PageIndex once, for clean standalone misses only ────────
+    # ── Phase 3: Download Agent coverage once, for clean misses only ───
     # Successful, WAF-blocked, pending, timed-out and errored searches never
-    # become PageIndex topics. This keeps independent report discovery off the
-    # PageIndex critical path and avoids classifying sections nobody needs.
+    # become coverage topics. This keeps independent report discovery off the
+    # analysis critical path and avoids classifying sections nobody needs.
     if _is_run_killed(run_id):
         failed_reference_classes = []
         annual_coverage_manifest = None

@@ -83,6 +83,7 @@ from pypdf import PdfReader
 
 import report_specs
 import registry_tier
+import annual_coverage
 
 app = BedrockAgentCoreApp()
 
@@ -5729,6 +5730,19 @@ def _deep_static_crawl(seed_url: str, domain: str | None, query: str,
 
 # ─── Orchestrator ─────────────────────────────────────────────────────────────
 def _invoke_sync(payload: dict) -> dict:
+    # A separate post-download analysis invocation. It reads one already stored
+    # Annual Report and never enters company cleanup, discovery, or storage.
+    if (payload or {}).get("mode") == "annual_report_coverage":
+        return annual_coverage.run(
+            payload or {},
+            configured_bucket=BUCKET,
+            s3_client=_s3,
+            converse=lambda prompt, max_tokens: _converse(
+                prompt, max_tokens=max_tokens,
+                model_id=DEEP_SCAN_MODEL_ID),
+            integrity_error=_document_integrity_error,
+        )
+
     run_id = (payload or {}).get("run_id") or uuid.uuid4().hex[:8]
     _document_preferences = (payload or {}).get("document_preferences") or {}
     if not isinstance(_document_preferences, dict):

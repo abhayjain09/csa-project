@@ -589,6 +589,28 @@ def _block_marker(text: str) -> str:
     return next((term for term in _BLOCK_MARKERS if term in low), "")
 
 
+def _reason_is_blocked(reason: str) -> bool:
+    value = str(reason or "").lower()
+    return bool(
+        _block_marker(value)
+        or re.search(r"\bhttp\s+(?:401|403|406|412|429|522)\b", value)
+        or "challenge html" in value
+    )
+
+
+def _failure_kind(reason: str, blocked: bool = False) -> str:
+    value = str(reason or "").lower()
+    if blocked or _reason_is_blocked(value):
+        return "actual_waf"
+    if "not a pdf" in value or "rejected" in value or "mismatch" in value:
+        return "invalid_candidate"
+    if "html response" in value or "html interstitial" in value:
+        return "challenge_html"
+    if "empty response" in value or "navigation failed" in value:
+        return "transport_failure"
+    return "document_not_found"
+
+
 def _dismiss_cookie_modals(page) -> None:
     for label in (
             "Accept all", "Accept All Cookies", "Accept cookies", "I agree",
@@ -620,10 +642,11 @@ def _response_body(context, page, url: str, referer: str) -> tuple:
         if status < 400 and (
                 "pdf" in ctype or urlparse(url).path.lower().endswith(".pdf")):
             try:
+                response.finished()
                 body = response.body()
             except Exception:
                 body = None
-    if not body and status not in {401, 403, 406, 429}:
+    if not body and status not in {401, 403, 406, 412, 429, 522}:
         try:
             request_response = context.request.get(
                 url,
@@ -640,7 +663,13 @@ def _response_body(context, page, url: str, referer: str) -> tuple:
         except Exception:
             pass
     if body and not body.startswith(b"%PDF") and not marker:
-        marker = _block_marker(body[:100_000].decode("utf-8", "ignore"))
+        sample = body[:100_000].decode("utf-8", "ignore")
+        marker = _block_marker(sample)
+        if not marker and "html" in ctype:
+            marker = "html interstitial" if any(
+                term in sample.lower() for term in (
+                    "sign in", "log in", "enable cookies", "checking your browser",
+                    "cf-chl-", "just a moment")) else ""
     return status, ctype, body, marker
 
 
@@ -920,29 +949,81 @@ def _type_into(page, label: str, value: str, ref: str = "") -> bool:
 
 
 def _native_download_from_click(page, locator, job: dict) -> tuple | None:
+    """Capture downloads, same-tab responses, and popup/new-tab PDFs."""
+    context = page.context
     download = None
+    responses = []
+    original_url = page.url
+    original_pages = set(context.pages)
+
+    def capture_response(response):
+        try:
+            ctype = (response.headers or {}).get("content-type", "").lower()
+            if ("application/pdf" in ctype
+                    or urlparse(response.url).path.lower().endswith(".pdf")):
+                responses.append(response)
+        except Exception:
+            pass
+
+    context.on("response", capture_response)
     try:
         try:
             with page.expect_download(timeout=6000) as info:
                 locator.click(timeout=8000)
             download = info.value
         except PlaywrightTimeoutError:
-            return None
-        path = download.path()
-        if not path:
-            return None
-        with open(path, "rb") as handle:
-            body = handle.read(MAX_DOCUMENT_BYTES + 1)
-        url = download.url or page.url
-        ok, reason, _ = _verify_pdf(job, url, body)
-        if ok:
-            return url, body
-        print(f"[browser-agent] native download rejected: {reason}")
+            # The click still occurred. PDF viewers commonly navigate the same
+            # tab or open a popup instead of emitting Playwright's download
+            # event, so continue with the captured browser responses below.
+            pass
+        page.wait_for_timeout(1500)
+        if download is not None:
+            path = download.path()
+            if path:
+                with open(path, "rb") as handle:
+                    body = handle.read(MAX_DOCUMENT_BYTES + 1)
+                url = download.url or page.url
+                ok, reason, _ = _verify_pdf(job, url, body)
+                if ok:
+                    return url, body
+                print(f"[browser-agent] native download rejected: {reason}")
+
+        for response in responses[:20]:
+            try:
+                length = int((response.headers or {}).get("content-length") or 0)
+                if length > MAX_DOCUMENT_BYTES:
+                    continue
+                response.finished()
+                body = response.body()
+                if len(body) > MAX_DOCUMENT_BYTES:
+                    continue
+                ok, reason, _ = _verify_pdf(job, response.url, body)
+                if ok:
+                    return response.url, body
+                print(
+                    "[browser-agent] clicked PDF response rejected: "
+                    f"{reason}; url={response.url}")
+            except Exception:
+                continue
         return None
     finally:
+        try:
+            context.remove_listener("response", capture_response)
+        except Exception:
+            pass
         if download is not None:
             try:
                 download.delete()
+            except Exception:
+                pass
+        for opened in set(context.pages) - original_pages:
+            try:
+                opened.close()
+            except Exception:
+                pass
+        if page.url not in {original_url, "about:blank", ""}:
+            try:
+                page.go_back(wait_until="domcontentloaded", timeout=NAV_TIMEOUT_MS)
             except Exception:
                 pass
 
@@ -966,7 +1047,7 @@ def _try_url(context, page, job: dict, url: str, referer: str) -> tuple:
                 probe.close()
             except Exception:
                 pass
-    if status in {401, 403, 406, 429} or marker:
+    if status in {401, 403, 406, 412, 429, 522} or marker:
         return None, marker or f"HTTP {status}", True
     if not body:
         probe, download = None, None
@@ -1287,7 +1368,7 @@ def _agent_navigate(context, page, job: dict, seed_urls: list[str],
             last_reason = (
                 f"browser action {kind} failed: {type(exc).__name__}: {exc}")[:500]
             print(f"[browser-agent] {last_reason}; url={page.url}")
-    return None, None, last_reason, blocked
+    return None, None, last_reason, _reason_is_blocked(last_reason)
 
 
 def _json_list(value) -> list[str]:
@@ -1383,7 +1464,7 @@ def _download(job: dict, pool: BrowserContextPool, heartbeat) -> tuple:
             pool.save(domain)
         if attempt < MAX_ATTEMPTS and RETRY_DELAY_SECONDS:
             time.sleep(RETRY_DELAY_SECONDS)
-    return None, None, last_reason, blocked
+    return None, None, last_reason, _reason_is_blocked(last_reason)
 
 
 def _store(job: dict, url: str, body: bytes, ctype: str) -> dict:
@@ -1506,27 +1587,35 @@ def _patch_run(job: dict, result: dict | None, failure_status: str = "") -> bool
                     row["status"] = failure_status or "blocked_by_source_waf"
                     row["reason"] = job.get(
                         "error_msg", "persistent browser did not download")
+                    row["failure_kind"] = job.get(
+                        "failure_kind", "document_not_found")
         all_terminal = _all_run_jobs_terminal(run_id)
         run_status = (
             "browser_retry_pending" if not all_terminal
             else ("complete" if downloaded else "no_results"))
+        coverage_status = (
+            "pending" if all_terminal
+            else str(run.get("annual_coverage_status") or "waiting_for_browser"))
         old_version = int(run.get("browser_patch_version", 0))
         try:
             runs_table.update_item(
                 Key={"run_id": run_id},
                 UpdateExpression=(
                     "SET #st = :st, #dl = :dl, #fl = :fl, #dg = :dg, "
-                    "#ver = :new, #fin = :fin"),
+                    "#ver = :new, #fin = :fin, #ac = :ac, #acu = :acu"),
                 ConditionExpression="(attribute_not_exists(#ver) OR #ver = :old)",
                 ExpressionAttributeNames={
                     "#st": "status", "#dl": "downloaded", "#fl": "failures",
                     "#dg": "diagnostics", "#ver": "browser_patch_version",
-                    "#fin": "finished_at"},
+                    "#fin": "finished_at",
+                    "#ac": "annual_coverage_status",
+                    "#acu": "annual_coverage_updated_at"},
                 ExpressionAttributeValues={
                     ":st": run_status, ":dl": json.dumps(downloaded),
                     ":fl": json.dumps(failures), ":dg": json.dumps(diagnostics),
                     ":old": old_version, ":new": old_version + 1,
-                    ":fin": _now()},)
+                    ":fin": _now(), ":ac": coverage_status,
+                    ":acu": _now()},)
             query_id = job.get("query_id", "")
             if query_id:
                 queries_table.update_item(
@@ -1635,11 +1724,16 @@ def _process_message(message: dict, pool: BrowserContextPool) -> None:
     try:
         url, body, detail, blocked = _download(job, pool, heartbeat)
         if not url or not body:
-            status = "blocked_by_source_waf" if blocked else "failed"
+            failure_kind = _failure_kind(str(detail), blocked)
+            status = (
+                "blocked_by_source_waf"
+                if failure_kind == "actual_waf" else "failed")
             job["error_msg"] = str(detail)[:1000]
             _set_job(
                 job_id, status, expected_status="running",
-                error_msg=job["error_msg"], finished_at=_now())
+                error_msg=job["error_msg"], failure_kind=failure_kind,
+                finished_at=_now())
+            job["failure_kind"] = failure_kind
             try:
                 _patch_run(job, None, status)
             except Exception as exc:

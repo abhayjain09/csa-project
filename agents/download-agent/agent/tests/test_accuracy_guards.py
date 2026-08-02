@@ -29,6 +29,7 @@ if "boto3" not in sys.modules:
     sys.modules["boto3"] = boto3_stub
 
 import registry_tier  # noqa: E402
+import annual_coverage  # noqa: E402
 
 
 def _seed_sec_cache():
@@ -715,6 +716,14 @@ class BrowserWorkerValidationTests(unittest.TestCase):
         self.assertEqual(used_pages, [context.probe])
         self.assertTrue(context.probe.closed)
 
+    def test_final_waf_status_depends_on_final_reason_not_sticky_candidate(self):
+        path = REPO_ROOT / "co-analyst-application/app/backend/browser_worker.py"
+        source = path.read_text(encoding="utf-8")
+        self.assertGreaterEqual(
+            source.count("return None, None, last_reason, _reason_is_blocked(last_reason)"),
+            2,
+        )
+
     def test_verifier_falls_back_when_primary_model_rejects_request(self):
         calls = []
 
@@ -977,6 +986,185 @@ class BrowserWorkerValidationTests(unittest.TestCase):
         )
         self.assertEqual(helpers["_candidate_year"](latest), 2025)
         self.assertGreater(key(latest), key(older))
+
+
+class AnnualCoverageTests(unittest.TestCase):
+    def test_late_sec_item_is_not_crowded_out_by_earlier_risk_headings(self):
+        headings = [{
+            "heading_id": f"heading-{index:04d}",
+            "title": f"Risk Management Discussion {index}",
+            "path": f"Risk Management Discussion {index}",
+            "location_type": "html_section",
+            "location_label": f"HTML section {index}",
+            "section_index": index,
+            "summary": "Discussion of enterprise risk governance.",
+            "source": "html_topic_heading",
+        } for index in range(1, 151)]
+        headings.append({
+            "heading_id": "heading-0151",
+            "title": "ITEM 16B. CODE OF ETHICS",
+            "path": "ITEM 16B. CODE OF ETHICS",
+            "location_type": "html_section",
+            "location_label": "HTML section 151",
+            "section_index": 151,
+            "summary": (
+                "A dedicated ethics code with reporting, investigation, "
+                "training, oversight, and non-retaliation controls."),
+            "source": "sec_item_heading",
+        })
+
+        def converse(prompt, _max_tokens):
+            self.assertIn("heading-0151", prompt)
+            return json.dumps({"coverage": {"code of conduct": {
+                "match": "dedicated_reference",
+                "heading_id": "heading-0151",
+                "heading": "ITEM 16B. CODE OF ETHICS",
+                "confidence": "high",
+                "evidence": "Dedicated ethics controls.",
+            }}})
+
+        result = annual_coverage.classify_coverage(
+            headings,
+            ["risk management policy", "code of conduct"],
+            converse,
+        )
+        self.assertEqual(
+            result["coverage"]["code of conduct"]["section_index"], 151)
+
+    def test_sec_html_20f_uses_html_sections_without_pdf_integrity_check(self):
+        body = b"""<!doctype html><html><body>
+        <div>ITEM 16B. CODE OF ETHICS</div>
+        <div>We have adopted a comprehensive code of ethics applicable to our
+        directors, officers, and employees. The code establishes reporting
+        procedures, investigation controls, annual training, non-retaliation
+        safeguards, oversight responsibilities, and an ethics hotline. Any
+        waiver requires board approval and public disclosure. Violations may
+        result in disciplinary action, and the audit committee receives
+        regular reports about operation of the program.</div>
+        <div>ITEM 16C. PRINCIPAL ACCOUNTANT FEES AND SERVICES</div>
+        </body></html>"""
+        headings = annual_coverage.extract_html_heading_index(body)
+        ethics = next(item for item in headings if "CODE OF ETHICS" in item["title"])
+
+        class Body:
+            def read(self):
+                return body
+
+        class S3:
+            def head_object(self, **_kwargs):
+                return {"ContentLength": len(body), "ContentType": "text/html"}
+
+            def get_object(self, **_kwargs):
+                return {"Body": Body()}
+
+        def converse(_prompt, _max_tokens):
+            return json.dumps({"coverage": {"code of conduct": {
+                "match": "dedicated_reference",
+                "heading_id": ethics["heading_id"],
+                "heading": ethics["title"],
+                "confidence": "high",
+                "evidence": "Dedicated ethics code and governance controls.",
+            }}})
+
+        def pdf_integrity_must_not_run(*_args):
+            raise AssertionError("PDF integrity check ran for SEC HTML")
+
+        result = annual_coverage.run(
+            {
+                "bucket": "reports",
+                "s3_key": "bilibili/annual-report/form20f.htm",
+                "report_classes": ["code of conduct"],
+            },
+            configured_bucket="reports",
+            s3_client=S3(),
+            converse=converse,
+            integrity_error=pdf_integrity_must_not_run,
+        )
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["document_kind"], "html")
+        match = result["coverage"]["code of conduct"]
+        self.assertEqual(match["match"], "dedicated_reference")
+        self.assertEqual(match["location_type"], "html_section")
+        self.assertGreaterEqual(match["section_index"], 1)
+        self.assertNotIn("page_start", match)
+
+    def test_terminal_browser_waf_becomes_annual_reference_eligible(self):
+        path = REPO_ROOT / "co-analyst-application/app/backend/app.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        node = next(
+            item for item in tree.body
+            if isinstance(item, ast.FunctionDef)
+            and item.name == "_annual_reference_item_eligible"
+        )
+        module = ast.Module(body=[node], type_ignores=[])
+        ast.fix_missing_locations(module)
+        namespace = {}
+        exec(compile(module, str(path), "exec"), namespace)
+        eligible = namespace["_annual_reference_item_eligible"]
+        row = {
+            "status": "blocked_by_source_waf",
+            "browser_job_id": "browser-job-1",
+        }
+        self.assertFalse(eligible(row))
+        self.assertTrue(eligible(row, terminal_browser=True))
+
+    def test_deferred_coverage_converts_terminal_browser_miss(self):
+        path = REPO_ROOT / "co-analyst-application/app/backend/app.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        wanted = {
+            "_annual_reference_item_eligible",
+            "_apply_annual_report_references",
+            "_apply_deferred_annual_coverage",
+        }
+        nodes = [
+            item for item in tree.body
+            if isinstance(item, ast.FunctionDef) and item.name in wanted
+        ]
+        module = ast.Module(body=nodes, type_ignores=[])
+        ast.fix_missing_locations(module)
+        namespace = {
+            "json": json,
+            "_infer_report_class": lambda _query, _company: "code of conduct",
+        }
+        exec(compile(module, str(path), "exec"), namespace)
+        run = {
+            "company": "Example Inc",
+            "failures": json.dumps([{
+                "request_id": "2:1", "query": "Example Code of Conduct",
+            }]),
+            "diagnostics": json.dumps({"per_chunk": [{
+                "failures": 1,
+                "results": [{
+                    "request_id": "2:1",
+                    "query": "Example Code of Conduct",
+                    "status": "blocked_by_source_waf",
+                    "browser_job_id": "browser-job-1",
+                }],
+            }]}),
+        }
+        manifest = {
+            "annual_report_s3_key": "example/annual/form20f.htm",
+            "annual_report_s3_uri": "s3://reports/example/annual/form20f.htm",
+            "manifest_s3_key": "example/_manifests/annual.json",
+            "coverage": {"code of conduct": {
+                "match": "dedicated_reference",
+                "heading": "ITEM 16B. CODE OF ETHICS",
+                "heading_id": "heading-0151",
+                "location_type": "html_section",
+                "location_label": "HTML section 151",
+                "section_index": 151,
+                "confidence": "high",
+                "evidence": "The filing links the registrant's ethics code.",
+            }},
+        }
+        diagnostics, failures, converted = namespace[
+            "_apply_deferred_annual_coverage"](run, manifest)
+        row = diagnostics["per_chunk"][0]["results"][0]
+        self.assertEqual(row["status"], "referenced_in_existing_document")
+        self.assertEqual(row["section_index"], 151)
+        self.assertEqual(diagnostics["per_chunk"][0]["failures"], 0)
+        self.assertEqual(failures, [])
+        self.assertEqual(converted, 1)
 
     def test_worker_refuses_old_report_when_latest_url_is_blocked(self):
         helpers = _load_worker_validation_helpers()
@@ -1812,7 +2000,7 @@ class CandidateDocumentYearContentFallbackTests(unittest.TestCase):
     (surfaced via _pdf_text_sample) is the only signal available."""
 
     def _year_fn(self, pdf_text_sample_stub):
-        ns = {"re": re, "CURRENT_YEAR": 2026,
+        ns = {"re": re, "unquote": unquote, "CURRENT_YEAR": 2026,
               "_pdf_text_sample": pdf_text_sample_stub}
         _load_current_agent_symbols(
             ["_extract_year_intent", "_candidate_document_year"],
@@ -1833,6 +2021,15 @@ class CandidateDocumentYearContentFallbackTests(unittest.TestCase):
         candidate = {"url": "https://example.com/2025-annual-report.pdf",
                      "body": b"%PDF-1.4 stub"}
         self.assertEqual(year(candidate), 2025)
+
+    def test_percent_encoded_space_before_day_is_not_misread_as_2011(self):
+        year = self._year_fn(lambda *_a, **_k: "")
+        candidate = {
+            "url": (
+                "https://example.com/notices/meeting%20august%2011%202026.pdf"),
+            "body": None,
+        }
+        self.assertEqual(year(candidate), 2026)
 
     def test_none_without_url_title_or_body_year(self):
         year = self._year_fn(lambda *_a, **_k: "")

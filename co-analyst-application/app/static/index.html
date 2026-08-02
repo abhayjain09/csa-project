@@ -1375,6 +1375,11 @@ function toggleRunDetail(rid){
   let chunkHtml='';
   if(progress){
     chunkHtml=`<div style="margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">${chunkProgressPill(progress)}${run.status==='running'?heartbeatIndicator(progress):''}</div>`;
+    if(['waiting_for_browser','pending','running'].includes(run.annual_coverage_status)){
+      chunkHtml+=`<div class="form-hint" style="margin-bottom:10px">Checking the stored annual report for relevant sections…</div>`;
+    }else if(run.annual_coverage_status==='error'){
+      chunkHtml+=`<div class="form-hint" style="margin-bottom:10px;color:var(--err)" title="${escH(run.annual_coverage_error||'')}">Annual-report section analysis did not complete.</div>`;
+    }
     if(progress.trimmed){
       chunkHtml+=`<div class="form-hint" style="margin-bottom:8px">ℹ️ Per-chunk diagnostic detail was trimmed to keep this run's record within DynamoDB's size limit — download/failure counts are still accurate, but per-query rows aren't available below.</div>`;
     }
@@ -1421,7 +1426,7 @@ function toggleRunDetail(rid){
               ? `<div class="manual-recovery">
                   <a class="dl-btn manual-link" href="${escH(manualSourceUrl)}" target="_blank" rel="noopener noreferrer" title="Open the official-source candidate in your local browser">↗ Manual download</a>
                   ${uploadAction}
-                  <span class="form-hint">1. Download from the official source. 2. Upload the saved file here.${isUnverifiedCandidate?' ⚠️ Not content-verified — confirm this is actually the target company’s document before uploading.':''}</span>
+                  <span class="form-hint">${isUnverifiedCandidate?'Download from the official source, verify the company and document, then upload.':'Download from the official source, then upload.'}</span>
                 </div>`
               : uploadAction;
             // The agent can grab the wrong document for a query even though
@@ -1429,10 +1434,13 @@ function toggleRunDetail(rid){
             // Download so a manual upload can correct it (this deletes the
             // superseded agent-downloaded file from S3 server-side).
             const replaceAction = `<button class="dl-btn upload" title="Replace with a manually uploaded file if the agent grabbed the wrong document" onclick="pickUploadForQuery(this,'${escH(rid)}','${escB64(run.company||'')}','${escH(run.query_id||'')}','${escH(String(pc.chunk))}','${escB64(r.query||'')}','')">⟳ Replace file</button>`;
+            const annualLocation = r.location_type==='html_section'
+              ? (r.location_label || (r.section_index ? 'HTML section '+String(r.section_index) : 'HTML filing section'))
+              : (r.page_start ? 'pp. '+String(r.page_start)+(r.page_end&&r.page_end!==r.page_start?'–'+String(r.page_end):'') : '');
             const action = isDl
               ? `<div style="display:flex;gap:6px;flex-wrap:wrap"><button class="dl-btn" onclick="downloadFileVerified(decB64('${escB64(r.s3_key)}'),this)">⬇ Download</button>${replaceAction}</div>`
               : isAnnualRef
-              ? `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button class="dl-btn" onclick="downloadFileVerified(decB64('${escB64(r.referenced_s3_key)}'),this)">⬇ Annual report</button><span class="form-hint">${escH(r.heading||'Relevant section')}${r.page_start?' · pp. '+escH(String(r.page_start))+(r.page_end&&r.page_end!==r.page_start?'–'+escH(String(r.page_end)):''):''}</span></div>`
+              ? `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button class="dl-btn" onclick="downloadFileVerified(decB64('${escB64(r.referenced_s3_key)}'),this)">⬇ Annual report</button><span class="form-hint">${escH(r.heading||'Relevant section')}${annualLocation?' · '+escH(annualLocation):''}</span></div>`
               : isBrowserPending
               ? `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button class="btn btn-sm" onclick="loadRuns()">↻ Check browser</button>${manualRecoveryAction}</div>`
               : isTimedOutPending

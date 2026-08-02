@@ -5,6 +5,63 @@ The first persistent-browser version was deployed and its production diagnostic
 archive was analyzed on 2026-08-02. The corrective changes described immediately
 below are local and are not deployed yet; see "Deployment status."
 
+## SEC HTML and post-browser annual coverage correction — 2026-08-02
+
+The `csa-browser-diagnostics.Zwbry0.tar.gz` archive produced zero Annual Report
+references for three different reasons: Bilibili's valid SEC Form 20-F HTML was
+rejected by the PDF-only coverage reader, JFrog's PDF coverage call hit the
+generic 900-second client timeout, and Fortis never delivered an Annual Report
+to S3. Interactive verification confirmed that the Fortis investor hub and its
+extensionless Annual Report route are public and that the Bilibili SEC filing
+is valid `text/html`; public accessibility does not prevent selective CDN/WAF
+blocking of AWS/headless traffic.
+
+Current local corrections (not deployed yet):
+
+- `annual_coverage.py` now detects PDF versus HTML from S3 metadata, filename,
+  and bytes. PDF extraction remains unchanged; SEC 10-K/20-F HTML gets a
+  non-executing structural parser for semantic headings, SEC Item headings,
+  topic headings, anchors, summaries, and explicit `html_section` locations.
+- Coverage grounding now uses stable `heading_id` values rather than asking the
+  model to repeat page ranges. HTML section ordinals are never presented as PDF
+  page numbers. The UI displays `HTML section N` for HTML references.
+- Candidate headings are selected per requested report class and classified in
+  bounded batches of five classes. This prevents hundreds of early risk
+  headings from crowding a late `ITEM 16B. CODE OF ETHICS` section out of a
+  single first-100-headings prompt. A dedicated matching section that
+  explicitly identifies/incorporates/links a requested policy is accepted as
+  `dedicated_reference`; passing mentions remain rejected.
+- Annual coverage no longer blocks the main company run. A DynamoDB-leased
+  background reconciler starts only after standalone/persistent-browser work is
+  terminal, retries failed coverage calls up to three times, and patches
+  `referenced_in_existing_document` rows back into run diagnostics. A new run
+  for the same company is prevented while coverage is pending/running so its
+  pre-run cleanup cannot delete the Annual Report being analyzed.
+- The generic AgentCore client and SigV4 fallback now use
+  `AGENT_READ_TIMEOUT` (1620 seconds by default), removing the separate
+  900-second coverage timeout that failed JFrog.
+- Browser clicks now capture native downloads plus same-tab, popup, and new-tab
+  PDF network responses. A single blocked candidate no longer makes WAF status
+  sticky across the whole job; terminal rows persist a `failure_kind` such as
+  `actual_waf`, `invalid_candidate`, `challenge_html`, `transport_failure`, or
+  `document_not_found`.
+- Percent-encoded URL spaces are decoded before year extraction, so a path such
+  as `august%2011%202026` resolves to 2026 rather than the false year 2011.
+- No Terraform/IAM change is required for this correction. The existing ECS
+  task role already allows DynamoDB read/write, S3 read/write, and
+  `bedrock-agentcore:InvokeAgentRuntime`; provider `default_tags` continue to
+  apply all mandatory tags. The existing
+  `.github/workflows/coanalyst-ecs-deploy.yml` deploys the application/browser
+  image unchanged. The Download Agent must still be deployed separately with
+  `agents/download-agent/scripts/deploy.sh <new-tag>` before running that ECS
+  workflow.
+
+Verification: the real 4.4 MB Bilibili Form 20-F produced 275 grounded HTML
+headings locally, including two `CODE OF ETHICS` sections; the late substantive
+section was retained. Python compilation, `git diff --check`, and 110 focused
+accuracy/lifecycle tests pass. Live AWS behavior still requires both
+deployments and a fresh three-company canary.
+
 ## Production browser incident follow-up — 2026-08-02
 
 ### Second production rerun (`csa-browser-diagnostics.ShejHn.tar.gz`)

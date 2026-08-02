@@ -1616,11 +1616,14 @@ def _candidate_document_year(candidate: dict | str | None) -> int | None:
     if isinstance(candidate, dict) and "_detected_year" in candidate:
         return candidate["_detected_year"]
     if isinstance(candidate, dict):
-        text = " ".join(str(candidate.get(key) or "") for key in (
-            "url", "title", "report", "source_page",
+        text = " ".join((
+            unquote(str(candidate.get("url") or "")),
+            str(candidate.get("title") or ""),
+            str(candidate.get("report") or ""),
+            unquote(str(candidate.get("source_page") or "")),
         ))
     else:
-        text = str(candidate or "")
+        text = unquote(str(candidate or ""))
     plausible = [
         year for year in _extract_year_intent(text)
         if 1990 <= year <= CURRENT_YEAR + 1

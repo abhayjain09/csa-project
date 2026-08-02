@@ -226,6 +226,12 @@ ANNUAL_REPORT_REFERENCE_CLASSES = (
     "risk management policy",
     "tax strategy and governance",
 )
+ANNUAL_COVERAGE_LEASE_SECONDS = int(os.environ.get(
+    "ANNUAL_COVERAGE_LEASE_SECONDS", "2100"))
+ANNUAL_COVERAGE_MAX_ATTEMPTS = max(1, int(os.environ.get(
+    "ANNUAL_COVERAGE_MAX_ATTEMPTS", "3")))
+ANNUAL_COVERAGE_RETRY_SECONDS = max(60, int(os.environ.get(
+    "ANNUAL_COVERAGE_RETRY_SECONDS", "300")))
 
 # One executor per backend process. A single bulk request is handled by one
 # process, so ten submitted companies occupy at most three worker threads while
@@ -382,11 +388,15 @@ def get_sqs():
     return boto3.client("sqs", region_name=REGION)
 
 def get_agentcore():
-    """AgentCore client with long read timeout — used by PageIndex invocations."""
+    """AgentCore client with the same timeout ladder as download invocations."""
     return boto3.client(
         "bedrock-agentcore",
         region_name=REGION,
-        config=Config(read_timeout=900, connect_timeout=10, retries={"max_attempts": 0}),
+        config=Config(
+            read_timeout=AGENT_READ_TIMEOUT,
+            connect_timeout=10,
+            retries={"max_attempts": 0},
+        ),
     )
 
 def _invoke_agentcore(runtime_arn: str, qualifier: str, payload_bytes: bytes) -> bytes:
@@ -442,7 +452,7 @@ def _invoke_agentcore_sigv4_generic(runtime_arn: str, qualifier: str, payload_by
         headers=dict(prepped.headers), method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=900) as resp:
+        with urllib.request.urlopen(req, timeout=AGENT_READ_TIMEOUT) as resp:
             return resp.read()
     except urllib.error.HTTPError as e:
         body = e.read()
@@ -1341,6 +1351,8 @@ def _refresh_browser_retry_run(run: dict, dynamo=None) -> dict:
                 changed = changed or row.get("reason") != new_reason
                 row["status"] = new_status
                 row["reason"] = new_reason
+                row["failure_kind"] = job.get(
+                    "failure_kind", "document_not_found")
 
     # Surface completed downloads immediately. The run remains pending until
     # every browser job is terminal, but users no longer wait for the entire
@@ -1353,18 +1365,22 @@ def _refresh_browser_retry_run(run: dict, dynamo=None) -> dict:
         return run
     old_version = int(run.get("browser_patch_version", 0))
     now_iso = datetime.now(timezone.utc).isoformat()
+    coverage_status = (
+        "pending" if all_terminal
+        else str(run.get("annual_coverage_status") or "waiting_for_browser"))
     try:
         dynamo.Table(RUNS_TABLE).update_item(
             Key={"run_id": run["run_id"]},
             UpdateExpression=(
                 "SET #st = :st, #dl = :dl, #fl = :fl, #dg = :dg, "
-                "#ver = :new, #fin = :fin"),
+                "#ver = :new, #fin = :fin, #ac = :ac, #acu = :acu"),
             ConditionExpression=(
                 "(attribute_not_exists(#ver) OR #ver = :old)"),
             ExpressionAttributeNames={
                 "#st": "status", "#dl": "downloaded", "#fl": "failures",
                 "#dg": "diagnostics", "#ver": "browser_patch_version",
-                "#fin": "finished_at",
+                "#fin": "finished_at", "#ac": "annual_coverage_status",
+                "#acu": "annual_coverage_updated_at",
             },
             ExpressionAttributeValues={
                 ":st": final_status,
@@ -1374,6 +1390,8 @@ def _refresh_browser_retry_run(run: dict, dynamo=None) -> dict:
                 ":old": old_version,
                 ":new": old_version + 1,
                 ":fin": now_iso,
+                ":ac": coverage_status,
+                ":acu": now_iso,
             },
         )
     except ClientError as exc:
@@ -1397,6 +1415,8 @@ def _refresh_browser_retry_run(run: dict, dynamo=None) -> dict:
         "diagnostics": json.dumps(diagnostics),
         "browser_patch_version": old_version + 1,
         "finished_at": now_iso,
+        "annual_coverage_status": coverage_status,
+        "annual_coverage_updated_at": now_iso,
     })
     return run
 
@@ -1752,6 +1772,9 @@ def _get_stuck_runs(dynamo=None) -> list:
 # run downloads anything; two concurrent runs for the same company would race
 # on that cleanup and could delete files the other run just stored.
 _ACTIVE_RUN_STATUSES = {"queued", "running", "browser_retry_pending"}
+_ACTIVE_ANNUAL_COVERAGE_STATUSES = {
+    "waiting_for_browser", "pending", "running",
+}
 
 
 class ActiveRunConflict(Exception):
@@ -1779,13 +1802,20 @@ def _find_active_run_for_company(company: str, dynamo=None) -> dict | None:
     try:
         resp = dynamo.Table(RUNS_TABLE).scan(
             FilterExpression=(
-                "#c = :c AND (#st = :s1 OR #st = :s2 OR #st = :s3)"),
-            ExpressionAttributeNames={"#c": "company", "#st": "status"},
+                "#c = :c AND (#st = :s1 OR #st = :s2 OR #st = :s3 OR "
+                "#ac = :a1 OR #ac = :a2 OR #ac = :a3)"),
+            ExpressionAttributeNames={
+                "#c": "company", "#st": "status",
+                "#ac": "annual_coverage_status",
+            },
             ExpressionAttributeValues={
                 ":c":  company,
                 ":s1": "queued",
                 ":s2": "running",
                 ":s3": "browser_retry_pending",
+                ":a1": "waiting_for_browser",
+                ":a2": "pending",
+                ":a3": "running",
             },
         )
         items = resp.get("Items", [])
@@ -3029,8 +3059,34 @@ def _annual_report_key_from_chunk(result: dict, company: str) -> str:
     return ""
 
 
+def _annual_reference_item_eligible(
+    item: dict,
+    *,
+    terminal_browser: bool = False,
+) -> bool:
+    """Whether a standalone miss may use the final Annual Report fallback.
+
+    Normal discovery misses retain the explicit eligibility bit. Once a
+    durable browser job has also finished, its failed/WAF result has exhausted
+    every automated standalone tier and becomes eligible too.
+    """
+    if not isinstance(item, dict):
+        return False
+    status = str(item.get("status") or "")
+    if status == "failed" and item.get(
+            "annual_report_reference_eligible") is True:
+        return True
+    return bool(
+        terminal_browser
+        and item.get("browser_job_id")
+        and status in {"failed", "blocked_by_source_waf"}
+    )
+
+
 def _annual_report_failed_classes(per_chunk_results: list,
-                                  company: str) -> list[str]:
+                                  company: str,
+                                  *,
+                                  terminal_browser: bool = False) -> list[str]:
     """Return unique clean-miss classes that need Annual Report analysis.
 
     This runs only after standalone searches finish. A chunk-level error and
@@ -3043,10 +3099,8 @@ def _annual_report_failed_classes(per_chunk_results: list,
         if not isinstance(chunk, dict) or chunk.get("error"):
             continue
         for item in chunk.get("results") or []:
-            if (not isinstance(item, dict)
-                    or item.get("status") != "failed"
-                    or item.get(
-                        "annual_report_reference_eligible") is not True):
+            if not _annual_reference_item_eligible(
+                    item, terminal_browser=terminal_browser):
                 continue
             report_class = _infer_report_class(
                 str(item.get("query") or ""), company)
@@ -3099,24 +3153,49 @@ def _create_annual_report_coverage_manifest(
             canonical = str(report_class or "").strip().lower()
             if canonical not in eligible or not isinstance(match, dict):
                 continue
-            if (match.get("match") != "substantive_section"
-                    or match.get("confidence") != "high"):
+            match_type = str(match.get("match") or "")
+            if (match_type not in {
+                    "substantive_section", "dedicated_reference"
+                    } or match.get("confidence") != "high"):
                 continue
-            try:
-                page_start = int(match.get("page_start"))
-                page_end = int(match.get("page_end"))
-            except (TypeError, ValueError):
-                continue
-            if page_start < 1 or page_end < page_start:
-                continue
-            coverage[canonical] = {
-                "match": "substantive_section",
+            location_type = str(
+                match.get("location_type") or "pdf_page").strip()
+            grounded = {
+                "match": match_type,
+                "heading_id": str(match.get("heading_id") or "")[:100],
                 "heading": str(match.get("heading") or "")[:500],
-                "page_start": page_start,
-                "page_end": page_end,
+                "location_type": location_type,
+                "location_label": str(
+                    match.get("location_label") or "")[:300],
                 "confidence": "high",
                 "evidence": str(match.get("evidence") or "")[:1000],
             }
+            if location_type == "pdf_page":
+                try:
+                    page_start = int(match.get("page_start"))
+                    page_end = int(match.get("page_end"))
+                except (TypeError, ValueError):
+                    continue
+                if page_start < 1 or page_end < page_start:
+                    continue
+                grounded.update({
+                    "page_start": page_start,
+                    "page_end": page_end,
+                })
+            elif location_type == "html_section":
+                try:
+                    section_index = int(match.get("section_index"))
+                except (TypeError, ValueError):
+                    continue
+                if section_index < 1:
+                    continue
+                grounded.update({
+                    "section_index": section_index,
+                    "anchor": str(match.get("anchor") or "")[:300],
+                })
+            else:
+                continue
+            coverage[canonical] = grounded
 
         s3 = s3 or get_s3()
         head = s3.head_object(
@@ -3140,7 +3219,7 @@ def _create_annual_report_coverage_manifest(
             annual_year = None
         manifest_key = _annual_report_manifest_key(company)
         manifest = {
-            "schema_version": 1,
+            "schema_version": 2,
             "company": company,
             "company_slug": _agent_slug(company),
             "annual_report_s3_key": annual_report_s3_key,
@@ -3156,10 +3235,12 @@ def _create_annual_report_coverage_manifest(
                 provenance.get("source_url")
                 or (head.get("Metadata") or {}).get("source_url")
                 or ""),
+            "annual_report_document_kind": str(
+                result.get("document_kind") or "pdf"),
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "extractor": str(
                 result.get("extractor")
-                or "download-agent-annual-coverage-v1"),
+                or "download-agent-annual-coverage-v2"),
             "manifest_s3_key": manifest_key,
             "headings": headings,
             "coverage": coverage,
@@ -3181,23 +3262,22 @@ def _create_annual_report_coverage_manifest(
         return None
 
 
-def _apply_annual_report_references(result: dict, company: str,
-                                    manifest: dict | None) -> dict:
-    """Replace honest standalone-search misses with typed section references.
-
-    Transport errors, timeouts, WAF blocks and browser retries remain untouched:
-    those paths did not exhaust discovery cleanly and therefore are not eligible
-    for the final-tier Annual Report fallback.
-    """
+def _apply_annual_report_references(
+    result: dict,
+    company: str,
+    manifest: dict | None,
+    *,
+    terminal_browser: bool = False,
+) -> dict:
+    """Replace exhausted standalone misses with typed section references."""
     if not manifest or result.get("error"):
         return result
     coverage = manifest.get("coverage") or {}
     referenced_classes = set()
     updated_results = []
     for item in result.get("results") or []:
-        if (not isinstance(item, dict)
-                or item.get("status") != "failed"
-                or item.get("annual_report_reference_eligible") is not True):
+        if not _annual_reference_item_eligible(
+                item, terminal_browser=terminal_browser):
             updated_results.append(item)
             continue
         report_class = _infer_report_class(item.get("query", ""), company)
@@ -3214,14 +3294,24 @@ def _apply_annual_report_references(result: dict, company: str,
             "referenced_s3_uri": manifest["annual_report_s3_uri"],
             "manifest_s3_key": manifest.get("manifest_s3_key"),
             "heading": match.get("heading"),
+            "heading_id": match.get("heading_id"),
+            "location_type": match.get("location_type"),
+            "location_label": match.get("location_label"),
             "page_start": match.get("page_start"),
             "page_end": match.get("page_end"),
+            "section_index": match.get("section_index"),
+            "anchor": match.get("anchor"),
             "confidence": "high",
             "evidence": match.get("evidence"),
             "reason": (
                 "No standalone document was found after all discovery tiers; "
-                "a verified substantive section exists in the stored Annual "
-                "Report."),
+                + (
+                    "a verified dedicated Annual Report section identifies "
+                    "or links that document."
+                    if match.get("match") == "dedicated_reference" else
+                    "a verified substantive section exists in the stored "
+                    "Annual Report."
+                )),
         }
         referenced.pop("annual_report_reference_eligible", None)
         updated_results.append(referenced)
@@ -3236,6 +3326,296 @@ def _apply_annual_report_references(result: dict, company: str,
         ]
         result["annual_report_references"] = len(referenced_classes)
     return result
+
+
+def _annual_report_key_from_run(run: dict, dynamo=None) -> str:
+    """Resolve the stored Annual Report, including a browser-downloaded one."""
+    company = str(run.get("company") or "")
+    try:
+        diagnostics = json.loads(run.get("diagnostics") or "{}")
+    except Exception:
+        diagnostics = {}
+    for chunk in diagnostics.get("per_chunk", []):
+        for item in chunk.get("results", []):
+            if (not isinstance(item, dict)
+                    or item.get("status") != "downloaded"
+                    or not item.get("s3_key")):
+                continue
+            report_class = str(item.get("report_class") or "") or (
+                _infer_report_class(str(item.get("query") or ""), company))
+            if report_class == "annual report":
+                return str(item["s3_key"])
+
+    # Diagnostics may have been size-trimmed. Fall back to authoritative
+    # provenance for each file already attached to this run.
+    try:
+        downloaded = json.loads(run.get("downloaded") or "[]")
+    except Exception:
+        downloaded = []
+    dynamo = dynamo or get_dynamo()
+    provenance = dynamo.Table(PROVENANCE_TABLE)
+    for item in downloaded:
+        s3_key = str((item or {}).get("s3_key") or "") if isinstance(
+            item, dict) else ""
+        if not s3_key:
+            continue
+        try:
+            record = provenance.get_item(Key={
+                "company": _agent_slug(company),
+                "s3_key": s3_key,
+            }).get("Item") or {}
+        except Exception:
+            continue
+        if record.get("doc_class") == "annual report":
+            return s3_key
+    return ""
+
+
+def _apply_deferred_annual_coverage(run: dict, manifest: dict) -> tuple:
+    """Apply a terminal-browser manifest to diagnostics and failure totals."""
+    company = str(run.get("company") or "")
+    diagnostics = json.loads(run.get("diagnostics") or "{}")
+    failures = json.loads(run.get("failures") or "[]")
+    converted_ids = set()
+    converted_queries = set()
+    converted_total = 0
+    for chunk in diagnostics.get("per_chunk", []):
+        rows = chunk.get("results") or []
+        before = {
+            str(item.get("request_id") or item.get("query") or "")
+            for item in rows
+            if _annual_reference_item_eligible(
+                item, terminal_browser=True)
+        }
+        updated = _apply_annual_report_references(
+            {"results": rows, "failures": []},
+            company,
+            manifest,
+            terminal_browser=True,
+        )
+        chunk["results"] = updated.get("results") or []
+        converted = [
+            item for item in chunk["results"]
+            if isinstance(item, dict)
+            and item.get("status") == "referenced_in_existing_document"
+            and str(item.get("request_id") or item.get("query") or "") in before
+        ]
+        if converted:
+            converted_total += len(converted)
+            chunk["failures"] = max(
+                0, int(chunk.get("failures") or 0) - len(converted))
+        for item in converted:
+            if item.get("request_id"):
+                converted_ids.add(str(item["request_id"]))
+            if item.get("query"):
+                converted_queries.add(str(item["query"]))
+
+    failures = [
+        item for item in failures
+        if not (
+            isinstance(item, dict)
+            and (
+                str(item.get("request_id") or "") in converted_ids
+                or (not item.get("request_id")
+                    and str(item.get("query") or "") in converted_queries)
+            )
+        )
+    ]
+    return diagnostics, failures, converted_total
+
+
+def _claim_pending_annual_coverage(dynamo=None) -> dict | None:
+    """Claim one pending/stale coverage job using a durable DynamoDB lease."""
+    dynamo = dynamo or get_dynamo()
+    table = dynamo.Table(RUNS_TABLE)
+    now_epoch = int(time.time())
+    scan_args = {
+        "FilterExpression": (
+            "(#ac = :pending AND "
+            "(attribute_not_exists(#next) OR #next <= :now)) OR "
+            "(#ac = :running AND #lease < :now)"),
+        "ExpressionAttributeNames": {
+            "#ac": "annual_coverage_status",
+            "#next": "annual_coverage_next_attempt_at",
+            "#lease": "annual_coverage_lease_until",
+        },
+        "ExpressionAttributeValues": {
+            ":pending": "pending", ":running": "running", ":now": now_epoch,
+        },
+    }
+    candidates = []
+    while True:
+        response = table.scan(**scan_args)
+        candidates.extend(response.get("Items", []))
+        last_key = response.get("LastEvaluatedKey")
+        if not last_key:
+            break
+        scan_args["ExclusiveStartKey"] = last_key
+    for candidate in candidates:
+        try:
+            claimed = table.update_item(
+                Key={"run_id": candidate["run_id"]},
+                UpdateExpression=(
+                    "SET #ac = :running, #lease = :lease, "
+                    "annual_coverage_attempts = "
+                    "if_not_exists(annual_coverage_attempts, :zero) + :one, "
+                    "annual_coverage_updated_at = :updated"),
+                ConditionExpression=(
+                    "(#ac = :pending AND "
+                    "(attribute_not_exists(#next) OR #next <= :now)) OR "
+                    "(#ac = :running AND #lease < :now)"),
+                ExpressionAttributeNames={
+                    "#ac": "annual_coverage_status",
+                    "#next": "annual_coverage_next_attempt_at",
+                    "#lease": "annual_coverage_lease_until",
+                },
+                ExpressionAttributeValues={
+                    ":pending": "pending", ":running": "running",
+                    ":now": now_epoch,
+                    ":lease": now_epoch + ANNUAL_COVERAGE_LEASE_SECONDS,
+                    ":zero": 0, ":one": 1,
+                    ":updated": datetime.now(timezone.utc).isoformat(),
+                },
+                ReturnValues="ALL_NEW",
+            )
+            return claimed.get("Attributes") or candidate
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get(
+                    "Code") == "ConditionalCheckFailedException":
+                continue
+            raise
+    return None
+
+
+def _finish_deferred_annual_coverage(
+    run: dict,
+    *,
+    status: str,
+    diagnostics: dict | None = None,
+    failures: list | None = None,
+    error: str = "",
+    retry: bool = False,
+    dynamo=None,
+) -> None:
+    dynamo = dynamo or get_dynamo()
+    table = dynamo.Table(RUNS_TABLE)
+    names = {"#ac": "annual_coverage_status"}
+    values = {
+        ":status": "pending" if retry else status,
+        ":updated": datetime.now(timezone.utc).isoformat(),
+        ":error": str(error or "")[:1000],
+        ":running": "running",
+    }
+    assignments = [
+        "#ac = :status", "annual_coverage_updated_at = :updated",
+        "annual_coverage_error = :error",
+    ]
+    if retry:
+        assignments.append("annual_coverage_next_attempt_at = :next")
+        values[":next"] = int(time.time()) + ANNUAL_COVERAGE_RETRY_SECONDS
+    if diagnostics is not None:
+        assignments.append("#dg = :diagnostics")
+        names["#dg"] = "diagnostics"
+        values[":diagnostics"] = json.dumps(diagnostics)
+    if failures is not None:
+        assignments.append("#fl = :failures")
+        names["#fl"] = "failures"
+        values[":failures"] = json.dumps(failures)
+    update = "SET " + ", ".join(assignments) + " REMOVE annual_coverage_lease_until"
+    if not retry:
+        update += ", annual_coverage_next_attempt_at"
+    table.update_item(
+        Key={"run_id": run["run_id"]},
+        UpdateExpression=update,
+        ConditionExpression="#ac = :running",
+        ExpressionAttributeNames=names,
+        ExpressionAttributeValues=values,
+    )
+
+
+def _process_one_pending_annual_coverage(dynamo=None) -> bool:
+    """Run one durable post-browser coverage job; retry transient failures."""
+    dynamo = dynamo or get_dynamo()
+    run = _claim_pending_annual_coverage(dynamo)
+    if not run:
+        return False
+    attempts = int(run.get("annual_coverage_attempts") or 1)
+    try:
+        diagnostics = json.loads(run.get("diagnostics") or "{}")
+        classes = _annual_report_failed_classes(
+            diagnostics.get("per_chunk", []),
+            str(run.get("company") or ""),
+            terminal_browser=True,
+        )
+        annual_key = _annual_report_key_from_run(run, dynamo)
+        if not annual_key or not classes:
+            reason = (
+                "no stored Annual Report" if not annual_key
+                else "no eligible exhausted standalone misses")
+            _finish_deferred_annual_coverage(
+                run, status="skipped", error=reason, dynamo=dynamo)
+            return True
+        manifest = _create_annual_report_coverage_manifest(
+            str(run.get("company") or ""), annual_key, classes)
+        if manifest is None:
+            retry = attempts < ANNUAL_COVERAGE_MAX_ATTEMPTS
+            _finish_deferred_annual_coverage(
+                run,
+                status="error",
+                error="annual coverage runtime failed closed",
+                retry=retry,
+                dynamo=dynamo,
+            )
+            return True
+        diagnostics, failures, converted = _apply_deferred_annual_coverage(
+            run, manifest)
+        _finish_deferred_annual_coverage(
+            run,
+            status="complete",
+            diagnostics=diagnostics,
+            failures=failures,
+            error="",
+            dynamo=dynamo,
+        )
+        log.info(
+            "[annual-coverage] deferred run=%s converted=%d classes=%d",
+            str(run.get("run_id") or "")[:8], converted, len(classes))
+        return True
+    except Exception as exc:
+        retry = attempts < ANNUAL_COVERAGE_MAX_ATTEMPTS
+        log.exception(
+            "[annual-coverage] deferred run=%s failed attempt=%d: %s",
+            str(run.get("run_id") or "")[:8], attempts, exc)
+        try:
+            _finish_deferred_annual_coverage(
+                run,
+                status="error",
+                error=f"{type(exc).__name__}: {exc}",
+                retry=retry,
+                dynamo=dynamo,
+            )
+        except Exception:
+            log.exception("[annual-coverage] failed to release coverage lease")
+        return True
+
+
+def _annual_coverage_reconciler():
+    """Dedicated loop so a slow model call never blocks run reconciliation."""
+    while True:
+        time.sleep(30)
+        try:
+            _process_one_pending_annual_coverage()
+        except Exception as exc:
+            log.exception("[annual-coverage] background loop failed: %s", exc)
+
+
+_annual_coverage_thread = threading.Thread(
+    target=_annual_coverage_reconciler,
+    daemon=True,
+    name="annual-coverage-reconciler",
+)
+_annual_coverage_thread.start()
+log.info("Annual coverage reconciler started (every 30s)")
 
 
 def _invoke_one_chunk(chunk_index: int, chunk_queries: list, company: str,
@@ -3717,74 +4097,15 @@ def _do_invoke_inner(run_id: str, query_record: dict):
             except Exception as exc:
                 _record_future_error(exc)
 
-    # ── Phase 3: Download Agent coverage once, for clean misses only ───
-    # Successful, WAF-blocked, pending, timed-out and errored searches never
-    # become coverage topics. This keeps independent report discovery off the
-    # analysis critical path and avoids classifying sections nobody needs.
-    if _is_run_killed(run_id):
-        failed_reference_classes = []
-        annual_coverage_manifest = None
-    else:
-        failed_reference_classes = _annual_report_failed_classes(
-            per_chunk_diag, company)
-        annual_coverage_manifest = _create_annual_report_coverage_manifest(
-            company,
-            annual_report_s3_key,
-            failed_reference_classes,
-        )
-
-    converted_request_ids = set()
-    converted_queries = set()
-    if annual_coverage_manifest:
-        for chunk in per_chunk_diag:
-            before_failures = sum(
-                1 for item in (chunk.get("results") or [])
-                if isinstance(item, dict)
-                and item.get("status") == "failed"
-                and item.get("annual_report_reference_eligible") is True
-            )
-            updated = _apply_annual_report_references(
-                {
-                    "error": chunk.get("error"),
-                    "results": chunk.get("results") or [],
-                    "failures": [],
-                },
-                company,
-                annual_coverage_manifest,
-            )
-            chunk["results"] = updated.get("results") or []
-            references = [
-                item for item in chunk["results"]
-                if isinstance(item, dict)
-                and item.get("status") == "referenced_in_existing_document"
-            ]
-            for item in references:
-                if item.get("request_id"):
-                    converted_request_ids.add(str(item["request_id"]))
-                if item.get("query"):
-                    converted_queries.add(str(item["query"]))
-            converted_count = min(before_failures, len(references))
-            if converted_count:
-                chunk["failures"] = max(
-                    0, int(chunk.get("failures") or 0) - converted_count)
-
-        if converted_request_ids or converted_queries:
-            all_failures[:] = [
-                item for item in all_failures
-                if not (
-                    isinstance(item, dict)
-                    and (
-                        (item.get("request_id")
-                         and str(item["request_id"])
-                         in converted_request_ids)
-                        or (not item.get("request_id")
-                            and str(item.get("query") or "")
-                            in converted_queries)
-                    )
-                )
-            ]
-            if not _is_run_killed(run_id):
-                _flush_run_row(final=False)
+    # ── Phase 3: durable asynchronous Annual Report coverage ────────────────
+    # Coverage no longer holds the company run open for another long AgentCore
+    # call. The durable reconciler claims it after standalone/browser discovery
+    # is terminal, retries transient runtime failures, and patches references
+    # back into this run's diagnostics.
+    failed_reference_classes = (
+        [] if _is_run_killed(run_id)
+        else _annual_report_failed_classes(per_chunk_diag, company)
+    )
 
     if _consume_run_kill(run_id):
         log.info("[run %s] killed mid-run — stopping without a final write",
@@ -3834,6 +4155,29 @@ def _do_invoke_inner(run_id: str, query_record: dict):
 
     finished_at = datetime.now(timezone.utc).isoformat()
     _flush_run_row(final=True, status=final_status, error_msg=error_msg)
+
+    if browser_jobs_pending:
+        annual_coverage_status = "waiting_for_browser"
+    elif failed_reference_classes and downloaded:
+        annual_coverage_status = "pending"
+    else:
+        annual_coverage_status = "skipped"
+    try:
+        runs_tbl.update_item(
+            Key={"run_id": run_id},
+            UpdateExpression=(
+                "SET annual_coverage_status = :status, "
+                "annual_coverage_updated_at = :updated, "
+                "annual_coverage_error = :error"),
+            ExpressionAttributeValues={
+                ":status": annual_coverage_status,
+                ":updated": datetime.now(timezone.utc).isoformat(),
+                ":error": "",
+            },
+        )
+    except Exception as ex:
+        log.error("[run %s] annual coverage scheduling failed: %s",
+                  run_id[:8], ex)
 
     try:
         qry_tbl.update_item(

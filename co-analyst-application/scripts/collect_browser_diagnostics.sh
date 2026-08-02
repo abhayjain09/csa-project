@@ -15,6 +15,10 @@ QUERY_ID="${2:-}"
 REGION="${AWS_REGION:-us-east-1}"
 LOOKBACK_HOURS="${LOOKBACK_HOURS:-2}"
 SINCE="${LOG_SINCE:-${LOOKBACK_HOURS}h}"
+RUNS_TABLE="${RUNS_TABLE:-reportiq-runs}"
+QUERIES_TABLE="${QUERIES_TABLE:-reportiq-web-queries}"
+BROWSER_JOBS_TABLE="${BROWSER_JOBS_TABLE:-reportiq-browser-jobs}"
+PROVENANCE_TABLE="${PROVENANCE_TABLE:-edo-coanalyst-report-provenance}"
 
 for command in aws jq tar python3; do
   if ! command -v "$command" >/dev/null 2>&1; then
@@ -54,7 +58,7 @@ if [[ -n "$RUN_ID" ]]; then
   RUN_IDS+=("$RUN_ID")
 else
   capture recent-runs.json aws dynamodb scan \
-    --table-name reportiq-runs \
+    --table-name "$RUNS_TABLE" \
     --filter-expression "#started >= :cutoff OR #updated >= :cutoff OR #queued >= :cutoff" \
     --expression-attribute-names \
       '{"#started":"started_at","#updated":"updated_at","#queued":"queued_at"}' \
@@ -74,7 +78,7 @@ for current_run_id in "${RUN_IDS[@]}"; do
   safe_run_id="$(printf '%s' "$current_run_id" | tr -cd 'A-Za-z0-9._-')"
   run_file="run-${safe_run_id}.json"
   capture "$run_file" aws dynamodb get-item \
-    --table-name reportiq-runs \
+    --table-name "$RUNS_TABLE" \
     --key "{\"run_id\":{\"S\":\"$current_run_id\"}}" \
     --consistent-read --region "$REGION" --output json
 
@@ -85,13 +89,21 @@ for current_run_id in "${RUN_IDS[@]}"; do
   fi
   if [[ -n "$current_query_id" ]]; then
     capture "query-${safe_run_id}.json" aws dynamodb get-item \
-      --table-name reportiq-web-queries \
+      --table-name "$QUERIES_TABLE" \
       --key "{\"query_id\":{\"S\":\"$current_query_id\"}}" \
       --consistent-read --region "$REGION" --output json
   fi
 
   capture "browser-jobs-${safe_run_id}.json" aws dynamodb scan \
-    --table-name reportiq-browser-jobs \
+    --table-name "$BROWSER_JOBS_TABLE" \
+    --filter-expression "#run = :run" \
+    --expression-attribute-names '{"#run":"run_id"}' \
+    --expression-attribute-values \
+      "{\":run\":{\"S\":\"$current_run_id\"}}" \
+    --region "$REGION" --output json
+
+  capture "provenance-${safe_run_id}.json" aws dynamodb scan \
+    --table-name "$PROVENANCE_TABLE" \
     --filter-expression "#run = :run" \
     --expression-attribute-names '{"#run":"run_id"}' \
     --expression-attribute-values \
@@ -149,11 +161,6 @@ for queue in reportiq-browser-jobs reportiq-browser-jobs-dlq; do
       --region "$REGION" --output json
   fi
 done
-
-capture fortis-s3-objects.json aws s3api list-objects-v2 \
-  --bucket edo-coanalyst-report-610639371721 \
-  --prefix fortis-healthcare-limited/ --max-items 300 \
-  --region "$REGION" --output json
 
 capture reportiq-app.log aws logs tail /ecs/reportiq \
   --since "$SINCE" --region "$REGION" --format short

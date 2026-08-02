@@ -1,10 +1,83 @@
 Here's how the EDO Co-Analyst Download Agent works, end to end. This document
 contains historical implementation notes followed by the current behavior. Use
 the handoff snapshot immediately below as the source of truth for a new chat.
-No AWS deployment or live end-to-end validation was performed by Codex during
-this work; see "Deployment status."
+The first persistent-browser version was deployed and its production diagnostic
+archive was analyzed on 2026-08-02. The corrective changes described immediately
+below are local and are not deployed yet; see "Deployment status."
 
-## Persistent browser service update — 2026-08-02 (current worktree)
+## Production browser incident follow-up — 2026-08-02
+
+The archive `csa-browser-diagnostics.ZATFWB.tar.gz` proves the queue/service
+architecture is running, but also explains why the Fortis canary still returned
+only two reports:
+
+- Run `fb20611d-b6f8-4ae9-8bbd-3eefb4b231b1` produced 19 browser jobs; at
+  capture time 15 had ended `blocked_by_source_waf`, one was running, and three
+  were queued. None had downloaded a document.
+- The Annual Report job had an official, useful landing-page seed
+  (`fortishealthcare.com/investors/annual-reports/476`), but weak search hits
+  were visited first. The actual Annual Report is served from an official HTTPS
+  route with no `.pdf` suffix. The worker's `_safe_candidate()` rejected that
+  route before checking its response content, so the browser could never accept
+  it even when the website exposed it.
+- The worker role lacked `s3:ListBucket` on the browser-state bucket. S3 therefore
+  returned AccessDenied rather than a clean missing-key result when loading a
+  domain's first session state.
+- The primary verifier returned a Bedrock `ValidationException`, but the old
+  exception handler discarded its message and rejected every otherwise-valid
+  candidate. Planner/action exceptions were similarly reduced to only an
+  exception class.
+- The single worker is intentionally serial. In this canary, 19 jobs at roughly
+  three-to-five minutes each can take about an hour; two immediate direct
+  downloads while browser jobs remain pending is therefore expected. A warm
+  browser/session may reduce blocking but cannot guarantee that a source WAF
+  will allow the AWS egress IP.
+
+Corrective code now in the worktree:
+
+- Extensionless official and explicitly attested URLs pass the transport gate.
+  Bytes are still fail-closed: a result is stored only after `%PDF` integrity,
+  size/parse, company, class, year, standalone, and high-confidence model checks.
+- Seeds are ranked generically using official domain, requested document-class
+  aliases, year, language, and near-neighbour exclusions. Every ranked
+  Vertex/search/official seed is inspected deterministically before the visual
+  planner spends its action budget. Visible matching links are eligible even
+  when their URL does not end in `.pdf`.
+- The planner prompt is generated from the company, class, year, accepted
+  synonyms, excluded near-neighbours, and current visible page controls. It can
+  use year tabs, archives, accordions, the company's site search, native
+  downloads, PDF viewers, and observed links without inventing URLs or bypassing
+  CAPTCHA/login controls.
+- Verification retries with the configured fallback Bedrock model when the
+  primary model/profile errors or returns invalid JSON. Full bounded model and
+  Playwright error details plus ranked URLs/rejection reasons are now logged.
+- Terraform adds the missing prefix-scoped `s3:ListBucket`, exports the SQS
+  visibility timeout to the worker lease logic, and exposes a verifier-fallback
+  model variable. Existing broad Bedrock inference-profile/foundation-model
+  invoke permissions cover both configured models.
+- All taggable AWS resources continue to inherit the six mandatory provider
+  `default_tags`; browser resources also retain their resource-specific `Name`
+  tags. Policy/configuration resources that AWS does not support tagging are
+  not exceptions to a tag requirement—they have no tag field.
+- `collect_browser_diagnostics.sh` no longer hard-codes a Fortis S3 prefix. It
+  accepts table-name environment overrides and captures browser jobs and
+  provenance for every recent run, making the same archive useful for any
+  company.
+
+Verification of these corrective changes: Python compilation passes, 93 focused
+regression tests pass, `terraform fmt -check` passes, and Terraform 1.15.8
+validates the configuration. A real plan could not be run locally because the
+current default AWS credentials return `InvalidClientTokenId`; the GitHub Actions
+OIDC deployment role must produce and review the authoritative plan.
+
+Deployment required for this follow-up: run
+`.github/workflows/coanalyst-ecs-deploy.yml`. No Download Agent application code
+changed in this corrective pass, so that runtime does not need another rebuild
+if the already-deployed version is the one emitting `browser_seed_urls`. Old
+terminal browser jobs are not automatically reopened; start a fresh Fortis
+canary after the worker service is stable.
+
+## Persistent browser service update — 2026-08-02 (deployed baseline)
 
 - Replaced one `ecs.run_task()` per WAF-blocked report with an encrypted SQS
   queue and one always-running `reportiq-browser-worker` ECS service.
@@ -38,39 +111,35 @@ this work; see "Deployment status."
   temporary Terraform 1.15.8 binary (the system Terraform remains 1.6.5, below
   this project's >=1.10.0 requirement). A real `terraform plan` still must run
   against the deployment backend/account before apply.
-- Not deployed or live-tested. Deployment now requires rebuilding the Download
-  Agent first (new result contract), then rebuilding/applying
-  `co-analyst-application` (queue, service, state bucket, IAM, and worker).
+- This baseline was subsequently deployed. Production diagnostics confirm the
+  queue, desired-count-one ECS service, and worker were running; the corrective
+  worktree changes are documented in the incident follow-up above.
 
 ### Deployment recommendation
 
-**Yes—deploy this as a controlled canary, not as an unreviewed full-company
-production rollout.** The local code and Terraform checks are green, and the
-existing browser fallback cannot recover the observed Fortis WAF failures. The
-remaining uncertainty is operational: real source-site behavior, Bedrock model
-access, approved subnet HTTPS egress, ECS memory, and runtime cost can only be
-confirmed in AWS.
+**Yes—deploy the corrective `co-analyst-application` change, then run a fresh
+controlled canary before another full-company rollout.** The baseline service is
+healthy but cannot accept the observed extensionless Fortis Annual Report route.
+The remaining uncertainty is source-site/WAF behavior after the corrected worker
+reaches the official report hub.
 
 Deployment order:
 
-1. Run a real Terraform plan for both changed deployables and review IAM,
-   replacement, and deletion actions. Do not apply a plan containing unexpected
-   destructive changes.
-2. Build and deploy `agents/download-agent` first so WAF results include the new
-   `browser_seed_urls` contract.
-3. Build and deploy `co-analyst-application`; its apply creates the SQS/DLQ,
-   browser-state bucket, IAM additions, and desired-count-one browser service.
-4. Confirm the browser ECS service is stable, queue polling is active, and no
+1. Run `.github/workflows/coanalyst-ecs-deploy.yml` and review its saved plan.
+   Expect an ECS task-definition/service update and an in-place task-role policy
+   update; do not approve unexpected replacement/deletion actions.
+2. Confirm the browser ECS service is stable, queue polling is active, and no
    AccessDenied/network/model errors appear in
    `/ecs/reportiq-browser-worker`.
-5. Canary one previously failing company (Fortis is the best current case),
-   inspect every downloaded document for correct company/class/year, then run
+3. Start a new Fortis run (terminal jobs from the old run remain terminal),
+   verify the Annual Report first, and inspect the new rejection/model logs.
+4. Inspect every downloaded document for correct company/class/year, then run
    the 23-report batch only after the canary succeeds.
 
-Rollback is to disable `enable_browser_worker`, apply the application stack,
-and redeploy the prior Download Agent image if the result contract must also be
-reverted. Persistent session state expires after seven days; report objects are
-never deleted by that rollback.
+Rollback is to redeploy the prior co-analyst image/task definition, or disable
+`enable_browser_worker` and apply the application stack. Persistent session
+state expires after seven days; report objects are never deleted by that
+rollback.
 
 ### GitHub Actions deployment pipeline audit
 
@@ -87,10 +156,11 @@ compatible with this change without a mandatory Terraform-input change:
 - `enable_browser_worker = true` in `terraform.tfvars` creates the
   desired-count-one service.
 
-Before the first apply, confirm `AWS_DEPLOY_ROLE_ARN` can create/manage SQS,
-S3 bucket configuration/policies, CloudWatch Logs, ECS services/task
-definitions, and IAM role policies. Also confirm Bedrock access to the planner
-and verifier models and HTTPS egress from the configured private subnets.
+For this apply, confirm `AWS_DEPLOY_ROLE_ARN` can update IAM role policies and
+ECS task definitions/services. The runtime task role must receive the new
+prefix-scoped browser-state `s3:ListBucket` statement. Also confirm Bedrock
+access to the primary/fallback verifier and planner models and HTTPS egress from
+the configured private subnets.
 
 Recommended workflow hardening (not yet applied because the workflow is outside
 the two directories authorized for edits): add Terraform format/validate checks,

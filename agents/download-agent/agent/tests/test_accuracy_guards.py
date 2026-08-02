@@ -96,7 +96,9 @@ def _load_worker_validation_helpers():
     wanted = {
         "_normalize_text", "_company_matches", "_class_matches",
         "_candidate_year", "_language_score", "_candidate_preference_key",
-        "_has_preferred_unresolved",
+        "_has_preferred_unresolved", "_same_official_domain",
+        "_class_terms", "_url_relevance_key", "_rank_urls",
+        "_document_links", "_safe_candidate",
     }
     nodes = []
     for item in tree.body:
@@ -123,6 +125,7 @@ def _load_worker_validation_helpers():
             "inc", "incorporated", "corp", "corporation", "company", "co",
             "limited", "ltd", "plc", "llc", "holdings", "group",
         },
+        "_safe_https_url": lambda url: url.startswith("https://"),
     }
     exec(compile(module, str(path), "exec"), namespace)
     return namespace
@@ -231,6 +234,26 @@ def _load_worker_terminal_helper(jobs_table):
     }
     exec(compile(module, str(path), "exec"), namespace)
     return namespace["_all_run_jobs_terminal"]
+
+
+def _load_worker_verifier(converse_fn):
+    path = REPO_ROOT / "co-analyst-application/app/backend/browser_worker.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    node = next(
+        item for item in tree.body
+        if isinstance(item, ast.FunctionDef)
+        and item.name == "_llm_document_match"
+    )
+    module = ast.Module(body=[node], type_ignores=[])
+    ast.fix_missing_locations(module)
+    namespace = {
+        "VERIFIER_MODEL_ID": "primary-model",
+        "VERIFIER_FALLBACK_MODEL_ID": "fallback-model",
+        "_converse_text": converse_fn,
+        "_parse_json_object": json.loads,
+    }
+    exec(compile(module, str(path), "exec"), namespace)
+    return namespace["_llm_document_match"]
 
 
 def _load_current_language_helpers():
@@ -611,6 +634,71 @@ class ResultMappingTests(unittest.TestCase):
 
 
 class BrowserWorkerValidationTests(unittest.TestCase):
+    def test_verifier_falls_back_when_primary_model_rejects_request(self):
+        calls = []
+
+        def converse(model_id, prompt, max_tokens):
+            calls.append(model_id)
+            if model_id == "primary-model":
+                raise RuntimeError("validation error")
+            return json.dumps({
+                "topic_match": True,
+                "company_match": True,
+                "year_match": True,
+                "standalone_match": True,
+                "confidence": "high",
+                "reason": "verified",
+            })
+
+        verify = _load_worker_verifier(converse)
+        ok, reason = verify({
+            "company": "Example Inc",
+            "report_class": "annual report",
+            "year": "2025",
+            "standalone_only": True,
+        }, "https://example.com/report", "Example Inc Annual Report 2025")
+        self.assertTrue(ok)
+        self.assertEqual(reason, "verified")
+        self.assertEqual(calls, ["primary-model", "fallback-model"])
+
+    def test_extensionless_official_document_route_is_allowed(self):
+        helpers = _load_worker_validation_helpers()
+        route = "https://example.com/investor/annual-report/fy-2025-26"
+        self.assertTrue(helpers["_safe_candidate"](
+            route, "example.com", set()))
+        self.assertFalse(helpers["_safe_candidate"](
+            "https://untrusted.example.net/file", "example.com", set()))
+        self.assertTrue(helpers["_safe_candidate"](
+            "https://cdn.example.net/file", "example.com",
+            {"https://cdn.example.net/file"}))
+
+    def test_official_class_hub_outranks_noisy_search_result(self):
+        helpers = _load_worker_validation_helpers()
+        job = {
+            "report_class": "annual report",
+            "official_domain": "example.com",
+            "year": "2025",
+        }
+        noisy = "https://news.example.net/company-financial-results-2025"
+        official = "https://example.com/investors/annual-reports"
+        self.assertEqual(
+            helpers["_rank_urls"](job, [noisy, official])[0], official)
+
+    def test_extensionless_visible_report_link_is_discovered(self):
+        helpers = _load_worker_validation_helpers()
+        route = "https://example.com/investor/annual-report/fy-2025-26"
+        observation = {"items": [{
+            "kind": "link",
+            "text": "Annual Report FY 2025-26",
+            "label": "",
+            "href": route,
+        }]}
+        links = helpers["_document_links"](
+            observation,
+            {"report_class": "annual report", "official_domain": "example.com"},
+        )
+        self.assertEqual(links, [route])
+
     def test_sp_global_vendor_code_matches_company_and_specific_class(self):
         helpers = _load_worker_validation_helpers()
         text = (
@@ -651,6 +739,8 @@ class BrowserWorkerValidationTests(unittest.TestCase):
         self.assertNotIn("ecs.run_task(", app_source)
         self.assertIn("sqs.send_message(", app_source)
         self.assertIn('resource "aws_ecs_service" "browser_worker"', terraform_source)
+        self.assertIn('sid       = "BrowserSessionStateList"', terraform_source)
+        self.assertIn('actions   = ["s3:ListBucket"]', terraform_source)
 
     def test_latest_fiscal_range_url_outranks_older_report(self):
         helpers = _load_worker_validation_helpers()

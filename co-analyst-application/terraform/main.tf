@@ -33,26 +33,28 @@ locals {
   }
 
   browser_worker_env = {
-    AWS_REGION                             = var.region
-    QUERIES_TABLE                          = var.queries_table
-    PROVENANCE_TABLE                       = var.provenance_table
-    RUNS_TABLE                             = var.runs_table
-    REPORTS_BUCKET                         = var.reports_bucket
-    BROWSER_JOBS_TABLE                     = aws_dynamodb_table.browser_jobs.name
-    BROWSER_QUEUE_URL                      = aws_sqs_queue.browser_jobs.url
-    BROWSER_STATE_BUCKET                   = aws_s3_bucket.browser_state.id
-    CHROMIUM_PATH                          = "/usr/bin/chromium"
-    BROWSER_WORKER_MAX_ATTEMPTS            = tostring(var.browser_worker_max_attempts)
-    BROWSER_WORKER_RETRY_DELAY_SECONDS     = tostring(var.browser_worker_retry_delay_seconds)
-    BROWSER_WORKER_NAV_TIMEOUT_MS          = tostring(var.browser_worker_nav_timeout_ms)
-    BROWSER_WORKER_MAX_DOCUMENT_BYTES      = tostring(var.browser_worker_max_document_bytes)
-    BROWSER_WORKER_MAX_AGENT_STEPS         = tostring(var.browser_worker_max_agent_steps)
-    BROWSER_WORKER_MAX_CONTEXTS            = tostring(var.browser_worker_max_contexts)
-    BROWSER_WORKER_MAX_JOBS_PER_PROCESS    = tostring(var.browser_worker_max_jobs_per_process)
-    BROWSER_WORKER_CONTEXT_MAX_AGE_SECONDS = tostring(var.browser_worker_context_max_age_seconds)
-    BROWSER_WORKER_PLANNER_MODEL_ID        = var.browser_worker_planner_model_id
-    BROWSER_WORKER_VERIFIER_MODEL_ID       = var.browser_worker_verifier_model_id
-    BROWSER_WORKER_STATE_PREFIX            = var.browser_worker_state_prefix
+    AWS_REGION                                  = var.region
+    QUERIES_TABLE                               = var.queries_table
+    PROVENANCE_TABLE                            = var.provenance_table
+    RUNS_TABLE                                  = var.runs_table
+    REPORTS_BUCKET                              = var.reports_bucket
+    BROWSER_JOBS_TABLE                          = aws_dynamodb_table.browser_jobs.name
+    BROWSER_QUEUE_URL                           = aws_sqs_queue.browser_jobs.url
+    BROWSER_STATE_BUCKET                        = aws_s3_bucket.browser_state.id
+    CHROMIUM_PATH                               = "/usr/bin/chromium"
+    BROWSER_WORKER_MAX_ATTEMPTS                 = tostring(var.browser_worker_max_attempts)
+    BROWSER_WORKER_RETRY_DELAY_SECONDS          = tostring(var.browser_worker_retry_delay_seconds)
+    BROWSER_WORKER_NAV_TIMEOUT_MS               = tostring(var.browser_worker_nav_timeout_ms)
+    BROWSER_WORKER_MAX_DOCUMENT_BYTES           = tostring(var.browser_worker_max_document_bytes)
+    BROWSER_WORKER_MAX_AGENT_STEPS              = tostring(var.browser_worker_max_agent_steps)
+    BROWSER_WORKER_MAX_CONTEXTS                 = tostring(var.browser_worker_max_contexts)
+    BROWSER_WORKER_MAX_JOBS_PER_PROCESS         = tostring(var.browser_worker_max_jobs_per_process)
+    BROWSER_WORKER_CONTEXT_MAX_AGE_SECONDS      = tostring(var.browser_worker_context_max_age_seconds)
+    BROWSER_WORKER_VISIBILITY_EXTENSION_SECONDS = tostring(var.browser_worker_visibility_timeout_seconds)
+    BROWSER_WORKER_PLANNER_MODEL_ID             = var.browser_worker_planner_model_id
+    BROWSER_WORKER_VERIFIER_MODEL_ID            = var.browser_worker_verifier_model_id
+    BROWSER_WORKER_VERIFIER_FALLBACK_MODEL_ID   = var.browser_worker_verifier_fallback_model_id
+    BROWSER_WORKER_STATE_PREFIX                 = var.browser_worker_state_prefix
   }
 }
 
@@ -273,6 +275,22 @@ data "aws_iam_policy_document" "task_perms" {
       "s3:DeleteObject",
     ]
     resources = ["${aws_s3_bucket.browser_state.arn}/*"]
+  }
+
+  statement {
+    sid       = "BrowserSessionStateList"
+    effect    = "Allow"
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_bucket.browser_state.arn]
+
+    condition {
+      test     = "StringLike"
+      variable = "s3:prefix"
+      values = [
+        local.browser_worker_env.BROWSER_WORKER_STATE_PREFIX,
+        "${local.browser_worker_env.BROWSER_WORKER_STATE_PREFIX}/*",
+      ]
+    }
   }
 
   statement {

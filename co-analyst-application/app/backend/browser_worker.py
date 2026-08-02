@@ -63,6 +63,8 @@ PLANNER_MODEL_ID = os.environ.get(
     "BROWSER_WORKER_PLANNER_MODEL_ID", "us.amazon.nova-2-lite-v1:0").strip()
 VERIFIER_MODEL_ID = os.environ.get(
     "BROWSER_WORKER_VERIFIER_MODEL_ID", "us.anthropic.claude-sonnet-5").strip()
+VERIFIER_FALLBACK_MODEL_ID = os.environ.get(
+    "BROWSER_WORKER_VERIFIER_FALLBACK_MODEL_ID", PLANNER_MODEL_ID).strip()
 VISIBILITY_EXTENSION_SECONDS = max(300, int(os.environ.get(
     "BROWSER_WORKER_VISIBILITY_EXTENSION_SECONDS", "1800")))
 
@@ -247,11 +249,53 @@ def _safe_candidate(url: str, official_domain: str,
     if not _safe_https_url(url):
         return False
     parsed = urlparse(url)
-    if not parsed.path.lower().endswith(".pdf"):
-        return False
     if _same_official_domain(parsed.hostname or "", official_domain):
         return True
     return url in (attested_urls or set())
+
+
+def _class_terms(report_class: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    canonical = _normalize_text(report_class)
+    accepted = next(
+        (values for key, values in _CLASS_ALIASES.items()
+         if _normalize_text(key) == canonical), ())
+    rejected = next(
+        (values for key, values in _NEAR_NEIGHBOUR_REJECTS.items()
+         if _normalize_text(key) == canonical), ())
+    return (
+        tuple(_normalize_text(value) for value in accepted),
+        tuple(_normalize_text(value) for value in rejected),
+    )
+
+
+def _url_relevance_key(job: dict, url: str, label: str = "") -> tuple[int, int, int]:
+    """Rank official report hubs and exact document links ahead of noisy search hits."""
+    parsed = urlparse(url or "")
+    haystack = _normalize_text(
+        " ".join((label, unquote(parsed.path), unquote(parsed.query))))
+    accepted, rejected = _class_terms(job.get("report_class", ""))
+    canonical = _normalize_text(job.get("report_class", ""))
+    score = 0
+    if _same_official_domain(parsed.hostname or "", job.get("official_domain", "")):
+        score += 40
+    if canonical and canonical in haystack:
+        score += 70
+    score += 35 * sum(1 for term in accepted if term and term in haystack)
+    score -= 140 * sum(1 for term in rejected if term and term in haystack)
+    if any(term in haystack for term in ("investor", "reports", "governance")):
+        score += 8
+    if (parsed.path.lower().endswith(".pdf") or "download" in haystack
+            or " pdf" in f" {haystack}"):
+        score += 10
+    requested_year = str(job.get("year") or "").strip()
+    if requested_year and requested_year in haystack:
+        score += 30
+    return score, _language_score(url), _candidate_year(url)
+
+
+def _rank_urls(job: dict, urls: list[str]) -> list[str]:
+    unique = list(dict.fromkeys(urls))
+    return sorted(unique, key=lambda url: _url_relevance_key(job, url), reverse=True)
 
 
 def _safe_navigation(url: str, official_domain: str,
@@ -386,13 +430,27 @@ def _llm_document_match(job: dict, url: str, text: str) -> tuple[bool, str]:
         "mentions, local facility/subsidiary documents for a group-wide "
         "request, and a section inside a larger report when standalone is "
         "required. An undated request does not require a specific year.\n"
-        "Extracted text:\n" + text[:45_000]
+        "Extracted text:\n" + text[:30_000]
     )
-    try:
-        decision = _parse_json_object(_converse_text(
-            VERIFIER_MODEL_ID, prompt, max_tokens=450))
-    except Exception as exc:
-        return False, f"verification model failed: {type(exc).__name__}"
+    decision = {}
+    errors = []
+    model_ids = list(dict.fromkeys(filter(None, (
+        VERIFIER_MODEL_ID, VERIFIER_FALLBACK_MODEL_ID))))
+    for model_id in model_ids:
+        try:
+            raw = _converse_text(model_id, prompt, max_tokens=450)
+            decision = _parse_json_object(raw)
+            if decision:
+                if model_id != VERIFIER_MODEL_ID:
+                    print(f"[browser-verifier] fallback model succeeded: {model_id}")
+                break
+            errors.append(f"{model_id}: invalid JSON response")
+        except Exception as exc:
+            detail = str(exc).replace("\n", " ")[:700]
+            errors.append(f"{model_id}: {type(exc).__name__}: {detail}")
+            print(f"[browser-verifier] model failed: {errors[-1]}")
+    if not decision:
+        return False, ("verification model failed: " + "; ".join(errors))[:500]
     ok = bool(
         decision.get("topic_match") is True
         and decision.get("company_match") is True
@@ -621,20 +679,36 @@ def _page_observation(page) -> dict:
     return data
 
 
-def _document_links(observation: dict) -> list[str]:
-    out = []
+def _document_links(observation: dict, job: dict) -> list[str]:
+    scored = []
+    accepted, _ = _class_terms(job.get("report_class", ""))
     for item in observation.get("items", []):
         url = item.get("href", "")
-        text = (item.get("text", "") + " " + url).lower()
-        if url and (urlparse(url).path.lower().endswith(".pdf")
-                    or "download" in text or " pdf" in text):
-            if url not in out:
-                out.append(url)
-    return out
+        label = " ".join((item.get("text", ""), item.get("label", ""), url))
+        normalized = _normalize_text(label)
+        documentish = bool(
+            url and (
+                urlparse(url).path.lower().endswith(".pdf")
+                or item.get("kind") == "embedded-document"
+                or "download" in normalized
+                or " pdf" in f" {normalized}"
+                or any(term and term in normalized for term in accepted)
+            )
+        )
+        if documentish:
+            scored.append((_url_relevance_key(job, url, label), url))
+    scored.sort(key=lambda item: item[0], reverse=True)
+    return list(dict.fromkeys(url for _, url in scored))[:24]
 
 
 def _planner_action(job: dict, observation: dict, seed_urls: list[str],
                     visited: set[str], step: int, page) -> dict:
+    aliases, rejected = _class_terms(job.get("report_class", ""))
+    search_text = " ".join(filter(None, (
+        str(job.get("company") or ""),
+        str(job.get("report_class") or ""),
+        str(job.get("year") or ""),
+    )))
     prompt = (
         "You control a bounded Playwright browser used only to locate one "
         "public official corporate document. Do not bypass CAPTCHA, login, "
@@ -650,13 +724,18 @@ def _planner_action(job: dict, observation: dict, seed_urls: list[str],
         '{"action":"finish","reason":"..."}.\n'
         "Never invent a URL. A goto URL must be one of the supplied seeds or "
         "an exact href in current items. Do not select a different company or "
-        "a near-neighbour document class.\n"
+        "a near-neighbour document class. First prefer visible links whose "
+        "label matches the requested class/year; use a year tab, archive, or "
+        "accordion when visible; then use the company's own search box. "
+        "Links may serve a PDF without a .pdf filename, so judge visible "
+        "labels rather than filename suffixes.\n"
         f"Company: {job.get('company', '')}\n"
         f"Official domain: {job.get('official_domain', '')}\n"
         f"Target: {job.get('report_class', '')}\n"
         f"Year: {job.get('year') or 'latest'}\n"
-        f"Suggested site-search text: {job.get('company', '')} "
-        f"{job.get('report_class', '')}\n"
+        f"Accepted target phrases: {json.dumps(aliases)}\n"
+        f"Excluded near-neighbour phrases: {json.dumps(rejected)}\n"
+        f"Suggested site-search text: {search_text}\n"
         f"Seeds: {json.dumps(seed_urls[:20])}\n"
         f"Visited: {json.dumps(list(visited)[-20:])}\n"
         f"Step: {step}/{MAX_AGENT_STEPS}\n"
@@ -761,7 +840,8 @@ def _try_url(context, page, job: dict, url: str, referer: str) -> tuple:
     try:
         status, _, body, marker = _response_body(context, page, url, referer)
     except Exception as exc:
-        return None, f"navigation failed: {type(exc).__name__}", False
+        return None, (
+            f"navigation failed: {type(exc).__name__}: {exc}")[:500], False
     if status in {401, 403, 406, 429} or marker:
         return None, marker or f"HTTP {status}", True
     if not body:
@@ -826,13 +906,14 @@ def _render_current_page(page, job: dict) -> tuple | None:
 def _agent_navigate(context, page, job: dict, seed_urls: list[str],
                     candidate_urls: list[str], heartbeat) -> tuple:
     domain = job.get("official_domain", "")
-    attested_urls = set(candidate_urls)
+    attested_urls = set(candidate_urls) | set(seed_urls)
     attested_hosts = {
         (urlparse(url).hostname or "").lower()
         for url in seed_urls + candidate_urls if _safe_https_url(url)
     }
     root = f"https://{domain}/"
     visited: set[str] = set()
+    attempted_seeds: set[str] = set()
     network_docs: list[str] = []
 
     def on_response(response):
@@ -846,7 +927,7 @@ def _agent_navigate(context, page, job: dict, seed_urls: list[str],
             pass
 
     page.on("response", on_response)
-    start_urls = list(dict.fromkeys(seed_urls + [root]))
+    start_urls = _rank_urls(job, seed_urls + [root])
     if not start_urls:
         start_urls = [root]
     blocked = False
@@ -854,32 +935,51 @@ def _agent_navigate(context, page, job: dict, seed_urls: list[str],
     rendered_attempted: set[str] = set()
 
     initial = start_urls[0]
+    attempted_seeds.add(initial)
     try:
         page.goto(initial, wait_until="domcontentloaded", timeout=NAV_TIMEOUT_MS)
         page.wait_for_timeout(1200)
         _dismiss_cookie_modals(page)
     except Exception as exc:
-        last_reason = f"initial seed navigation failed: {type(exc).__name__}"
+        last_reason = (
+            f"initial seed navigation failed: {type(exc).__name__}: {exc}")[:500]
+        print(f"[browser-agent] {last_reason}; url={initial}")
 
-    for step in range(1, MAX_AGENT_STEPS + 1):
+    # First inspect every ranked search/Vertex/official seed without spending
+    # a model call. Only then give the visual planner its full action budget.
+    total_cycles = len(start_urls) + MAX_AGENT_STEPS - 1
+    for cycle in range(1, total_cycles + 1):
         heartbeat()
         if page.url in {"about:blank", ""}:
-            next_seed = next((url for url in start_urls if url not in visited), root)
+            next_seed = next(
+                (url for url in start_urls if url not in attempted_seeds), "")
+            if not next_seed:
+                last_reason = "all ranked browser seeds failed before rendering"
+                break
+            attempted_seeds.add(next_seed)
             try:
                 page.goto(next_seed, wait_until="domcontentloaded", timeout=NAV_TIMEOUT_MS)
                 page.wait_for_timeout(1200)
                 _dismiss_cookie_modals(page)
             except Exception as exc:
-                last_reason = f"seed navigation failed: {type(exc).__name__}"
+                last_reason = (
+                    f"seed navigation failed: {type(exc).__name__}: {exc}")[:500]
+                print(f"[browser-agent] {last_reason}; url={next_seed}")
         observation = _page_observation(page)
         visited.add(page.url)
         marker = _block_marker(observation.get("text", ""))
         blocked = blocked or bool(marker)
 
-        candidates = list(dict.fromkeys(network_docs + _document_links(observation)))
+        observed_documents = _document_links(observation, job)
+        candidates = _rank_urls(
+            job, list(dict.fromkeys(network_docs + observed_documents)))
         network_docs.clear()
         for url in candidates[:16]:
-            if not _safe_candidate(url, domain, attested_urls | {url}):
+            page_host = (urlparse(observation.get("url", "")).hostname or "")
+            observed_on_official_page = _same_official_domain(page_host, domain)
+            allowed_urls = attested_urls | (
+                set(candidates) if observed_on_official_page else set())
+            if not _safe_candidate(url, domain, allowed_urls):
                 continue
             found, reason, was_blocked = _try_url(
                 context, page, job, url, page.url or root)
@@ -887,6 +987,9 @@ def _agent_navigate(context, page, job: dict, seed_urls: list[str],
             last_reason = reason
             if found:
                 return found[0], found[1], "application/pdf", blocked
+            print(
+                f"[browser-agent] document rejected url={url} "
+                f"blocked={was_blocked} reason={reason}")
 
         if page.url not in rendered_attempted:
             rendered_attempted.add(page.url)
@@ -894,8 +997,29 @@ def _agent_navigate(context, page, job: dict, seed_urls: list[str],
             if rendered:
                 return rendered[0], rendered[1], "application/pdf", blocked
 
-        action = _planner_action(job, observation, start_urls, visited, step, page)
+        next_seed = next(
+            (url for url in start_urls if url not in attempted_seeds), "")
+        if next_seed:
+            attempted_seeds.add(next_seed)
+            try:
+                page.goto(
+                    next_seed, wait_until="domcontentloaded",
+                    timeout=NAV_TIMEOUT_MS)
+                page.wait_for_timeout(1200)
+                _dismiss_cookie_modals(page)
+            except Exception as exc:
+                last_reason = (
+                    f"seed navigation failed: {type(exc).__name__}: {exc}")[:500]
+                print(f"[browser-agent] {last_reason}; url={next_seed}")
+            continue
+
+        planner_step = max(1, cycle - len(start_urls) + 1)
+        action = _planner_action(
+            job, observation, start_urls, visited, planner_step, page)
         kind = str(action.get("action") or "finish").lower()
+        print(
+            f"[browser-agent] step={planner_step}/{MAX_AGENT_STEPS} action={kind} "
+            f"url={page.url} target={str(action)[:500]}")
         try:
             if kind == "goto":
                 target = str(action.get("url") or "")
@@ -934,8 +1058,10 @@ def _agent_navigate(context, page, job: dict, seed_urls: list[str],
             elif kind == "wait":
                 page.wait_for_timeout(1800)
             else:
-                next_seed = next((url for url in start_urls if url not in visited), "")
+                next_seed = next(
+                    (url for url in start_urls if url not in attempted_seeds), "")
                 if next_seed:
+                    attempted_seeds.add(next_seed)
                     page.goto(next_seed, wait_until="domcontentloaded", timeout=NAV_TIMEOUT_MS)
                     page.wait_for_timeout(1200)
                     _dismiss_cookie_modals(page)
@@ -943,7 +1069,9 @@ def _agent_navigate(context, page, job: dict, seed_urls: list[str],
                     last_reason = str(action.get("reason") or last_reason)[:500]
                     break
         except Exception as exc:
-            last_reason = f"browser action {kind} failed: {type(exc).__name__}"
+            last_reason = (
+                f"browser action {kind} failed: {type(exc).__name__}: {exc}")[:500]
+            print(f"[browser-agent] {last_reason}; url={page.url}")
     return None, None, last_reason, blocked
 
 
@@ -970,7 +1098,13 @@ def _download(job: dict, pool: BrowserContextPool, heartbeat) -> tuple:
     seed_urls = [url for url in seed_urls if _safe_https_url(url)]
     if not candidates and not seed_urls:
         raise ValueError("job has no safe candidate or browser seed URLs")
-    candidates.sort(key=_candidate_preference_key, reverse=True)
+    candidates = _rank_urls(job, candidates)
+    seed_urls = _rank_urls(job, seed_urls)
+    print(
+        f"[browser-worker] job={job.get('job_id', '')} "
+        f"company={job.get('company', '')!r} class={job.get('report_class', '')!r} "
+        f"year={job.get('year') or 'latest'} candidates={json.dumps(candidates)} "
+        f"ranked_seeds={json.dumps(seed_urls)}")
     context = pool.get(domain)
     root = f"https://{domain}/"
     last_reason = "no candidate returned a verified PDF"
@@ -999,6 +1133,11 @@ def _download(job: dict, pool: BrowserContextPool, heartbeat) -> tuple:
                     verified_candidates.append(found)
                 elif was_blocked or reason.startswith("empty response"):
                     unresolved_candidates.append(url)
+                if not found:
+                    print(
+                        f"[browser-worker] exact candidate rejected "
+                        f"attempt={attempt}/{MAX_ATTEMPTS} url={url} "
+                        f"blocked={was_blocked} reason={reason}")
             if verified_candidates:
                 verified_candidates.sort(
                     key=lambda item: _candidate_preference_key(item[0]),

@@ -189,6 +189,12 @@ variable "browser_worker_verifier_model_id" {
   default     = "us.anthropic.claude-sonnet-5"
 }
 
+variable "browser_worker_verifier_fallback_model_id" {
+  description = "Bedrock fallback verifier used when the primary model/profile rejects a request"
+  type        = string
+  default     = "us.amazon.nova-2-lite-v1:0"
+}
+
 variable "browser_worker_state_prefix" {
   description = "Encrypted S3 prefix for per-domain Playwright cookie and local-storage state"
   type        = string

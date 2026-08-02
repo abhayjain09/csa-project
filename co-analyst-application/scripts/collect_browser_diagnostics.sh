@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Collect read-only diagnostics for recent CoAnalyst download runs or one ID.
 #
-# Usage (default AWS credential chain, every run from the last hour):
+# Usage (default AWS credential chain, every run from the last 2.5 hours):
 #   ./collect_browser_diagnostics.sh
 #
 # Optional:
@@ -13,7 +13,7 @@ set -u
 RUN_ID="${1:-}"
 QUERY_ID="${2:-}"
 REGION="${AWS_REGION:-us-east-1}"
-LOOKBACK_HOURS="${LOOKBACK_HOURS:-1}"
+LOOKBACK_HOURS="${LOOKBACK_HOURS:-2.5}"
 SINCE="${LOG_SINCE:-${LOOKBACK_HOURS}h}"
 RUNS_TABLE="${RUNS_TABLE:-reportiq-runs}"
 QUERIES_TABLE="${QUERIES_TABLE:-reportiq-web-queries}"

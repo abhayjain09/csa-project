@@ -1,0 +1,706 @@
+[class-parity] OK — 23 document classes aligned across _DOC_CLASS_RULES and report_specs.REPORT_SPECS
+WARNING:  Invalid HTTP request received.
+[identity] Vertex hint for 'Fortis Healthcare Limited': ticker=None cik=None domain=None sources=0 (untrusted until SEC validation)
+[llm-querygen] generated 7 variants for 'Fortis Healthcare Limited annual report site:fortishealthcare.com'
+[llm-querygen] rejected 1 variant(s) that invented or dropped a year
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[find][query] 'Fortis Healthcare Limited annual report site:fortishealthcare.com' -> 1 hits via=vertex-grounding
+[find][query] 'Fortis Healthcare Limited annual report latest site:fortishealthcare.com' -> 2 hits via=vertex-grounding
+[find][query] 'Fortis Healthcare Limited annual report 2026 site:fortishealthcare.com' -> 2 hits via=vertex-grounding
+[find][query] 'Fortis Healthcare Limited annual report FY2026 site:fortishealthcare.com' -> 1 hits via=vertex-grounding
+[find][query] 'Fortis Healthcare Limited annual report 2025 site:fortishealthcare.com' -> 3 hits via=vertex-grounding
+[find][query] 'Fortis Healthcare Limited annual report FY2025 site:fortishealthcare.com' -> 2 hits via=vertex-grounding
+[find][query] 'Fortis Healthcare Limited annual report updated 2026 site:fortishealthcare.com' -> 1 hits via=vertex-grounding
+[find][query] 'Fortis Healthcare Limited annual report filetype:pdf site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare integrated annual report site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare annual report and accounts site:fortishealthcare.com' -> 2 hits via=vertex-grounding
+[find][query] 'investors.fortishealthcare.com annual report filetype:pdf site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare BRSR annual report site:fortishealthcare.com' -> 2 hits via=vertex-grounding
+[find][query] 'Fortis Healthcare Limited annual report investor relations site:fortishealthcare.com' -> 2 hits via=vertex-grounding
+[find][query] 'static.fortishealthcare.com annual report pdf site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find] dropped 1 junk-host candidate(s) (app store / media / social / aggregator subdomains — generic, not company-specific)
+[find] domain_mode=hard(on_domain_hits_found,known_cdn_kept=0) | HEAD pre-filtering 12 candidates for: Fortis Healthcare Limited annual report site:fortishealthcare.com
+[find] 12/12 passed HEAD pre-filter
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2025-05/Newspaper%20Publication%20(English%20&%20Punjabi)%20Audited%20Financial%20Results%20for%20the%20year%20ended%20March%2031,%202025%20-%20May%2021,%202025.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2026-06/BMW%20Annual%20Report%20%202025.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2024-06/BMW%20Annual%20Return%202023_0.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2026-07/BMW%20Annual%20Report-FY%20Jan%2025%20To%20Dec%2025(Form%20IV).pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2026-06/FHML%20Financials%20FY%202026.pdf): HTTP Error 403: Forbidden
+[llm] selection JSON parse failed (attempt 1/2): Expecting value: line 1 column 1 (char 0)
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=No candidate is the actual full Annual Report document
+[sitemap] fortishealthcare.com: 9579 urls -> 1090 candidates -> top 40
+[sitemap] inspected 12 landing page(s), discovered 8 linked document(s); 8 total document candidate(s)
+[deep-crawl] fetch failed (https://fortishealthcare.com/): The read operation timed out
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2025-05/Newspaper%20Publication%20(English%20&%20Punjabi)%20Audited%20Financial%20Results%20for%20the%20year%20ended%20March%2031,%202025%20-%20May%2021,%202025.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2026-06/BMW%20Annual%20Report%20%202025.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2024-06/BMW%20Annual%20Return%202023_0.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2026-07/BMW%20Annual%20Report-FY%20Jan%2025%20To%20Dec%2025(Form%20IV).pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2026-06/FHML%20Financials%20FY%202026.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2026-02/Annual%20Report%202025_0.pdf): 403
+[browser] hover-reveal: harvested grew to 0 links after menu hover
+[browser] harvested 0 links: 0 doc-file candidates, 0 download-labeled controls (verify_budget=10, click_budget=10)
+[browser][vision] model found no download control
+[browser] https://www.fortishealthcare.com/investor/disclosure%20under%20reg.%2030%20of%20sebi%20(lodr)/fhl%20se%20intimation%20for%20letter%20to%20shareholders%20providing%20the%20weblink%20of%20annual%20report%20of%20financial%20year%202025%2026: no document resolved through any tier
+[registry] skipped 'annual report': company identity is not validated and no authoritative company number was supplied
+[result] BLOCKED BY SOURCE WAF: 'Fortis Healthcare Limited annual report site:fortishealthcare.com' (6 exact candidates)
+{
+    "timestamp": "2026-08-01T21:03:28.945Z",
+    "level": "INFO",
+    "message": "Invocation completed successfully (172.239s)",
+    "logger": "bedrock_agentcore.app",
+    "requestId": "931aeee2-bcca-493a-b00f-d5bc6f57a88b",
+    "sessionId": "c93b2fad-6e88-4ec8-941f-f107f1786ab5"
+}
+
+[class-parity] OK — 23 document classes aligned across _DOC_CLASS_RULES and report_specs.REPORT_SPECS
+WARNING:  Invalid HTTP request received.
+[identity] Vertex hint for 'Fortis Healthcare Limited': ticker=None cik=None domain=None sources=0 (untrusted until SEC validation)
+[llm-querygen] generated 8 variants for 'Fortis Healthcare Limited discrimination and harassment policy site:fortishealthcare.com'
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[find][query] 'Fortis Healthcare Limited discrimination and harassment policy site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited discrimination and harassment policy latest site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited discrimination and harassment policy 2026 site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited discrimination and harassment policy FY2026 site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited discrimination and harassment policy 2025 site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited discrimination and harassment policy FY2025 site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited discrimination and harassment policy updated 2026 site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited discrimination and harassment policy filetype:pdf site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare POSH policy prevention of sexual harassment site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare anti-discrimination policy site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare equal opportunity policy filetype:pdf site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare diversity and inclusion policy site:fortishealthcare.com' -> 1 hits via=vertex-grounding
+[find][query] 'Fortis Healthcare Limited POSH policy filetype:pdf site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare code of conduct anti-harassment policy site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare BRSR sustainability report discrimination harassment policy site:fortishealthcare.com' -> 2 hits via=vertex-grounding
+[find] dropped 2 junk-host candidate(s) (app store / media / social / aggregator subdomains — generic, not company-specific)
+[find] domain_mode=hard(on_domain_hits_found,known_cdn_kept=0) | HEAD pre-filtering 12 candidates for: Fortis Healthcare Limited discrimination and harassment policy site:fortishealth
+[find] 12/12 passed HEAD pre-filter
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2026-06/Annual%20Secretarial%20Compliance%20Report%202025-26.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2025-05/Compliance%20Report%20on%20Integrated%20Corporate%20Governance%20for%20Quarter%20ended%20March%2031,%202025_0.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2025-07/FHL%20AGM%20Notice%20-%20%20August%2011,%202025_0.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2025-05/Policy%20for%20Prevention%20of%20Insider%20Trading.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2025-05/Policy%20on%20Related%20Party%20Transactions_1.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2023-12/Whistle%20Blower%20Policy.pdf): HTTP Error 403: Forbidden
+[llm] select decision: selected=None topic=False company=True year=True conf=medium reason=No candidate is a standalone discrimination/harassment or POSH policy document
+[sitemap] fortishealthcare.com: 9579 urls -> 1090 candidates -> top 40
+[sitemap] inspected 12 landing page(s), discovered 5 linked document(s); 5 total document candidate(s)
+[deep-crawl] fetch failed (https://fortishealthcare.com/): HTTP Error 522: <none>
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2026-06/Annual%20Secretarial%20Compliance%20Report%202025-26.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2025-05/Compliance%20Report%20on%20Integrated%20Corporate%20Governance%20for%20Quarter%20ended%20March%2031,%202025_0.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2025-07/FHL%20AGM%20Notice%20-%20%20August%2011,%202025_0.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2025-05/Policy%20for%20Prevention%20of%20Insider%20Trading.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2025-05/Policy%20on%20Related%20Party%20Transactions_1.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2023-12/Whistle%20Blower%20Policy.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2024-01/Compliance%20Report%20on%20Corporate%20Governance%20For%20Quarter%20Ended%20December%2031,%202023.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2024-06/Policy%20for%20Prevention,%20Prohibition%20&%20Redressal%20of%20Sexual%20Harassment.pdf): 403
+[browser] hover-reveal: harvested grew to 0 links after menu hover
+[browser] harvested 0 links: 0 doc-file candidates, 0 download-labeled controls (verify_budget=10, click_budget=10)
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Only candidate is an earnings call transcript, not the policy document.
+[browser] candidate REJECTED by class check (https://www.fortishealthcare.com/investor/investor%20presentations%20&%20transcripts/earnings%20call%20transcript%20for%20the%20quarter%20and%20year%20ended%20march%202026): Only candidate is an earnings call transcript, not the policy document.
+[browser][vision] model found no download control
+[browser] https://www.fortishealthcare.com/investor/investor%20presentations%20&%20transcripts/earnings%20call%20transcript%20for%20the%20quarter%20and%20year%20ended%20march%202026: no document resolved through any tier
+[registry] skipped 'discrimination and harassment policy': company identity is not validated and no authoritative company number was supplied
+[result] BLOCKED BY SOURCE WAF: 'Fortis Healthcare Limited discrimination and harassment policy site:fortishealthcare.com' (8 exact candidates)
+{
+    "timestamp": "2026-08-01T21:07:06.760Z",
+    "level": "INFO",
+    "message": "Invocation completed successfully (107.624s)",
+    "logger": "bedrock_agentcore.app",
+    "requestId": "ed781cf7-a864-4d96-869b-7354e78c21ff",
+    "sessionId": "8f29fe73-4ad4-477b-a1b6-f86241431c3e"
+}
+[class-parity] OK — 23 document classes aligned across _DOC_CLASS_RULES and report_specs.REPORT_SPECS
+WARNING:  Invalid HTTP request received.
+[identity] Vertex hint for 'Fortis Healthcare Limited': ticker=None cik=None domain=None sources=0 (untrusted until SEC validation)
+[llm-querygen] generated 8 variants for 'Fortis Healthcare Limited discrimination and harassment policy site:fortishealthcare.com'
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[find][query] 'Fortis Healthcare Limited discrimination and harassment policy site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited discrimination and harassment policy latest site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited discrimination and harassment policy 2026 site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited discrimination and harassment policy FY2026 site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited discrimination and harassment policy 2025 site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited discrimination and harassment policy FY2025 site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited discrimination and harassment policy updated 2026 site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited discrimination and harassment policy filetype:pdf site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare POSH policy prevention of sexual harassment site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare anti-discrimination policy site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare equal opportunity policy filetype:pdf site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare diversity and inclusion policy site:fortishealthcare.com' -> 1 hits via=vertex-grounding
+[find][query] 'Fortis Healthcare Limited POSH policy filetype:pdf site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare code of conduct anti-harassment policy site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare BRSR sustainability report discrimination harassment policy site:fortishealthcare.com' -> 2 hits via=vertex-grounding
+[find] dropped 2 junk-host candidate(s) (app store / media / social / aggregator subdomains — generic, not company-specific)
+[find] domain_mode=hard(on_domain_hits_found,known_cdn_kept=0) | HEAD pre-filtering 12 candidates for: Fortis Healthcare Limited discrimination and harassment policy site:fortishealth
+[find] 12/12 passed HEAD pre-filter
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2026-06/Annual%20Secretarial%20Compliance%20Report%202025-26.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2025-05/Compliance%20Report%20on%20Integrated%20Corporate%20Governance%20for%20Quarter%20ended%20March%2031,%202025_0.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2025-07/FHL%20AGM%20Notice%20-%20%20August%2011,%202025_0.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2025-05/Policy%20for%20Prevention%20of%20Insider%20Trading.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2025-05/Policy%20on%20Related%20Party%20Transactions_1.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2023-12/Whistle%20Blower%20Policy.pdf): HTTP Error 403: Forbidden
+[llm] select decision: selected=None topic=False company=True year=True conf=medium reason=No candidate is a standalone discrimination/harassment or POSH policy document
+[sitemap] fortishealthcare.com: 9579 urls -> 1090 candidates -> top 40
+[sitemap] inspected 12 landing page(s), discovered 5 linked document(s); 5 total document candidate(s)
+[deep-crawl] fetch failed (https://fortishealthcare.com/): HTTP Error 522: <none>
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2026-06/Annual%20Secretarial%20Compliance%20Report%202025-26.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2025-05/Compliance%20Report%20on%20Integrated%20Corporate%20Governance%20for%20Quarter%20ended%20March%2031,%202025_0.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2025-07/FHL%20AGM%20Notice%20-%20%20August%2011,%202025_0.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2025-05/Policy%20for%20Prevention%20of%20Insider%20Trading.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2025-05/Policy%20on%20Related%20Party%20Transactions_1.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2023-12/Whistle%20Blower%20Policy.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2024-01/Compliance%20Report%20on%20Corporate%20Governance%20For%20Quarter%20Ended%20December%2031,%202023.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2024-06/Policy%20for%20Prevention,%20Prohibition%20&%20Redressal%20of%20Sexual%20Harassment.pdf): 403
+[browser] hover-reveal: harvested grew to 0 links after menu hover
+[browser] harvested 0 links: 0 doc-file candidates, 0 download-labeled controls (verify_budget=10, click_budget=10)
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Only candidate is an earnings call transcript, not the policy document.
+[browser] candidate REJECTED by class check (https://www.fortishealthcare.com/investor/investor%20presentations%20&%20transcripts/earnings%20call%20transcript%20for%20the%20quarter%20and%20year%20ended%20march%202026): Only candidate is an earnings call transcript, not the policy document.
+[browser][vision] model found no download control
+[browser] https://www.fortishealthcare.com/investor/investor%20presentations%20&%20transcripts/earnings%20call%20transcript%20for%20the%20quarter%20and%20year%20ended%20march%202026: no document resolved through any tier
+[registry] skipped 'discrimination and harassment policy': company identity is not validated and no authoritative company number was supplied
+[result] BLOCKED BY SOURCE WAF: 'Fortis Healthcare Limited discrimination and harassment policy site:fortishealthcare.com' (8 exact candidates)
+{
+    "timestamp": "2026-08-01T21:07:06.760Z",
+    "level": "INFO",
+    "message": "Invocation completed successfully (107.624s)",
+    "logger": "bedrock_agentcore.app",
+    "requestId": "ed781cf7-a864-4d96-869b-7354e78c21ff",
+    "sessionId": "8f29fe73-4ad4-477b-a1b6-f86241431c3e"
+}
+
+[class-parity] OK — 23 document classes aligned across _DOC_CLASS_RULES and report_specs.REPORT_SPECS
+WARNING:  Invalid HTTP request received.
+[identity] Vertex hint for 'Fortis Healthcare Limited': ticker=None cik=None domain=None sources=0 (untrusted until SEC validation)
+[llm-querygen] generated 8 variants for 'Fortis Healthcare Limited supplier code of conduct site:fortishealthcare.com'
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[find][query] 'Fortis Healthcare Limited supplier code of conduct site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited supplier code of conduct latest site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited supplier code of conduct 2026 site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited supplier code of conduct FY2026 site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited supplier code of conduct 2025 site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited supplier code of conduct FY2025 site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited supplier code of conduct updated 2026 site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited supplier code of conduct filetype:pdf site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare vendor code of conduct site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare third-party code of conduct site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare business partner code of conduct site:fortishealthcare.com' -> 1 hits via=vertex-grounding
+[find][query] 'Fortis Healthcare responsible sourcing policy site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare supplier code of conduct site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare supply chain code of conduct filetype:pdf site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare procurement code of conduct policy site:fortishealthcare.com' -> 10 hits via=gateway(native-site)
+[find] dropped 2 junk-host candidate(s) (app store / media / social / aggregator subdomains — generic, not company-specific)
+[find] domain_mode=hard(on_domain_hits_found,known_cdn_kept=0) | HEAD pre-filtering 12 candidates for: Fortis Healthcare Limited supplier code of conduct site:fortishealthcare.com
+[find] 12/12 passed HEAD pre-filter
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2026-06/Annual%20Secretarial%20Compliance%20Report%202025-26.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2025-05/Policy%20for%20Prevention%20of%20Insider%20Trading.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2025-05/Compliance%20Report%20on%20Integrated%20Corporate%20Governance%20for%20Quarter%20ended%20March%2031,%202025_0.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://workbench.fortishealthcare.com/investor/corporate%20governance%20report/compliance%20report%20on%20integrated%20corporate%20governance%20for%20quarter%20ended%20june%2030,%202025): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2024-06/Anti-Bribery%20and%20Corruption%20Policy.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2024-10/Compliance%20Report%20on%20Corporate%20Governance%20for%20quarter%20ended%20September%2030,%202024.pdf): HTTP Error 403: Forbidden
+[llm] select decision: selected=None topic=False company=True year=True conf=low reason=No candidate is a standalone Supplier/Vendor Code of Conduct document.
+[sitemap] fortishealthcare.com: 9579 urls -> 1090 candidates -> top 40
+[sitemap] inspected 12 landing page(s), discovered 6 linked document(s); 6 total document candidate(s)
+[deep-crawl] fetch failed (https://fortishealthcare.com/): HTTP Error 522: <none>
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2026-06/Annual%20Secretarial%20Compliance%20Report%202025-26.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2025-05/Policy%20for%20Prevention%20of%20Insider%20Trading.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2025-05/Compliance%20Report%20on%20Integrated%20Corporate%20Governance%20for%20Quarter%20ended%20March%2031,%202025_0.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2024-06/Anti-Bribery%20and%20Corruption%20Policy.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2024-10/Compliance%20Report%20on%20Corporate%20Governance%20for%20quarter%20ended%20September%2030,%202024.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2024-06/Policy%20for%20Prevention,%20Prohibition%20&%20Redressal%20of%20Sexual%20Harassment.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2023-12/Policy%20on%20Prohibition%20of%20Insider%20Trading.pdf): 403
+[browser] hover-reveal: harvested grew to 0 links after menu hover
+[browser] harvested 0 links: 0 doc-file candidates, 0 download-labeled controls (verify_budget=10, click_budget=10)
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Only candidate is a BRSR report with unreadable content, not supplier code
+[browser] candidate REJECTED by class check (https://www.fortishealthcare.com/sustainability/bsr/BRSR%20Report%20for%20FY%202024-25): Only candidate is a BRSR report with unreadable content, not supplier code
+[browser][vision] model found no download control
+[browser] https://www.fortishealthcare.com/sustainability/bsr/BRSR%20Report%20for%20FY%202024-25: no document resolved through any tier
+[result] BLOCKED BY SOURCE WAF: 'Fortis Healthcare Limited supplier code of conduct site:fortishealthcare.com' (7 exact candidates)
+{
+    "timestamp": "2026-08-01T21:09:05.149Z",
+    "level": "INFO",
+    "message": "Invocation completed successfully (175.065s)",
+    "logger": "bedrock_agentcore.app",
+    "requestId": "a7936b8a-3d1e-4a6b-8e33-4581787171f8",
+    "sessionId": "9579e71e-d76e-46cd-aa63-d0185c1cd044"
+}
+[class-parity] OK — 23 document classes aligned across _DOC_CLASS_RULES and report_specs.REPORT_SPECS
+WARNING:  Invalid HTTP request received.
+[identity] Vertex hint for 'Fortis Healthcare Limited': ticker=None cik=None domain='fortishealthcare.com' sources=0 (untrusted until SEC validation)
+[llm-querygen] generated 8 variants for 'Fortis Healthcare Limited environment, health & safety policy site:fortishealthcare.com'
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[find][query] 'Fortis Healthcare Limited environment, health & safety policy site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited environment, health & safety policy latest site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited environment, health & safety policy 2026 site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited environment, health & safety policy FY2026 site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited environment, health & safety policy 2025 site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited environment, health & safety policy FY2025 site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited environment, health & safety policy updated 2026 site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited environment health and safety policy filetype:pdf site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare EHS policy filetype:pdf site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare HSE policy pdf site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare environment health and safety policy site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare environmental health and safety policy site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare QHSE policy pdf site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare EHS policy corporate governance site:fortishealthcare.com' -> 10 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare BRSR environment health safety policy site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited environment, health & safety policy filetype:pdf site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find] dropped 1 junk-host candidate(s) (app store / media / social / aggregator subdomains — generic, not company-specific)
+[find] domain_mode=hard(on_domain_hits_found,known_cdn_kept=0) | HEAD pre-filtering 12 candidates for: Fortis Healthcare Limited environment, health & safety policy site:fortishealthc
+[find] 12/12 passed HEAD pre-filter
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2026-06/Annual%20Secretarial%20Compliance%20Report%202025-26.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2025-05/FHL%20-%20Q4FY25%20and%20FY25%20Press%20Release.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2025-05/Policy%20for%20Prevention%20of%20Insider%20Trading.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2025-03/Policy%20on%20Determination%20of%20Materiality%20of%20Events.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2025-05/Policy%20on%20Related%20Party%20Transactions_1.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2025-02/Policy%20on%20Materilaity%20of%20Events.pdf): HTTP Error 403: Forbidden
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=No candidate is a standalone EHS/HSE policy document
+[sitemap] fortishealthcare.com: 9579 urls -> 1090 candidates -> top 40
+[sitemap] inspected 12 landing page(s), discovered 7 linked document(s); 7 total document candidate(s)
+[deep-crawl] fetch failed (https://fortishealthcare.com/): The read operation timed out
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2026-06/Annual%20Secretarial%20Compliance%20Report%202025-26.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2025-05/FHL%20-%20Q4FY25%20and%20FY25%20Press%20Release.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2025-05/Policy%20for%20Prevention%20of%20Insider%20Trading.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2025-03/Policy%20on%20Determination%20of%20Materiality%20of%20Events.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2025-05/Policy%20on%20Related%20Party%20Transactions_1.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2025-02/Policy%20on%20Materilaity%20of%20Events.pdf): 403
+[browser] hover-reveal: harvested grew to 0 links after menu hover
+[browser] harvested 0 links: 0 doc-file candidates, 0 download-labeled controls (verify_budget=10, click_budget=10)
+[llm] select decision: selected=None topic=False company=False year=True conf=low reason=Only candidate is unrelated BRSR report content, no EHS policy found
+[browser] candidate REJECTED by class check (https://www.fortishealthcare.com/sustainability/bsr/BRSR%20Report%20for%20FY%202024-25): Only candidate is unrelated BRSR report content, no EHS policy found
+[browser][vision] model found no download control
+[browser] https://www.fortishealthcare.com/sustainability/bsr/BRSR%20Report%20for%20FY%202024-25: no document resolved through any tier
+[result] BLOCKED BY SOURCE WAF: 'Fortis Healthcare Limited environment, health & safety policy site:fortishealthcare.com' (6 exact candidates)
+{
+    "timestamp": "2026-08-01T21:11:47.100Z",
+    "level": "INFO",
+    "message": "Invocation completed successfully (118.018s)",
+    "logger": "bedrock_agentcore.app",
+    "requestId": "6597918e-80ec-4676-b24e-3acfabeb29f5",
+    "sessionId": "c2d08be9-65ab-4604-99c6-14b33878d4ae"
+}
+No more records within selected time range 
+Auto retry paused.
+ 
+Resume
+ 
+
+[class-parity] OK — 23 document classes aligned across _DOC_CLASS_RULES and report_specs.REPORT_SPECS
+WARNING:  Invalid HTTP request received.
+[identity] Vertex hint for 'Fortis Healthcare Limited': ticker=None cik=None domain='fortishealthcare.com' sources=0 (untrusted until SEC validation)
+[llm-querygen] generated 8 variants for 'Fortis Healthcare Limited biodiversity policy site:fortishealthcare.com'
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[find][query] 'Fortis Healthcare Limited biodiversity policy site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited biodiversity policy latest site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited biodiversity policy 2026 site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited biodiversity policy FY2026 site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited biodiversity policy 2025 site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited biodiversity policy FY2025 site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited biodiversity policy updated 2026 site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited biodiversity policy filetype:pdf site:fortishealthcare.com' -> 2 hits via=vertex-grounding
+[find][query] 'Fortis Healthcare biodiversity and nature policy site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare biodiversity policy site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare biodiversity policy pdf site:fortishealthcare.com' -> 10 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited BRSR biodiversity policy site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited ESG biodiversity policy filetype:pdf site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited corporate governance biodiversity policy document site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find] dropped 1 junk-host candidate(s) (app store / media / social / aggregator subdomains — generic, not company-specific)
+[find] domain_mode=hard(on_domain_hits_found,known_cdn_kept=0) | HEAD pre-filtering 12 candidates for: Fortis Healthcare Limited biodiversity policy site:fortishealthcare.com
+[find] 12/12 passed HEAD pre-filter
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2026-06/Annual%20Secretarial%20Compliance%20Report%202025-26.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2026-06/annual%20BMW%20report%20-2025_0.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2025-05/FHL%20-%20Q4FY25%20and%20FY25%20Press%20Release.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2025-05/Compliance%20Report%20on%20Integrated%20Corporate%20Governance%20for%20Quarter%20ended%20March%2031,%202025_0.pdf): HTTP Error 403: Forbidden
+[llm] select decision: selected=None topic=False company=True year=True conf=high reason=No candidate is a standalone biodiversity policy document.
+[sitemap] fortishealthcare.com: 9579 urls -> 1090 candidates -> top 40
+[sitemap] inspected 12 landing page(s), discovered 5 linked document(s); 5 total document candidate(s)
+[deep-crawl] fetch failed (https://fortishealthcare.com/): The read operation timed out
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2026-06/Annual%20Secretarial%20Compliance%20Report%202025-26.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2026-06/annual%20BMW%20report%20-2025_0.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2025-05/FHL%20-%20Q4FY25%20and%20FY25%20Press%20Release.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2025-05/Compliance%20Report%20on%20Integrated%20Corporate%20Governance%20for%20Quarter%20ended%20March%2031,%202025_0.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2024-10/Compliance%20Report%20on%20Corporate%20Governance%20for%20quarter%20ended%20September%2030,%202024.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2024-01/Compliance%20Report%20on%20Corporate%20Governance%20For%20Quarter%20Ended%20December%2031,%202023.pdf): 403
+[browser] hover-reveal: harvested grew to 0 links after menu hover
+[browser] harvested 0 links: 0 doc-file candidates, 0 download-labeled controls (verify_budget=10, click_budget=10)
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Only candidate is a press release page, not a biodiversity policy
+[browser] candidate REJECTED by class check (https://www.fortishealthcare.com/investor/investor%20presentations%20&%20transcripts/fhl%20-%20q4fy26%20and%20fy26%20press%20release): Only candidate is a press release page, not a biodiversity policy
+[browser][vision] model found no download control
+[browser] https://www.fortishealthcare.com/investor/investor%20presentations%20&%20transcripts/fhl%20-%20q4fy26%20and%20fy26%20press%20release: no document resolved through any tier
+[result] BLOCKED BY SOURCE WAF: 'Fortis Healthcare Limited biodiversity policy site:fortishealthcare.com' (6 exact candidates)
+{
+    "timestamp": "2026-08-01T21:13:47.393Z",
+    "level": "INFO",
+    "message": "Invocation completed successfully (172.873s)",
+    "logger": "bedrock_agentcore.app",
+    "requestId": "c87ebaae-db21-401a-86eb-16722cf764b9",
+    "sessionId": "87c2a4b5-3a8f-4f84-9bd5-3624913cfa09"
+}
+[class-parity] OK — 23 document classes aligned across _DOC_CLASS_RULES and report_specs.REPORT_SPECS
+WARNING:  Invalid HTTP request received.
+[identity] Vertex hint for 'Fortis Healthcare Limited': ticker=None cik=None domain=None sources=0 (untrusted until SEC validation)
+[llm-querygen] generated 8 variants for 'Fortis Healthcare Limited human rights due diligence site:fortishealthcare.com'
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[find][query] 'Fortis Healthcare Limited human rights due diligence site:fortishealthcare.com' -> 1 hits via=vertex-grounding
+[find][query] 'Fortis Healthcare Limited human rights due diligence latest site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited human rights due diligence 2026 site:fortishealthcare.com' -> 10 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited human rights due diligence FY2026 site:fortishealthcare.com' -> 10 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited human rights due diligence 2025 site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited human rights due diligence FY2025 site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited human rights due diligence updated 2026 site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited human rights due diligence policy filetype:pdf site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare human rights due diligence report site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare human rights impact assessment site:fortishealthcare.com' -> 1 hits via=vertex-grounding
+[find][query] 'Fortis Healthcare BRSR business responsibility sustainability report human rights site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare sustainability report human rights due diligence filetype:pdf site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'human rights due diligence site:fortishealthcare.com' -> 5 hits via=vertex-grounding
+[find][query] 'Fortis Healthcare Limited human rights policy annual report filetype:pdf site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited human rights due diligence filetype:pdf site:fortishealthcare.com' -> 1 hits via=vertex-grounding
+[find] dropped 1 junk-host candidate(s) (app store / media / social / aggregator subdomains — generic, not company-specific)
+[find] domain_mode=hard(on_domain_hits_found,known_cdn_kept=0) | HEAD pre-filtering 12 candidates for: Fortis Healthcare Limited human rights due diligence site:fortishealthcare.com
+[find] 12/12 passed HEAD pre-filter
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2026-06/Annual%20Secretarial%20Compliance%20Report%202025-26.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://workbench.fortishealthcare.com/investor/corporate%20governance%20report/compliance%20report%20on%20integrated%20corporate%20governance%20for%20quarter%20ended%20june%2030,%202025): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://workbench.fortishealthcare.com/investor/annual%20secretarial%20compliance%20report/annual%20secretarial%20compliance%20report%202024-25): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2025-05/Compliance%20Report%20on%20Integrated%20Corporate%20Governance%20for%20Quarter%20ended%20March%2031,%202025_0.pdf): HTTP Error 403: Forbidden
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=No candidate is a human rights due diligence report; all are unrelated filings.
+[sitemap] fortishealthcare.com: 9579 urls -> 1090 candidates -> top 40
+[sitemap] inspected 12 landing page(s), discovered 7 linked document(s); 7 total document candidate(s)
+[deep-crawl] fetch failed (https://fortishealthcare.com/): The read operation timed out
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2026-06/Annual%20Secretarial%20Compliance%20Report%202025-26.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2025-05/Compliance%20Report%20on%20Integrated%20Corporate%20Governance%20for%20Quarter%20ended%20March%2031,%202025_0.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2024-10/Compliance%20Report%20on%20Corporate%20Governance%20for%20quarter%20ended%20September%2030,%202024.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2024-01/Compliance%20Report%20on%20Corporate%20Governance%20For%20Quarter%20Ended%20December%2031,%202023.pdf): 403
+[browser] hover-reveal: harvested grew to 0 links after menu hover
+[browser] harvested 0 links: 0 doc-file candidates, 0 download-labeled controls (verify_budget=10, click_budget=10)
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Only candidate is unrelated press release page, not human rights due diligence report
+[browser] candidate REJECTED by class check (https://www.fortishealthcare.com/investor/investor%20presentations%20&%20transcripts/fhl%20-%20q4fy26%20and%20fy26%20press%20release): Only candidate is unrelated press release page, not human rights due diligence report
+[browser][vision] model found no download control
+[browser] https://www.fortishealthcare.com/investor/investor%20presentations%20&%20transcripts/fhl%20-%20q4fy26%20and%20fy26%20press%20release: no document resolved through any tier
+[result] BLOCKED BY SOURCE WAF: 'Fortis Healthcare Limited human rights due diligence site:fortishealthcare.com' (4 exact candidates)
+{
+    "timestamp": "2026-08-01T21:32:32.910Z",
+    "level": "INFO",
+    "message": "Invocation completed successfully (1132.156s)",
+    "logger": "bedrock_agentcore.app",
+    "requestId": "7a297d00-29f5-4664-9e97-375ab4403968",
+    "sessionId": "1968cfca-cca2-49c6-af15-a3f649ae96bf"
+}
+[class-parity] OK — 23 document classes aligned across _DOC_CLASS_RULES and report_specs.REPORT_SPECS
+WARNING:  Invalid HTTP request received.
+[identity] Vertex hint for 'Fortis Healthcare Limited': ticker='FORTIS (NSE), 53' cik=None domain='fortishealthcare.com' sources=0 (untrusted until SEC validation)
+[llm-querygen] generated 7 variants for 'Fortis Healthcare Limited modern slavery statement site:fortishealthcare.com'
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[find][query] 'Fortis Healthcare Limited modern slavery statement site:fortishealthcare.com' -> 1 hits via=vertex-grounding
+[find][query] 'Fortis Healthcare Limited modern slavery statement latest site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited modern slavery statement 2026 site:fortishealthcare.com' -> 10 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited modern slavery statement FY2026 site:fortishealthcare.com' -> 10 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited modern slavery statement 2025 site:fortishealthcare.com' -> 4 hits via=vertex-grounding
+[find][query] 'Fortis Healthcare Limited modern slavery statement FY2025 site:fortishealthcare.com' -> 5 hits via=vertex-grounding
+[find][query] 'Fortis Healthcare Limited modern slavery statement updated 2026 site:fortishealthcare.com' -> 4 hits via=vertex-grounding
+[find][query] 'Fortis Healthcare modern slavery statement filetype:pdf site:fortishealthcare.com' -> 10 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare slavery and human trafficking statement site:fortishealthcare.com' -> 1 hits via=vertex-grounding
+[find][query] 'Fortis Healthcare modern slavery act statement site:fortishealthcare.com' -> 4 hits via=vertex-grounding
+[find][query] 'Fortis Healthcare transparency in supply chains statement site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare BRSR business responsibility sustainability report site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited annual report modern slavery filetype:pdf site:fortishealthcare.com' -> 1 hits via=vertex-grounding
+[find][query] 'Fortis Healthcare sustainability report modern slavery site:fortishealthcare.com' -> 1 hits via=vertex-grounding
+[find][query] 'Fortis Healthcare Limited modern slavery statement filetype:pdf site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find] dropped 2 junk-host candidate(s) (app store / media / social / aggregator subdomains — generic, not company-specific)
+[find] domain_mode=hard(on_domain_hits_found,known_cdn_kept=0) | HEAD pre-filtering 12 candidates for: Fortis Healthcare Limited modern slavery statement site:fortishealthcare.com
+[find] 12/12 passed HEAD pre-filter
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2026-02/Earnings%20Call%20Transcript%20for%20the%20quarter%20ended%20December%202025.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2026-06/Annual%20Secretarial%20Compliance%20Report%202025-26.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2026-02/FHL%20Press%20Release%20-%20Q3FY26_0.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2025-05/Compliance%20Report%20on%20Integrated%20Corporate%20Governance%20for%20Quarter%20ended%20March%2031,%202025_0.pdf): HTTP Error 403: Forbidden
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=No candidate is a modern slavery statement document
+[sitemap] fortishealthcare.com: 9579 urls -> 1090 candidates -> top 40
+[sitemap] inspected 12 landing page(s), discovered 5 linked document(s); 5 total document candidate(s)
+[deep-crawl] fetch failed (https://fortishealthcare.com/): HTTP Error 522: <none>
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2026-02/Earnings%20Call%20Transcript%20for%20the%20quarter%20ended%20December%202025.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2026-06/Annual%20Secretarial%20Compliance%20Report%202025-26.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2026-02/FHL%20Press%20Release%20-%20Q3FY26_0.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2025-05/Compliance%20Report%20on%20Integrated%20Corporate%20Governance%20for%20Quarter%20ended%20March%2031,%202025_0.pdf): 403
+[browser] hover-reveal: harvested grew to 0 links after menu hover
+[browser] harvested 0 links: 0 doc-file candidates, 0 download-labeled controls (verify_budget=10, click_budget=10)
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Candidate is a press release, not a modern slavery statement
+[browser] candidate REJECTED by class check (https://www.fortishealthcare.com/investor/investor%20presentations%20&%20transcripts/fhl%20-%20q4fy26%20and%20fy26%20press%20release): Candidate is a press release, not a modern slavery statement
+[browser][vision] model found no download control
+[browser] https://www.fortishealthcare.com/investor/investor%20presentations%20&%20transcripts/fhl%20-%20q4fy26%20and%20fy26%20press%20release: no document resolved through any tier
+[result] BLOCKED BY SOURCE WAF: 'Fortis Healthcare Limited modern slavery statement site:fortishealthcare.com' (4 exact candidates)
+{
+    "timestamp": "2026-08-01T21:16:32.497Z",
+    "level": "INFO",
+    "message": "Invocation completed successfully (163.930s)",
+    "logger": "bedrock_agentcore.app",
+    "requestId": "b7a41528-7edd-42f5-8179-6b463020419f",
+    "sessionId": "a8f07e81-4a30-463c-bdb6-de8e2d727b96"
+}
+[class-parity] OK — 23 document classes aligned across _DOC_CLASS_RULES and report_specs.REPORT_SPECS
+WARNING:  Invalid HTTP request received.
+[identity] Vertex hint for 'Fortis Healthcare Limited': ticker=None cik=None domain='fortishealthcare.com' sources=0 (untrusted until SEC validation)
+[llm-querygen] generated 8 variants for 'Fortis Healthcare Limited wolfsberg questionnaire site:fortishealthcare.com'
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[find][query] 'Fortis Healthcare Limited wolfsberg questionnaire site:fortishealthcare.com' -> 2 hits via=vertex-grounding
+[find][query] 'Fortis Healthcare Limited wolfsberg questionnaire latest site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited wolfsberg questionnaire 2026 site:fortishealthcare.com' -> 2 hits via=vertex-grounding
+[find][query] 'Fortis Healthcare Limited wolfsberg questionnaire FY2026 site:fortishealthcare.com' -> 3 hits via=vertex-grounding
+[find][query] 'Fortis Healthcare Limited wolfsberg questionnaire 2025 site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited wolfsberg questionnaire FY2025 site:fortishealthcare.com' -> 7 hits via=vertex-grounding
+[find][query] 'Fortis Healthcare Limited wolfsberg questionnaire updated 2026 site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited wolfsberg questionnaire filetype:pdf site:fortishealthcare.com' -> 9 hits via=vertex-grounding
+[find][query] 'Fortis Healthcare wolfsberg due diligence questionnaire site:fortishealthcare.com' -> 5 hits via=vertex-grounding
+[find][query] 'Fortis Healthcare Limited wolfsberg CBDDQ site:fortishealthcare.com' -> 4 hits via=vertex-grounding
+[find][query] 'Fortis Healthcare wolfsberg questionnaire investors site:fortishealthcare.com' -> 5 hits via=vertex-grounding
+[find][query] 'Fortis Healthcare Limited AML wolfsberg questionnaire pdf site:fortishealthcare.com' -> 4 hits via=vertex-grounding
+[find][query] 'Fortis Healthcare wolfsberg due diligence questionnaire filetype:pdf site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited wolfsberg questionnaire compliance site:fortishealthcare.com' -> 5 hits via=vertex-grounding
+[find][query] 'Fortis Healthcare wolfsberg questionnaire KYC site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find] dropped 1 junk-host candidate(s) (app store / media / social / aggregator subdomains — generic, not company-specific)
+[find] domain_mode=hard(on_domain_hits_found,known_cdn_kept=0) | HEAD pre-filtering 12 candidates for: Fortis Healthcare Limited wolfsberg questionnaire site:fortishealthcare.com
+[find] 12/12 passed HEAD pre-filter
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2026-06/Annual%20Secretarial%20Compliance%20Report%202025-26.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2026-02/Earnings%20Call%20Transcript%20for%20the%20quarter%20ended%20December%202025.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2026-05/Fortis%20Investor%20Presentation%20for%20the%20period%20ended%20Mar%2031,%202026.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2026-01/Fortis%20Investor%20Presentation_JPM%20Conf,%20NDR_Jan'26.pdf): HTTP Error 403: Forbidden
+[llm] select decision: selected=None topic=False company=True year=True conf=high reason=No candidate is a Wolfsberg questionnaire; none match this document class.
+[sitemap] fortishealthcare.com: 9579 urls -> 1090 candidates -> top 40
+[sitemap] inspected 12 landing page(s), discovered 5 linked document(s); 5 total document candidate(s)
+[deep-crawl] fetch failed (https://fortishealthcare.com/): HTTP Error 522: <none>
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2026-06/Annual%20Secretarial%20Compliance%20Report%202025-26.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2026-02/Earnings%20Call%20Transcript%20for%20the%20quarter%20ended%20December%202025.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2026-05/Fortis%20Investor%20Presentation%20for%20the%20period%20ended%20Mar%2031,%202026.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2026-01/Fortis%20Investor%20Presentation_JPM%20Conf,%20NDR_Jan'26.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2025-05/Compliance%20Report%20on%20Integrated%20Corporate%20Governance%20for%20Quarter%20ended%20March%2031,%202025_0.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2024-01/Compliance%20Report%20on%20Corporate%20Governance%20For%20Quarter%20Ended%20December%2031,%202023.pdf): 403
+[browser] hover-reveal: harvested grew to 0 links after menu hover
+[browser] harvested 0 links: 0 doc-file candidates, 0 download-labeled controls (verify_budget=10, click_budget=10)
+[browser][vision] model found no download control
+[browser] https://www.fortishealthcare.com/investor/newspaper%20publications/newspaper%20publication%20regarding%20the%20dispatch%20of%2030th%20agm%20notice%20and%20annual%20report%20july%2018%202026: no document resolved through any tier
+[result] BLOCKED BY SOURCE WAF: 'Fortis Healthcare Limited wolfsberg questionnaire site:fortishealthcare.com' (6 exact candidates)
+{
+    "timestamp": "2026-08-01T21:28:22.523Z",
+    "level": "INFO",
+    "message": "Invocation completed successfully (159.739s)",
+    "logger": "bedrock_agentcore.app",
+    "requestId": "f7821650-c41d-4cc1-ab33-ff725b2fbf8e",
+    "sessionId": "bccc7e72-98af-4ecd-8beb-e4d4a9f692ee"
+}
+[class-parity] OK — 23 document classes aligned across _DOC_CLASS_RULES and report_specs.REPORT_SPECS
+WARNING:  Invalid HTTP request received.
+[identity] Vertex hint for 'Fortis Healthcare Limited': ticker=None cik=None domain='fortishealthcare.com' sources=0 (untrusted until SEC validation)
+[llm-querygen] generated 8 variants for 'Fortis Healthcare Limited occupational health and safety policy site:fortishealthcare.com'
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[find][query] 'Fortis Healthcare Limited occupational health and safety policy site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited occupational health and safety policy latest site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited occupational health and safety policy 2026 site:fortishealthcare.com' -> 10 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited occupational health and safety policy FY2026 site:fortishealthcare.com' -> 1 hits via=vertex-grounding
+[find][query] 'Fortis Healthcare Limited occupational health and safety policy 2025 site:fortishealthcare.com' -> 5 hits via=vertex-grounding
+[find][query] 'Fortis Healthcare Limited occupational health and safety policy FY2025 site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited occupational health and safety policy updated 2026 site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited occupational health and safety policy filetype:pdf site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare health and safety policy site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare SHE policy filetype:pdf site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare workplace health and safety policy site:fortishealthcare.com' -> 10 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare OHS policy pdf site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare sustainability report health and safety site:fortishealthcare.com' -> 2 hits via=vertex-grounding
+[find][query] 'Fortis Healthcare BRSR occupational health and safety site:fortishealthcare.com' -> 1 hits via=vertex-grounding
+[find][query] 'Fortis Healthcare corporate governance health and safety policy site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find] dropped 2 junk-host candidate(s) (app store / media / social / aggregator subdomains — generic, not company-specific)
+[find] domain_mode=hard(on_domain_hits_found,known_cdn_kept=0) | HEAD pre-filtering 12 candidates for: Fortis Healthcare Limited occupational health and safety policy site:fortishealt
+[find] 12/12 passed HEAD pre-filter
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2026-06/Annual%20Secretarial%20Compliance%20Report%202025-26.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2025-07/FHL%20AGM%20Notice%20-%20%20August%2011,%202025_0.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2025-05/Policy%20for%20Prevention%20of%20Insider%20Trading.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2025-03/Policy%20on%20Determination%20of%20Materiality%20of%20Events.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2025-05/Policy%20on%20Related%20Party%20Transactions_1.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2025-05/Compliance%20Report%20on%20Integrated%20Corporate%20Governance%20for%20Quarter%20ended%20March%2031,%202025_0.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2024-10/Compliance%20Report%20on%20Corporate%20Governance%20for%20quarter%20ended%20September%2030,%202024.pdf): HTTP Error 403: Forbidden
+[llm] select decision: selected=None topic=False company=True year=True conf=high reason=No candidate is an OHS/health & safety policy document.
+[sitemap] fortishealthcare.com: 9579 urls -> 1090 candidates -> top 40
+[sitemap] inspected 12 landing page(s), discovered 7 linked document(s); 7 total document candidate(s)
+[deep-crawl] fetch failed (https://fortishealthcare.com/): HTTP Error 522: <none>
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2026-06/Annual%20Secretarial%20Compliance%20Report%202025-26.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2025-07/FHL%20AGM%20Notice%20-%20%20August%2011,%202025_0.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2025-05/Policy%20for%20Prevention%20of%20Insider%20Trading.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2025-03/Policy%20on%20Determination%20of%20Materiality%20of%20Events.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2025-05/Policy%20on%20Related%20Party%20Transactions_1.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2025-05/Compliance%20Report%20on%20Integrated%20Corporate%20Governance%20for%20Quarter%20ended%20March%2031,%202025_0.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2024-10/Compliance%20Report%20on%20Corporate%20Governance%20for%20quarter%20ended%20September%2030,%202024.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2024-01/Compliance%20Report%20on%20Corporate%20Governance%20For%20Quarter%20Ended%20December%2031,%202023.pdf): 403
+[browser] hover-reveal: harvested grew to 0 links after menu hover
+[browser] harvested 0 links: 0 doc-file candidates, 0 download-labeled controls (verify_budget=10, click_budget=10)
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Only candidate is unrelated related-party transactions policy, not OHS policy
+[browser] candidate REJECTED by class check (https://www.fortishealthcare.com/investor/policies%20&%20code/policy%20on%20related%20party%20transactions): Only candidate is unrelated related-party transactions policy, not OHS policy
+[browser][vision] model found no download control
+[browser] https://www.fortishealthcare.com/investor/policies%20&%20code/policy%20on%20related%20party%20transactions: no document resolved through any tier
+[result] BLOCKED BY SOURCE WAF: 'Fortis Healthcare Limited occupational health and safety policy site:fortishealthcare.com' (8 exact candidates)
+{
+    "timestamp": "2026-08-01T21:31:06.538Z",
+    "level": "INFO",
+    "message": "Invocation completed successfully (162.359s)",
+    "logger": "bedrock_agentcore.app",
+    "requestId": "7ac8da2c-743d-449e-a68b-984e19b5e1e8",
+    "sessionId": "a12a5d47-67d7-4803-a7b8-2db4c0c26370"
+
+    [class-parity] OK — 23 document classes aligned across _DOC_CLASS_RULES and report_specs.REPORT_SPECS
+WARNING:  Invalid HTTP request received.
+[identity] Vertex hint for 'Fortis Healthcare Limited': ticker=None cik=None domain=None sources=0 (untrusted until SEC validation)
+[llm-querygen] generated 8 variants for 'Fortis Healthcare Limited human rights due diligence site:fortishealthcare.com'
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[search] vertex returned nothing (vertex-grounding); falling back to gateway
+[find][query] 'Fortis Healthcare Limited human rights due diligence site:fortishealthcare.com' -> 1 hits via=vertex-grounding
+[find][query] 'Fortis Healthcare Limited human rights due diligence latest site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited human rights due diligence 2026 site:fortishealthcare.com' -> 10 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited human rights due diligence FY2026 site:fortishealthcare.com' -> 10 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited human rights due diligence 2025 site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited human rights due diligence FY2025 site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited human rights due diligence updated 2026 site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited human rights due diligence policy filetype:pdf site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare human rights due diligence report site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare human rights impact assessment site:fortishealthcare.com' -> 1 hits via=vertex-grounding
+[find][query] 'Fortis Healthcare BRSR business responsibility sustainability report human rights site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare sustainability report human rights due diligence filetype:pdf site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'human rights due diligence site:fortishealthcare.com' -> 5 hits via=vertex-grounding
+[find][query] 'Fortis Healthcare Limited human rights policy annual report filetype:pdf site:fortishealthcare.com' -> 9 hits via=gateway(native-site)
+[find][query] 'Fortis Healthcare Limited human rights due diligence filetype:pdf site:fortishealthcare.com' -> 1 hits via=vertex-grounding
+[find] dropped 1 junk-host candidate(s) (app store / media / social / aggregator subdomains — generic, not company-specific)
+[find] domain_mode=hard(on_domain_hits_found,known_cdn_kept=0) | HEAD pre-filtering 12 candidates for: Fortis Healthcare Limited human rights due diligence site:fortishealthcare.com
+[find] 12/12 passed HEAD pre-filter
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2026-06/Annual%20Secretarial%20Compliance%20Report%202025-26.pdf): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://workbench.fortishealthcare.com/investor/corporate%20governance%20report/compliance%20report%20on%20integrated%20corporate%20governance%20for%20quarter%20ended%20june%2030,%202025): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://workbench.fortishealthcare.com/investor/annual%20secretarial%20compliance%20report/annual%20secretarial%20compliance%20report%202024-25): HTTP Error 403: Forbidden
+[find] sample fetch failed (https://www.fortishealthcare.com/drupal-data/2025-05/Compliance%20Report%20on%20Integrated%20Corporate%20Governance%20for%20Quarter%20ended%20March%2031,%202025_0.pdf): HTTP Error 403: Forbidden
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=No candidate is a human rights due diligence report; all are unrelated filings.
+[sitemap] fortishealthcare.com: 9579 urls -> 1090 candidates -> top 40
+[sitemap] inspected 12 landing page(s), discovered 7 linked document(s); 7 total document candidate(s)
+[deep-crawl] fetch failed (https://fortishealthcare.com/): The read operation timed out
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2026-06/Annual%20Secretarial%20Compliance%20Report%202025-26.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2025-05/Compliance%20Report%20on%20Integrated%20Corporate%20Governance%20for%20Quarter%20ended%20March%2031,%202025_0.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2024-10/Compliance%20Report%20on%20Corporate%20Governance%20for%20quarter%20ended%20September%2030,%202024.pdf): 403
+[browser][direct] source blocked (https://www.fortishealthcare.com/drupal-data/2024-01/Compliance%20Report%20on%20Corporate%20Governance%20For%20Quarter%20Ended%20December%2031,%202023.pdf): 403
+[browser] hover-reveal: harvested grew to 0 links after menu hover
+[browser] harvested 0 links: 0 doc-file candidates, 0 download-labeled controls (verify_budget=10, click_budget=10)
+[llm] select decision: selected=None topic=False company=False year=True conf=high reason=Only candidate is unrelated press release page, not human rights due diligence report
+[browser] candidate REJECTED by class check (https://www.fortishealthcare.com/investor/investor%20presentations%20&%20transcripts/fhl%20-%20q4fy26%20and%20fy26%20press%20release): Only candidate is unrelated press release page, not human rights due diligence report
+[browser][vision] model found no download control
+[browser] https://www.fortishealthcare.com/investor/investor%20presentations%20&%20transcripts/fhl%20-%20q4fy26%20and%20fy26%20press%20release: no document resolved through any tier
+[result] BLOCKED BY SOURCE WAF: 'Fortis Healthcare Limited human rights due diligence site:fortishealthcare.com' (4 exact candidates)
+{
+    "timestamp": "2026-08-01T21:32:32.910Z",
+    "level": "INFO",
+    "message": "Invocation completed successfully (1132.156s)",
+    "logger": "bedrock_agentcore.app",
+    "requestId": "7a297d00-29f5-4664-9e97-375ab4403968",
+    "sessionId": "1968cfca-cca2-49c6-af15-a3f649ae96bf"
+}
+No more records within selected time range 
+Auto retry paused.
+ 
+Resume
+ 
+ 

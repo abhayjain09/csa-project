@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Collect read-only diagnostics for recent CoAnalyst download runs or one ID.
 #
-# Usage (default AWS credential chain, every run from the last 2.5 hours):
+# Usage (default AWS credential chain, every run from the last 4 hours):
 #   ./collect_browser_diagnostics.sh
 #
 # Optional:
@@ -13,8 +13,7 @@ set -u
 RUN_ID="${1:-}"
 QUERY_ID="${2:-}"
 REGION="${AWS_REGION:-us-east-1}"
-LOOKBACK_HOURS="${LOOKBACK_HOURS:-2.5}"
-SINCE="${LOG_SINCE:-${LOOKBACK_HOURS}h}"
+LOOKBACK_HOURS="${LOOKBACK_HOURS:-4}"
 RUNS_TABLE="${RUNS_TABLE:-reportiq-runs}"
 QUERIES_TABLE="${QUERIES_TABLE:-reportiq-web-queries}"
 BROWSER_JOBS_TABLE="${BROWSER_JOBS_TABLE:-reportiq-browser-jobs}"
@@ -63,6 +62,10 @@ hours = float(sys.argv[1])
 print((datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat())
 PY
 )"
+# Use the same exact cutoff for DynamoDB and CloudWatch.  Passing a fractional
+# relative value such as "2.5h" through `aws logs tail` is version-dependent
+# and produced empty log captures with AWS CLI 2.14.5.
+SINCE="${LOG_SINCE:-$CUTOFF_ISO}"
 
 RUN_IDS=()
 if [[ -n "$RUN_ID" ]]; then
@@ -142,7 +145,7 @@ for current_run_id in "${RUN_IDS[@]}"; do
     '(.Item.failures.S // "[]" | fromjson? // []) | length' \
     "$OUT_DIR/$run_file" 2>/dev/null)"
   browser_statuses="$(jq -r \
-    '[.Items[]?.status.S // "unknown"] | sort | group_by(.) | map("\(.[0])=\(length)") | join(",")' \
+    '[(.Items // [])[] | (.status.S // "unknown")] | sort | group_by(.) | map("\(.[0])=\(length)") | join(",")' \
     "$OUT_DIR/browser-jobs-${safe_run_id}.json" 2>/dev/null)"
   queued_at="$(jq -r '.Item.queued_at.S // ""' "$OUT_DIR/$run_file" 2>/dev/null)"
   started_at="$(jq -r '.Item.started_at.S // ""' "$OUT_DIR/$run_file" 2>/dev/null)"
@@ -304,6 +307,23 @@ while IFS= read -r group; do
   capture "agentcore-${safe_name}.log" aws logs tail "$group" \
     --since "$SINCE" --region "$REGION" --format short
 done <<<"$agent_groups"
+
+LOG_CAPTURE_SUMMARY="$OUT_DIR/cloudwatch-log-summary.tsv"
+printf 'file\tbytes\tlines\n' >"$LOG_CAPTURE_SUMMARY"
+total_log_bytes=0
+for log_file in "$OUT_DIR"/*.log; do
+  [[ -f "$log_file" ]] || continue
+  log_bytes="$(wc -c <"$log_file" | tr -d ' ')"
+  log_lines="$(wc -l <"$log_file" | tr -d ' ')"
+  total_log_bytes=$((total_log_bytes + log_bytes))
+  printf '%s\t%s\t%s\n' "$(basename "$log_file")" \
+    "$log_bytes" "$log_lines" >>"$LOG_CAPTURE_SUMMARY"
+done
+if [[ "$total_log_bytes" -eq 0 ]]; then
+  printf '%s\n' \
+    "WARNING: every CloudWatch log capture is empty for cutoff $SINCE" \
+    >"$OUT_DIR/cloudwatch-logs-empty.txt"
+fi
 
 printf '%s\n' "${RUN_IDS[@]}" >"$OUT_DIR/run-ids.txt"
 

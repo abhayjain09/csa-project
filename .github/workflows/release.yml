@@ -1,0 +1,20 @@
+name: release tag
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  pull-requests: write
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    uses: spglobal-innersource/release-please-action/.github/workflows/release-please.yaml@v1
+    secrets:
+      RELEASE_PLEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_PLEASE_APP_PRIVATE_KEY }}
+      RELEASE_PLEASE_APP_ID: ${{ secrets.RELEASE_PLEASE_APP_ID }}
+    with:
+      runner: dts-pod-runner-rhel9

@@ -1,0 +1,36 @@
+name: Pre-Commit
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  pre-commit:
+    runs-on: dts-pod-runner-rhel9
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect pre-commit configuration
+        id: detect-config
+        run: |
+          if [[ -f .pre-commit-config.yaml || -f .pre-commit-config.yml ]]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "No pre-commit configuration found. Skipping pre-commit checks."
+          fi
+
+      - name: Set up Python
+        if: steps.detect-config.outputs.found == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install pre-commit
+        if: steps.detect-config.outputs.found == 'true'
+        run: python -m pip install --upgrade pip pre-commit
+
+      - name: Run pre-commit
+        if: steps.detect-config.outputs.found == 'true'
+        run: pre-commit run --all-files

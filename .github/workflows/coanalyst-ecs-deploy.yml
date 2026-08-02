@@ -1,0 +1,159 @@
+name: CoAnalyst ECS Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to build/deploy (defaults to sha-<short sha>)"
+        required: false
+        default: ""
+  push:
+    branches:
+      - main
+    paths:
+      - "co-analyst-application/app/**"
+      - "co-analyst-application/terraform/**"
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: us-east-1
+  TF_DIR: co-analyst-application/terraform
+  APP_DIR: co-analyst-application/app
+  ECR_REPO: reportiq
+
+jobs:
+  build-and-push:
+    name: Build & push image
+    runs-on: dts-pod-runner-rhel9
+    outputs:
+      image_tag: ${{ steps.vars.outputs.image_tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve image tag
+        id: vars
+        run: |
+          if [ -n "${{ github.event.inputs.image_tag }}" ]; then
+            echo "image_tag=${{ github.event.inputs.image_tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "image_tag=sha-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install AWS CLI
+        run: |
+          if ! command -v aws >/dev/null 2>&1; then
+            curl -sS "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o /tmp/awscliv2.zip
+            unzip -q /tmp/awscliv2.zip -d /tmp
+            /tmp/aws/install --install-dir "$HOME/.local/aws-cli" --bin-dir "$HOME/.local/bin"
+            echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          fi
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Ensure ECR repo exists
+        run: |
+          aws ecr describe-repositories --repository-names "$ECR_REPO" --region "$AWS_REGION" >/dev/null 2>&1 \
+            || aws ecr create-repository --repository-name "$ECR_REPO" --region "$AWS_REGION" \
+                 --image-scanning-configuration scanOnPush=true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        working-directory: ${{ env.APP_DIR }}
+        run: |
+          docker buildx build \
+            --platform linux/amd64 \
+            -t "${{ steps.ecr-login.outputs.registry }}/${ECR_REPO}:${{ steps.vars.outputs.image_tag }}" \
+            --load .
+
+      - name: Push image
+        run: docker push "${{ steps.ecr-login.outputs.registry }}/${ECR_REPO}:${{ steps.vars.outputs.image_tag }}"
+
+  terraform-plan:
+    name: Terraform plan
+    needs: build-and-push
+    runs-on: dts-pod-runner-rhel9
+    outputs:
+      image_tag: ${{ needs.build-and-push.outputs.image_tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.15.3"
+          terraform_wrapper: false
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform init
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform init -input=false
+
+      - name: Terraform plan
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          terraform plan -input=false \
+            -var="image_tag=${{ needs.build-and-push.outputs.image_tag }}" \
+            -out=tfplan
+
+      - name: Upload plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: ${{ env.TF_DIR }}/tfplan
+          retention-days: 5
+
+  terraform-apply:
+    name: Terraform apply
+    needs: terraform-plan
+    runs-on: dts-pod-runner-rhel9
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.15.3"
+          terraform_wrapper: false
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform init
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform init -input=false
+
+      - name: Download plan
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan
+          path: ${{ env.TF_DIR }}
+
+      - name: Terraform apply
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform apply -input=false tfplan
+
+      - name: Show deployment outputs
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          echo "Portal: $(terraform output -raw portal_url)"
+          echo "ECR image: $(terraform output -raw ecr_repository_url):${{ needs.terraform-plan.outputs.image_tag }}"

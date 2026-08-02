@@ -21,7 +21,7 @@ import unicodedata
 from collections import OrderedDict
 from datetime import datetime, timezone
 from io import BytesIO
-from urllib.parse import unquote, urlparse
+from urllib.parse import unquote, urljoin, urlparse
 
 import boto3
 from botocore.exceptions import ClientError
@@ -61,6 +61,9 @@ CONTEXT_MAX_AGE_SECONDS = max(300, int(os.environ.get(
     "BROWSER_WORKER_CONTEXT_MAX_AGE_SECONDS", "21600")))
 PLANNER_MODEL_ID = os.environ.get(
     "BROWSER_WORKER_PLANNER_MODEL_ID", "us.amazon.nova-2-lite-v1:0").strip()
+PLANNER_FALLBACK_MODEL_ID = os.environ.get(
+    "BROWSER_WORKER_PLANNER_FALLBACK_MODEL_ID",
+    "us.anthropic.claude-sonnet-5").strip()
 VERIFIER_MODEL_ID = os.environ.get(
     "BROWSER_WORKER_VERIFIER_MODEL_ID", "us.anthropic.claude-sonnet-5").strip()
 VERIFIER_FALLBACK_MODEL_ID = os.environ.get(
@@ -82,6 +85,8 @@ _BLOCK_MARKERS = (
     "access denied", "request rejected", "reference #", "akamai",
     "bot detection", "captcha", "verify you are human", "cloudflare",
     "challenge", "temporarily blocked", "are you a human",
+    "request unsuccessful", "requested url was rejected", "incident id",
+    "enable javascript and cookies",
 )
 _TERMINAL_JOB_STATUSES = {
     "downloaded", "blocked_by_source_waf", "failed", "queue_failed",
@@ -405,7 +410,10 @@ def _converse_text(model_id: str, prompt: str, image: bytes | None = None,
     response = bedrock.converse(
         modelId=model_id,
         messages=[{"role": "user", "content": content}],
-        inferenceConfig={"temperature": 0, "maxTokens": max_tokens},
+        # Claude Sonnet 5 rejects ``temperature`` in Converse.  Keeping the
+        # shared request to the portable subset also lets Nova remain the
+        # verifier fallback without model-specific branching.
+        inferenceConfig={"maxTokens": max_tokens},
     )
     return "".join(
         block.get("text", "")
@@ -631,6 +639,8 @@ def _response_body(context, page, url: str, referer: str) -> tuple:
                     marker = _block_marker(body[:100_000].decode("utf-8", "ignore"))
         except Exception:
             pass
+    if body and not body.startswith(b"%PDF") and not marker:
+        marker = _block_marker(body[:100_000].decode("utf-8", "ignore"))
     return status, ctype, body, marker
 
 
@@ -640,36 +650,52 @@ def _page_observation(page) -> dict:
         () => {
           const items = [];
           const seen = new Set();
-          const add = (kind, text, href, label) => {
+          window.__reportIqRefCounter = window.__reportIqRefCounter || 0;
+          const add = (el, kind, text, href, label) => {
             text = (text || '').replace(/\\s+/g, ' ').trim().slice(0, 180);
+            label = (label || '').replace(/\\s+/g, ' ').trim().slice(0, 120);
             href = href || '';
             if (href) {
               try { href = new URL(href, document.baseURI).href; } catch (_) { href = ''; }
             }
-            const key = kind + '|' + text + '|' + href;
-            if ((!text && !href) || seen.has(key)) return;
+            // Repeated years, "Download" labels, and icon-only controls make
+            // text locators ambiguous. Give each observed element a short ref
+            // for this DOM state, following the structured-ref pattern in
+            // iris.md. Playwright still checks visibility before every action.
+            let ref = el.getAttribute('data-reportiq-ref');
+            if (!ref) {
+              ref = `riq-${window.__reportIqRefCounter++}`;
+              try { el.setAttribute('data-reportiq-ref', ref); } catch (_) {}
+            }
+            // Deduplicate true duplicate hrefs, but preserve separate controls
+            // with the same label because each may open a different year/card.
+            const key = href ? kind + '|' + text + '|' + href : kind + '|' + ref;
+            if ((!text && !href && !label) || seen.has(key)) return;
             seen.add(key);
-            items.push({kind, text, href, label: (label || '').slice(0, 120)});
+            items.push({ref, kind, text, href, label});
           };
           document.querySelectorAll('a[href]').forEach(el =>
-            add('link', el.innerText || el.textContent, el.href, el.getAttribute('aria-label')));
+            add(el, 'link', el.innerText || el.textContent, el.href, el.getAttribute('aria-label')));
           document.querySelectorAll('[data-href],[data-url],[data-file],[data-download],[data-pdf]').forEach(el =>
-            add('data-link', el.innerText || el.textContent,
+            add(el, 'data-link', el.innerText || el.textContent,
                 el.getAttribute('data-href') || el.getAttribute('data-url') ||
                 el.getAttribute('data-file') || el.getAttribute('data-download') ||
                 el.getAttribute('data-pdf'), el.getAttribute('aria-label')));
           document.querySelectorAll('iframe[src],embed[src],object[data]').forEach(el =>
-            add('embedded-document', el.title || el.getAttribute('aria-label'),
+            add(el, 'embedded-document', el.title || el.getAttribute('aria-label'),
                 el.src || el.data, el.getAttribute('aria-label')));
           document.querySelectorAll('button,[role=button]').forEach(el =>
-            add('button', el.innerText || el.textContent, '', el.getAttribute('aria-label')));
+            add(el, 'button', el.innerText || el.textContent, '', el.getAttribute('aria-label')));
           document.querySelectorAll('input,textarea,select').forEach(el =>
-            add(el.tagName.toLowerCase(), el.value || el.placeholder,
+            add(el, el.tagName.toLowerCase(), el.value || el.placeholder,
                 '', el.getAttribute('aria-label') || el.name));
           return {
             title: document.title,
             text: (document.body?.innerText || '').replace(/\\s+/g, ' ').slice(0, 12000),
-            items: items.slice(0, 140)
+            // Keep enough links for long investor archive pages. The planner
+            // prompt remains byte-bounded separately, while deterministic
+            // link discovery can inspect the complete useful set.
+            items: items.slice(0, 500)
           };
         }
         """)
@@ -701,14 +727,63 @@ def _document_links(observation: dict, job: dict) -> list[str]:
     return list(dict.fromkeys(url for _, url in scored))[:24]
 
 
+def _json_document_urls(body: bytes, base_url: str, job: dict) -> list[str]:
+    """Extract bounded document routes from an official page's JSON/XHR data."""
+    if not body or len(body) > 2 * 1024 * 1024:
+        return []
+    try:
+        payload = json.loads(body.decode("utf-8", "ignore"))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return []
+    accepted, _ = _class_terms(job.get("report_class", ""))
+    found: list[str] = []
+    stack = [payload]
+    inspected = 0
+    while stack and inspected < 10_000 and len(found) < 50:
+        value = stack.pop()
+        inspected += 1
+        if isinstance(value, dict):
+            stack.extend(value.values())
+            continue
+        if isinstance(value, list):
+            stack.extend(value)
+            continue
+        if not isinstance(value, str):
+            continue
+        raw = value.strip().replace("\\/", "/")
+        if not (raw.startswith(("https://", "http://", "/"))):
+            continue
+        url = urljoin(base_url, raw)
+        normalized = _normalize_text(url)
+        if (urlparse(url).path.lower().endswith(".pdf")
+                or "download" in normalized
+                or any(term and term in normalized for term in accepted)):
+            found.append(url)
+    return list(dict.fromkeys(found))[:50]
+
+
+def _native_search_queries(job: dict) -> list[str]:
+    """Return bounded, progressively broader phrases for native site search."""
+    company = str(job.get("company") or "").strip()
+    report_class = str(job.get("report_class") or "").strip()
+    year = str(job.get("year") or "").strip()
+    phrases = [
+        " ".join(filter(None, (company, report_class, year))),
+        " ".join(filter(None, (report_class, year))),
+        " ".join(filter(None, (company, report_class, "PDF"))),
+    ]
+    if not year:
+        phrases.append(" ".join(filter(None, (report_class, "latest"))))
+    return list(dict.fromkeys(value for value in phrases if value))[:4]
+
+
 def _planner_action(job: dict, observation: dict, seed_urls: list[str],
-                    visited: set[str], step: int, page) -> dict:
+                    visited: set[str], step: int, page,
+                    action_history: list[dict] | None = None,
+                    model_id: str | None = None,
+                    rescue_reason: str = "") -> dict:
     aliases, rejected = _class_terms(job.get("report_class", ""))
-    search_text = " ".join(filter(None, (
-        str(job.get("company") or ""),
-        str(job.get("report_class") or ""),
-        str(job.get("year") or ""),
-    )))
+    search_queries = _native_search_queries(job)
     prompt = (
         "You control a bounded Playwright browser used only to locate one "
         "public official corporate document. Do not bypass CAPTCHA, login, "
@@ -717,12 +792,15 @@ def _planner_action(job: dict, observation: dict, seed_urls: list[str],
         "inside the website. Prefer an exact official PDF/download, then the company's "
         "native site search. Return ONLY one JSON object. Allowed actions:\n"
         '{"action":"goto","url":"exact https URL"}\n'
-        '{"action":"click","text":"exact visible link/button text"}\n'
-        '{"action":"type","label":"visible textbox label/placeholder",'
+        '{"action":"click","ref":"exact ref from current items",'
+        '"text":"visible text fallback"}\n'
+        '{"action":"type","ref":"exact textbox ref from current items",'
+        '"label":"visible textbox label/placeholder",'
         '"text":"search text"}\n'
         '{"action":"scroll"}, {"action":"back"}, {"action":"wait"}, '
         '{"action":"finish","reason":"..."}.\n'
-        "Never invent a URL. A goto URL must be one of the supplied seeds or "
+        "Use ref instead of visible text whenever an item has one. Never invent "
+        "a ref or URL. A goto URL must be one of the supplied seeds or "
         "an exact href in current items. Do not select a different company or "
         "a near-neighbour document class. First prefer visible links whose "
         "label matches the requested class/year; use a year tab, archive, or "
@@ -735,9 +813,12 @@ def _planner_action(job: dict, observation: dict, seed_urls: list[str],
         f"Year: {job.get('year') or 'latest'}\n"
         f"Accepted target phrases: {json.dumps(aliases)}\n"
         f"Excluded near-neighbour phrases: {json.dumps(rejected)}\n"
-        f"Suggested site-search text: {search_text}\n"
+        "When using native search, try these phrases in order and do not repeat "
+        f"one already present in action history: {json.dumps(search_queries)}\n"
         f"Seeds: {json.dumps(seed_urls[:20])}\n"
         f"Visited: {json.dumps(list(visited)[-20:])}\n"
+        f"Recent actions: {json.dumps((action_history or [])[-8:])}\n"
+        f"Rescue reason: {rescue_reason or 'none'}\n"
         f"Step: {step}/{MAX_AGENT_STEPS}\n"
         "Current page observation:\n" + json.dumps(observation)[:28_000]
     )
@@ -746,11 +827,24 @@ def _planner_action(job: dict, observation: dict, seed_urls: list[str],
         screenshot = page.screenshot(type="png", full_page=False)
     except Exception:
         pass
+    chosen_model = model_id or PLANNER_MODEL_ID
     try:
         return _parse_json_object(_converse_text(
-            PLANNER_MODEL_ID, prompt, image=screenshot, max_tokens=300))
+            chosen_model, prompt, image=screenshot, max_tokens=300))
     except Exception as exc:
-        print(f"[browser-agent] planner failed: {type(exc).__name__}: {exc}")
+        print(f"[browser-agent] planner failed model={chosen_model}: "
+              f"{type(exc).__name__}: {exc}")
+        if (PLANNER_FALLBACK_MODEL_ID
+                and chosen_model != PLANNER_FALLBACK_MODEL_ID):
+            try:
+                return _parse_json_object(_converse_text(
+                    PLANNER_FALLBACK_MODEL_ID, prompt,
+                    image=screenshot, max_tokens=300))
+            except Exception as fallback_exc:
+                print(
+                    "[browser-agent] planner fallback failed "
+                    f"model={PLANNER_FALLBACK_MODEL_ID}: "
+                    f"{type(fallback_exc).__name__}: {fallback_exc}")
         return {"action": "finish", "reason": "planner unavailable"}
 
 
@@ -784,8 +878,25 @@ def _visible_locator(page, text: str):
     return None
 
 
-def _type_into(page, label: str, value: str) -> bool:
+def _ref_locator(page, ref: str):
+    if not ref or not re.fullmatch(r"riq-\d+", ref):
+        return None
+    try:
+        locator = page.locator(f'[data-reportiq-ref="{ref}"]')
+        for index in range(min(locator.count(), 5)):
+            candidate = locator.nth(index)
+            if candidate.is_visible():
+                return candidate
+    except Exception:
+        pass
+    return None
+
+
+def _type_into(page, label: str, value: str, ref: str = "") -> bool:
     candidates = []
+    referenced = _ref_locator(page, ref)
+    if referenced is not None:
+        candidates.append(referenced)
     if label:
         candidates.extend([
             page.get_by_label(label, exact=False),
@@ -837,11 +948,24 @@ def _native_download_from_click(page, locator, job: dict) -> tuple | None:
 
 
 def _try_url(context, page, job: dict, url: str, referer: str) -> tuple:
+    # Never navigate the agent's working page while probing a candidate. The
+    # old implementation destroyed the investor-hub DOM on every probe, so
+    # the visual planner ended up operating on the final rejected URL and
+    # repeatedly pressed Back instead of clicking the real download link.
+    probe = None
     try:
-        status, _, body, marker = _response_body(context, page, url, referer)
+        probe = context.new_page()
+        status, _, body, marker = _response_body(
+            context, probe, url, referer)
     except Exception as exc:
         return None, (
             f"navigation failed: {type(exc).__name__}: {exc}")[:500], False
+    finally:
+        if probe is not None:
+            try:
+                probe.close()
+            except Exception:
+                pass
     if status in {401, 403, 406, 429} or marker:
         return None, marker or f"HTTP {status}", True
     if not body:
@@ -923,6 +1047,20 @@ def _agent_navigate(context, page, job: dict, seed_urls: list[str],
                     or urlparse(response.url).path.lower().endswith(".pdf")):
                 if response.url not in network_docs:
                     network_docs.append(response.url)
+            elif ("json" in ctype and len(network_docs) < 100):
+                content_length = int(
+                    (response.headers or {}).get("content-length") or 0)
+                if not content_length or content_length <= 2 * 1024 * 1024:
+                    discovered = _json_document_urls(
+                        response.body(), response.url, job)
+                    if discovered:
+                        print(
+                            "[browser-agent] JSON/XHR exposed "
+                            f"{len(discovered)} document route(s) from "
+                            f"{response.url}")
+                    for url in discovered:
+                        if url not in network_docs:
+                            network_docs.append(url)
         except Exception:
             pass
 
@@ -933,8 +1071,14 @@ def _agent_navigate(context, page, job: dict, seed_urls: list[str],
     blocked = False
     last_reason = "browser agent exhausted its navigation budget"
     rendered_attempted: set[str] = set()
-
     initial = start_urls[0]
+    document_attempts: dict[str, int] = {}
+    promising_seed = initial
+    promising_score = None
+    planner_initialized = False
+    action_history: list[dict] = []
+    planner_rescue_used = False
+
     attempted_seeds.add(initial)
     try:
         page.goto(initial, wait_until="domcontentloaded", timeout=NAV_TIMEOUT_MS)
@@ -971,10 +1115,19 @@ def _agent_navigate(context, page, job: dict, seed_urls: list[str],
         blocked = blocked or bool(marker)
 
         observed_documents = _document_links(observation, job)
+        if observed_documents:
+            observation_score = max(
+                _url_relevance_key(job, url) for url in observed_documents)
+            if promising_score is None or observation_score > promising_score:
+                promising_seed = observation.get("url") or page.url
+                promising_score = observation_score
         candidates = _rank_urls(
             job, list(dict.fromkeys(network_docs + observed_documents)))
         network_docs.clear()
         for url in candidates[:16]:
+            if document_attempts.get(url, 0) >= 2:
+                continue
+            document_attempts[url] = document_attempts.get(url, 0) + 1
             page_host = (urlparse(observation.get("url", "")).hostname or "")
             observed_on_official_page = _same_official_domain(page_host, domain)
             allowed_urls = attested_urls | (
@@ -1013,10 +1166,68 @@ def _agent_navigate(context, page, job: dict, seed_urls: list[str],
                 print(f"[browser-agent] {last_reason}; url={next_seed}")
             continue
 
+        # Begin visual navigation back on the page that exposed the most
+        # relevant document links, instead of whatever low-ranked seed was
+        # inspected last during the deterministic sweep.
+        if not planner_initialized:
+            planner_initialized = True
+            if promising_seed and page.url != promising_seed:
+                try:
+                    page.goto(
+                        promising_seed, wait_until="domcontentloaded",
+                        timeout=NAV_TIMEOUT_MS)
+                    page.wait_for_timeout(1200)
+                    _dismiss_cookie_modals(page)
+                    observation = _page_observation(page)
+                    visited.add(page.url)
+                except Exception as exc:
+                    last_reason = (
+                        "promising seed navigation failed: "
+                        f"{type(exc).__name__}: {exc}")[:500]
+                    print(f"[browser-agent] {last_reason}; url={promising_seed}")
+
         planner_step = max(1, cycle - len(start_urls) + 1)
         action = _planner_action(
-            job, observation, start_urls, visited, planner_step, page)
+            job, observation, start_urls, visited, planner_step, page,
+            action_history=action_history)
         kind = str(action.get("action") or "finish").lower()
+        action_key = {
+            "url": page.url,
+            "action": kind,
+            "target": str(
+                action.get("ref") or action.get("url") or action.get("text")
+                or action.get("label") or "")[:300],
+        }
+        if action_history.count(action_key) >= 2:
+            if PLANNER_FALLBACK_MODEL_ID and not planner_rescue_used:
+                planner_rescue_used = True
+                action = _planner_action(
+                    job, observation, start_urls, visited, planner_step, page,
+                    action_history=action_history,
+                    model_id=PLANNER_FALLBACK_MODEL_ID,
+                    rescue_reason=(
+                        "The primary planner repeated the same ineffective "
+                        "action three times. Choose a different observed ref, "
+                        "native-search phrase, or finish."))
+                kind = str(action.get("action") or "finish").lower()
+                action_key = {
+                    "url": page.url,
+                    "action": kind,
+                    "target": str(
+                        action.get("ref") or action.get("url")
+                        or action.get("text") or action.get("label") or "")[:300],
+                }
+                print(
+                    "[browser-agent] used one stronger-model rescue after "
+                    "repeated primary-planner action")
+            else:
+                last_reason = "planner repeated the same ineffective action three times"
+                print(
+                    f"[browser-agent] stopping repeated action={kind} "
+                    f"url={page.url}")
+                break
+        action_history.append(action_key)
+        action_history = action_history[-12:]
         print(
             f"[browser-agent] step={planner_step}/{MAX_AGENT_STEPS} action={kind} "
             f"url={page.url} target={str(action)[:500]}")
@@ -1036,7 +1247,10 @@ def _agent_navigate(context, page, job: dict, seed_urls: list[str],
                 page.wait_for_timeout(1200)
                 _dismiss_cookie_modals(page)
             elif kind == "click":
-                locator = _visible_locator(page, str(action.get("text") or ""))
+                locator = _ref_locator(page, str(action.get("ref") or ""))
+                if locator is None:
+                    locator = _visible_locator(
+                        page, str(action.get("text") or ""))
                 if locator is None:
                     last_reason = "planner click target was not visible"
                     continue
@@ -1047,7 +1261,8 @@ def _agent_navigate(context, page, job: dict, seed_urls: list[str],
             elif kind == "type":
                 if not _type_into(
                         page, str(action.get("label") or ""),
-                        str(action.get("text") or "")[:300]):
+                        str(action.get("text") or "")[:300],
+                        ref=str(action.get("ref") or "")):
                     last_reason = "planner could not find the requested textbox"
                 page.wait_for_timeout(1200)
             elif kind == "scroll":

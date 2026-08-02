@@ -11,6 +11,9 @@ Contracts (direct boto3 RequestResponse invoke from the AgentCore runtime):
          "report_class": "<canonical class, optional>",
          "synonyms": ["<alternate name for report_class>", ...] (optional),
          "year": <int, optional>,
+         "prefer_latest": <bool, optional>,
+         "preferred_language": "<language code, optional>",
+         "standalone_only": <bool, optional>,
          "company_name": "<legal/official name, optional>",
          "ticker": "<ticker, optional>",
          "jurisdiction": "<jurisdiction, optional>"}
@@ -50,6 +53,7 @@ but call Vertex inference.
 """
 
 import concurrent.futures
+import datetime as dt
 import json
 import os
 import threading
@@ -65,7 +69,7 @@ import google.auth.transport.requests
 SECRET_NAME         = os.environ.get("GCP_SECRET_NAME", "GCP_Vertex_Service_Account_Key")
 GCP_PROJECT_ID      = os.environ.get("GCP_PROJECT_ID", "poc-corpdevvertexai")
 VERTEX_LOCATION     = os.environ.get("VERTEX_LOCATION", "global")
-VERTEX_MODEL_ID     = os.environ.get("VERTEX_MODEL_ID", "gemini-3.5-flash")
+VERTEX_MODEL_ID     = os.environ.get("VERTEX_MODEL_ID", "gemini-2.5-flash")
 REDIRECT_WORKERS    = int(os.environ.get("REDIRECT_WORKERS", "8"))
 REDIRECT_TIMEOUT    = int(os.environ.get("REDIRECT_TIMEOUT", "5"))
 DEFAULT_MAX_RESULTS = int(os.environ.get("DEFAULT_MAX_RESULTS", "10"))
@@ -248,7 +252,10 @@ def _clean_identity_hint(raw: dict) -> dict:
 def _document_search_prompt(query: str, report_class: str, year,
                             company_name: str, ticker: str,
                             jurisdiction: str,
-                            synonyms: list | None = None) -> str:
+                            synonyms: list | None = None,
+                            prefer_latest: bool = False,
+                            preferred_language: str = "",
+                            standalone_only: bool = False) -> str:
     """Layer structured identity/class/year facts on top of the free-text
     query so Gemini's own internal search formulation has explicit anchors,
     instead of relying on those signals being embedded as ordinary words
@@ -272,14 +279,29 @@ def _document_search_prompt(query: str, report_class: str, year,
         facts.append(f"Document type requested: {report_class}{also}.")
     if year:
         facts.append(f"Target fiscal/reporting year: {year}.")
+    elif prefer_latest:
+        facts.append(
+            "Target version: the latest currently published official version; "
+            "do not default to an older familiar result.")
+    if preferred_language:
+        facts.append(f"Preferred document language: {preferred_language}.")
+    if standalone_only:
+        facts.append(
+            "Return a standalone document for this exact document type, not "
+            "an annual/sustainability report that merely mentions the topic.")
     if not facts:
         return query
     facts.append(
-        "Use Google Search to find the exact official document matching the "
-        "above facts. Prefer the company's own official website or "
-        "regulatory filing over news, summaries, or third-party mirrors. Do "
-        "not substitute a different document type or a different fiscal "
-        "year unless the query below asks for the latest/undated version."
+        f"Today's date is {dt.date.today().isoformat()}. Use Google Search to "
+        "find the exact official document matching the above facts. Search "
+        "both for a direct PDF/download and for the company's official "
+        "investor-relations archive, reports library, or governance document "
+        "landing page that contains it. Prefer the company's own official "
+        "website or regulatory filing over news, summaries, or third-party "
+        "mirrors. Try an exact document-title formulation and a broader "
+        "official archive/library formulation when necessary. Do not "
+        "substitute a different document type or a different fiscal year "
+        "unless the query below asks for the latest/undated version."
     )
     facts.append(f"Search query: {query}")
     return "\n".join(facts)
@@ -325,9 +347,15 @@ def lambda_handler(event, context):
             year = int(year) if year else None
         except (TypeError, ValueError):
             year = None
+        prefer_latest = bool(event.get("prefer_latest"))
+        preferred_language = str(
+            event.get("preferred_language") or "").strip()[:32]
+        standalone_only = bool(event.get("standalone_only"))
         query = _document_search_prompt(
             query, report_class, year, company_name, ticker, jurisdiction,
-            synonyms=synonyms)
+            synonyms=synonyms, prefer_latest=prefer_latest,
+            preferred_language=preferred_language,
+            standalone_only=standalone_only)
 
     if not query or (mode == "company_identity" and not company_name):
         return {"results": [], "via": "vertex-error", "count": 0,

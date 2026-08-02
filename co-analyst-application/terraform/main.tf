@@ -52,6 +52,7 @@ locals {
     BROWSER_WORKER_CONTEXT_MAX_AGE_SECONDS      = tostring(var.browser_worker_context_max_age_seconds)
     BROWSER_WORKER_VISIBILITY_EXTENSION_SECONDS = tostring(var.browser_worker_visibility_timeout_seconds)
     BROWSER_WORKER_PLANNER_MODEL_ID             = var.browser_worker_planner_model_id
+    BROWSER_WORKER_PLANNER_FALLBACK_MODEL_ID    = var.browser_worker_planner_fallback_model_id
     BROWSER_WORKER_VERIFIER_MODEL_ID            = var.browser_worker_verifier_model_id
     BROWSER_WORKER_VERIFIER_FALLBACK_MODEL_ID   = var.browser_worker_verifier_fallback_model_id
     BROWSER_WORKER_STATE_PREFIX                 = var.browser_worker_state_prefix

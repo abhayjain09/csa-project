@@ -98,7 +98,7 @@ def _load_worker_validation_helpers():
         "_candidate_year", "_language_score", "_candidate_preference_key",
         "_has_preferred_unresolved", "_same_official_domain",
         "_class_terms", "_url_relevance_key", "_rank_urls",
-        "_document_links", "_safe_candidate",
+        "_document_links", "_json_document_urls", "_safe_candidate",
     }
     nodes = []
     for item in tree.body:
@@ -120,7 +120,9 @@ def _load_worker_validation_helpers():
         "re": re,
         "unicodedata": unicodedata,
         "unquote": unquote,
+        "urljoin": urljoin,
         "urlparse": urlparse,
+        "json": json,
         "_LEGAL_SUFFIXES": {
             "inc", "incorporated", "corp", "corporation", "company", "co",
             "limited", "ltd", "plc", "llc", "holdings", "group",
@@ -321,14 +323,17 @@ def _load_page_render_helpers():
 def _load_vertex_helpers():
     path = REPO_ROOT / "agents/download-agent/vertex_search/lambda.py"
     tree = ast.parse(path.read_text(encoding="utf-8"))
-    wanted = {"_parse_first_json_object", "_clean_identity_hint"}
+    wanted = {
+        "_parse_first_json_object", "_clean_identity_hint",
+        "_document_search_prompt",
+    }
     nodes = [
         item for item in tree.body
         if isinstance(item, ast.FunctionDef) and item.name in wanted
     ]
     module = ast.Module(body=nodes, type_ignores=[])
     ast.fix_missing_locations(module)
-    namespace = {"json": json}
+    namespace = {"json": json, "dt": __import__("datetime")}
     exec(compile(module, str(path), "exec"), namespace)
     return namespace
 
@@ -373,6 +378,7 @@ def _load_routing_helpers():
         "LATEST_DOCUMENT_SEARCH_VARIANTS": 6,
         "LATEST_COMPLETED_FISCAL_YEAR_LAG": 1,
         "CURRENT_YEAR": 2026,
+        "VERTEX_SEARCH_MAX_CALLS": 2,
         "_IR_ONLY_CLASSES": {
             "annual report", "proxy statement", "remuneration report"},
         "_extract_year_intent": lambda value: {
@@ -634,6 +640,81 @@ class ResultMappingTests(unittest.TestCase):
 
 
 class BrowserWorkerValidationTests(unittest.TestCase):
+    def test_bedrock_converse_uses_model_portable_inference_config(self):
+        path = REPO_ROOT / "co-analyst-application/app/backend/browser_worker.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        node = next(
+            item for item in tree.body
+            if isinstance(item, ast.FunctionDef)
+            and item.name == "_converse_text"
+        )
+        module = ast.Module(body=[node], type_ignores=[])
+        ast.fix_missing_locations(module)
+
+        class Bedrock:
+            def __init__(self):
+                self.kwargs = None
+
+            def converse(self, **kwargs):
+                self.kwargs = kwargs
+                return {"output": {"message": {"content": [{"text": "ok"}]}}}
+
+        client = Bedrock()
+        namespace = {"bedrock": client}
+        exec(compile(module, str(path), "exec"), namespace)
+        self.assertEqual(
+            namespace["_converse_text"]("model", "prompt", max_tokens=321),
+            "ok",
+        )
+        self.assertEqual(client.kwargs["inferenceConfig"], {"maxTokens": 321})
+
+    def test_candidate_probe_uses_an_isolated_page(self):
+        path = REPO_ROOT / "co-analyst-application/app/backend/browser_worker.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        node = next(
+            item for item in tree.body
+            if isinstance(item, ast.FunctionDef) and item.name == "_try_url"
+        )
+        module = ast.Module(body=[node], type_ignores=[])
+        ast.fix_missing_locations(module)
+
+        class Probe:
+            def __init__(self):
+                self.closed = False
+
+            def close(self):
+                self.closed = True
+
+        class Context:
+            def __init__(self):
+                self.probe = Probe()
+
+            def new_page(self):
+                return self.probe
+
+        context = Context()
+        working_page = object()
+        used_pages = []
+
+        def response_body(_context, page, _url, _referer):
+            used_pages.append(page)
+            return 403, "text/html", b"Access denied", "access denied"
+
+        namespace = {
+            "_response_body": response_body,
+            "_verify_pdf": lambda *_args: (False, "not used", ""),
+            "MAX_DOCUMENT_BYTES": 1024,
+            "NAV_TIMEOUT_MS": 1000,
+        }
+        exec(compile(module, str(path), "exec"), namespace)
+        found, reason, blocked = namespace["_try_url"](
+            context, working_page, {}, "https://example.com/report", "")
+        self.assertIsNone(found)
+        self.assertEqual(reason, "access denied")
+        self.assertTrue(blocked)
+        self.assertEqual(used_pages, [context.probe])
+        self.assertTrue(context.probe.closed)
+
     def test_verifier_falls_back_when_primary_model_rejects_request(self):
         calls = []
 
@@ -699,6 +780,23 @@ class BrowserWorkerValidationTests(unittest.TestCase):
         )
         self.assertEqual(links, [route])
 
+    def test_json_api_document_routes_are_discovered_without_an_llm_call(self):
+        helpers = _load_worker_validation_helpers()
+        links = helpers["_json_document_urls"](
+            json.dumps({
+                "items": [
+                    {"downloadUrl": "/drupal-data/annual-report-2025.pdf"},
+                    {"url": "/news/unrelated"},
+                ]
+            }).encode(),
+            "https://example.com/api/reports",
+            {"report_class": "annual report"},
+        )
+        self.assertEqual(
+            links,
+            ["https://example.com/drupal-data/annual-report-2025.pdf"],
+        )
+
     def test_sp_global_vendor_code_matches_company_and_specific_class(self):
         helpers = _load_worker_validation_helpers()
         text = (
@@ -741,6 +839,130 @@ class BrowserWorkerValidationTests(unittest.TestCase):
         self.assertIn('resource "aws_ecs_service" "browser_worker"', terraform_source)
         self.assertIn('sid       = "BrowserSessionStateList"', terraform_source)
         self.assertIn('actions   = ["s3:ListBucket"]', terraform_source)
+
+    def test_visual_worker_preserves_investor_page_and_bounds_repeated_actions(self):
+        source = (
+            REPO_ROOT / "co-analyst-application/app/backend/browser_worker.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("items: items.slice(0, 500)", source)
+        self.assertIn("document_attempts", source)
+        self.assertIn("promising_seed", source)
+        self.assertIn("planner repeated the same ineffective action", source)
+        self.assertIn("data-reportiq-ref", source)
+        self.assertIn("kind + '|' + ref", source)
+        self.assertIn("!text && !href && !label", source)
+        self.assertIn("PLANNER_FALLBACK_MODEL_ID", source)
+
+    def test_native_search_queries_are_bounded_and_progressively_broader(self):
+        path = REPO_ROOT / "co-analyst-application/app/backend/browser_worker.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        node = next(
+            item for item in tree.body
+            if isinstance(item, ast.FunctionDef)
+            and item.name == "_native_search_queries"
+        )
+        module = ast.Module(body=[node], type_ignores=[])
+        ast.fix_missing_locations(module)
+        namespace = {}
+        exec(compile(module, str(path), "exec"), namespace)
+        queries = namespace["_native_search_queries"]({
+            "company": "Example Inc",
+            "report_class": "annual report",
+            "year": "2025",
+        })
+        self.assertLessEqual(len(queries), 4)
+        self.assertEqual(queries[0], "Example Inc annual report 2025")
+        self.assertIn("annual report 2025", queries)
+
+    def test_kill_cancels_browser_jobs_even_while_run_is_running(self):
+        path = REPO_ROOT / "co-analyst-application/app/backend/app.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        function = next(
+            item for item in tree.body
+            if isinstance(item, ast.FunctionDef) and item.name == "kill_run"
+        )
+        source = ast.unparse(function)
+        self.assertFalse(any(
+            "browser_retry_pending" in ast.unparse(node.test)
+            for node in ast.walk(function) if isinstance(node, ast.If)
+        ))
+        self.assertIn("ExclusiveStartKey", source)
+        self.assertIn("{'queued', 'running'}", source)
+
+    def test_browser_success_is_merged_before_all_jobs_finish(self):
+        path = REPO_ROOT / "co-analyst-application/app/backend/app.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        node = next(
+            item for item in tree.body
+            if isinstance(item, ast.FunctionDef)
+            and item.name == "_refresh_browser_retry_run"
+        )
+        module = ast.Module(body=[node], type_ignores=[])
+        ast.fix_missing_locations(module)
+
+        class Table:
+            def __init__(self, items=None):
+                self.items = items or []
+                self.updates = []
+
+            def scan(self, **_kwargs):
+                return {"Items": self.items}
+
+            def update_item(self, **kwargs):
+                self.updates.append(kwargs)
+
+            def get_item(self, **_kwargs):
+                return {}
+
+        jobs = Table([
+            {
+                "job_id": "job-1", "request_id": "1:1",
+                "status": "downloaded", "s3_key": "company/annual/report.pdf",
+                "source_url": "https://example.com/report",
+            },
+            {"job_id": "job-2", "request_id": "2:1", "status": "queued"},
+        ])
+        runs, queries = Table(), Table()
+
+        class Dynamo:
+            def Table(self, name):
+                return {
+                    "browser-jobs": jobs,
+                    "runs": runs,
+                    "queries": queries,
+                }[name]
+
+        class ClientError(Exception):
+            response = {"Error": {"Code": ""}}
+
+        namespace = {
+            "json": json,
+            "datetime": datetime,
+            "timezone": timezone,
+            "ClientError": ClientError,
+            "BROWSER_JOBS_TABLE": "browser-jobs",
+            "RUNS_TABLE": "runs",
+            "QUERIES_TABLE": "queries",
+        }
+        exec(compile(module, str(path), "exec"), namespace)
+        run = {
+            "run_id": "run-1", "query_id": "query-1",
+            "status": "browser_retry_pending",
+            "downloaded": "[]",
+            "failures": json.dumps([{"request_id": "1:1"}]),
+            "diagnostics": json.dumps({"per_chunk": [{"results": [
+                {"request_id": "1:1", "status": "browser_retry_queued"},
+                {"request_id": "2:1", "status": "browser_retry_queued"},
+            ]}]}),
+        }
+        refreshed = namespace["_refresh_browser_retry_run"](run, Dynamo())
+        self.assertEqual(refreshed["status"], "browser_retry_pending")
+        self.assertEqual(
+            json.loads(refreshed["downloaded"])[0]["s3_key"],
+            "company/annual/report.pdf",
+        )
+        self.assertEqual(json.loads(refreshed["failures"]), [])
+        self.assertEqual(len(runs.updates), 1)
 
     def test_latest_fiscal_range_url_outranks_older_report(self):
         helpers = _load_worker_validation_helpers()
@@ -836,10 +1058,19 @@ class StructuredPayloadTests(unittest.TestCase):
                 "tax strategy and governance",
             "Supplier Code of Conduct":
                 "supplier code of conduct",
+            "Human Rights Due Diligence":
+                "human rights due diligence",
         }
         for query, expected in cases.items():
             with self.subTest(query=query):
                 self.assertEqual(infer(query), expected)
+
+    def test_bulk_ui_uses_full_human_rights_due_diligence_query(self):
+        source = (
+            REPO_ROOT / "co-analyst-application/app/static/index.html"
+        ).read_text(encoding="utf-8")
+        self.assertIn("'Human Rights Due Diligence'", source)
+        self.assertNotIn("'Human Due Diligence'", source)
 
 
 class PdfIntegrityTests(unittest.TestCase):
@@ -1021,6 +1252,24 @@ class VertexIdentityContractTests(unittest.TestCase):
         })
         self.assertIsNone(hint["cik"])
 
+    def test_document_prompt_carries_latest_language_and_standalone_intent(self):
+        prompt = _load_vertex_helpers()["_document_search_prompt"](
+            "Example anti-bribery policy",
+            "anti-bribery policy",
+            None,
+            "Example Inc",
+            "EX",
+            "us",
+            synonyms=["anti-corruption policy"],
+            prefer_latest=True,
+            preferred_language="en",
+            standalone_only=True,
+        )
+        self.assertIn("latest currently published official version", prompt)
+        self.assertIn("Preferred document language: en", prompt)
+        self.assertIn("standalone document", prompt)
+        self.assertIn("official archive/library formulation", prompt)
+
 
 class SelectionConfidenceTests(unittest.TestCase):
     def test_medium_web_selection_is_rejected(self):
@@ -1167,6 +1416,76 @@ class LanguageScopeAndDomainTests(unittest.TestCase):
         self.assertTrue(any('ticker "ACME"' in q for q in queries))
         self.assertTrue(all("wrong.example" not in q for q in queries))
         self.assertTrue(all("0000123456" not in q for q in queries))
+
+    def test_vertex_queries_use_exact_then_archive_rescue_and_are_capped(self):
+        helpers = _load_routing_helpers()
+        queries = helpers["_official_search_queries"](
+            "Acme annual report 2025",
+            {"domain": "investors.acme.com"},
+            ["Acme yearly report 2025"],
+            ["Acme financial statements 2025"],
+            report_class="annual report",
+            vertex_backend=True,
+        )
+        self.assertEqual(len(queries), 2)
+        self.assertTrue(queries[0].endswith("site:investors.acme.com"))
+        self.assertIn("reports archive PDF download", queries[1])
+        # Annual-report discovery stays on the supplied IR subdomain rather
+        # than broadening to the apex domain.
+        self.assertTrue(queries[1].endswith("site:investors.acme.com"))
+
+    def test_vertex_rescue_call_is_adaptive(self):
+        path = REPO_ROOT / "agents/download-agent/agent/agent.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        node = next(
+            item for item in tree.body
+            if isinstance(item, ast.FunctionDef)
+            and item.name == "_parallel_web_search"
+        )
+        module = ast.Module(body=[node], type_ignores=[])
+        ast.fix_missing_locations(module)
+        calls = []
+
+        def search(query, *_args, **_kwargs):
+            calls.append(query)
+            if "archive" in query:
+                return ([{"url": "https://acme.com/report-2025.pdf"}],
+                        "vertex-grounding")
+            return ([{"url": "https://acme.com/investors"}],
+                    "vertex-grounding")
+
+        namespace = {
+            "concurrent": __import__("concurrent"),
+            "SEARCH_BACKEND": "vertex_lambda",
+            "SEARCH_FANOUT_WORKERS": 8,
+            "_single_web_search": search,
+            "_domain": lambda _query: "acme.com",
+            "_host_matches": lambda url, domain: domain in url,
+            "_is_doc_url": lambda url: url.endswith(".pdf"),
+            "_keywords": lambda value: value.lower().split(),
+            "unquote": unquote,
+            "urlparse": urlparse,
+        }
+        exec(compile(module, str(path), "exec"), namespace)
+        queries = [
+            "Acme annual report 2025 site:acme.com",
+            "Acme annual report 2025 archive PDF site:acme.com",
+        ]
+        results = namespace["_parallel_web_search"](queries, 10)
+        self.assertEqual(calls, queries)
+        self.assertEqual(len(results[queries[1]][0]), 1)
+
+        calls.clear()
+
+        def direct_search(query, *_args, **_kwargs):
+            calls.append(query)
+            return ([{"url": "https://acme.com/report-2025.pdf"}],
+                    "vertex-grounding")
+
+        namespace["_single_web_search"] = direct_search
+        results = namespace["_parallel_web_search"](queries, 10)
+        self.assertEqual(calls, [queries[0]])
+        self.assertEqual(results[queries[1]][1], "skipped-primary-sufficient")
 
     def test_web_discovery_fails_closed_without_official_domain(self):
         helpers = _load_routing_helpers()

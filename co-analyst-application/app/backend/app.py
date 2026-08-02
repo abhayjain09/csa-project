@@ -1270,8 +1270,7 @@ def _refresh_browser_retry_run(run: dict, dynamo=None) -> dict:
         "downloaded", "blocked_by_source_waf", "failed", "queue_failed",
         "cancelled",
     }
-    if not all(job.get("status") in terminal for job in jobs):
-        return run
+    all_terminal = all(job.get("status") in terminal for job in jobs)
 
     try:
         downloaded = json.loads(run.get("downloaded") or "[]")
@@ -1288,6 +1287,7 @@ def _refresh_browser_retry_run(run: dict, dynamo=None) -> dict:
 
     successful_ids = set()
     jobs_by_request = {}
+    changed = False
     for job in jobs:
         request_id = job.get("request_id", "")
         jobs_by_request[request_id] = job
@@ -1306,32 +1306,51 @@ def _refresh_browser_retry_run(run: dict, dynamo=None) -> dict:
                 and item.get("s3_key") == result["s3_key"]
                 for item in downloaded):
             downloaded.append(result)
+            changed = True
+    failure_count = len(failures)
     failures = [
         item for item in failures
         if not (isinstance(item, dict)
                 and item.get("request_id") in successful_ids)
     ]
+    changed = changed or len(failures) != failure_count
     for chunk in diagnostics.get("per_chunk", []):
         for row in chunk.get("results", []):
             job = jobs_by_request.get(row.get("request_id", ""))
             if not job:
                 continue
             if job.get("status") == "downloaded" and job.get("s3_key"):
-                row.update({
+                updates = {
                     "status": "downloaded",
                     "s3_key": job["s3_key"],
                     "file_name": job["s3_key"].rsplit("/", 1)[-1],
                     "source_url": job.get("source_url", ""),
                     "duplicate": bool(job.get("duplicate")),
                     "browser_job_id": job.get("job_id", ""),
-                })
+                }
+                changed = changed or any(
+                    row.get(key) != value for key, value in updates.items())
+                row.update(updates)
+                changed = changed or "reason" in row
                 row.pop("reason", None)
-            else:
-                row["status"] = job.get("status", "failed")
-                row["reason"] = job.get(
+            elif job.get("status") in terminal:
+                new_status = job.get("status", "failed")
+                new_reason = job.get(
                     "error_msg", "long-running browser did not download")
+                changed = changed or row.get("status") != new_status
+                changed = changed or row.get("reason") != new_reason
+                row["status"] = new_status
+                row["reason"] = new_reason
 
-    final_status = "complete" if downloaded else "no_results"
+    # Surface completed downloads immediately. The run remains pending until
+    # every browser job is terminal, but users no longer wait for the entire
+    # serial queue before seeing a document already verified and stored in S3.
+    final_status = (
+        ("complete" if downloaded else "no_results")
+        if all_terminal else "browser_retry_pending"
+    )
+    if not changed and not all_terminal:
+        return run
     old_version = int(run.get("browser_patch_version", 0))
     now_iso = datetime.now(timezone.utc).isoformat()
     try:
@@ -2151,9 +2170,10 @@ def kill_run(run_id):
     never writes to this run_id again — so deleting the row here is final,
     not something a lagging background write can resurrect.
 
-    For a run in browser_retry_pending, durable browser jobs are marked
-    cancelled. The persistent worker discards queued messages for cancelled
-    jobs and never recreates the deleted run.
+    Durable browser jobs are marked cancelled regardless of the run's current
+    status. A browser retry can be queued while AgentCore chunks are still
+    running, so restricting cleanup to ``browser_retry_pending`` leaves an
+    orphaned SQS job after the run is deleted.
     """
     dynamo   = get_dynamo()
     runs_tbl = dynamo.Table(RUNS_TABLE)
@@ -2163,14 +2183,15 @@ def kill_run(run_id):
 
     _mark_run_killed(run_id)
 
-    if item.get("status") == "browser_retry_pending":
-        try:
-            jobs_tbl = dynamo.Table(BROWSER_JOBS_TABLE)
-            resp = jobs_tbl.scan(
-                FilterExpression="#run = :run",
-                ExpressionAttributeNames={"#run": "run_id"},
-                ExpressionAttributeValues={":run": run_id},
-            )
+    try:
+        jobs_tbl = dynamo.Table(BROWSER_JOBS_TABLE)
+        scan_kwargs = {
+            "FilterExpression": "#run = :run",
+            "ExpressionAttributeNames": {"#run": "run_id"},
+            "ExpressionAttributeValues": {":run": run_id},
+        }
+        while True:
+            resp = jobs_tbl.scan(**scan_kwargs)
             for job in resp.get("Items", []):
                 if job.get("status") not in {"queued", "running"}:
                     continue
@@ -2187,9 +2208,13 @@ def kill_run(run_id):
                 except Exception as exc:
                     log.warning("[kill] browser job status update failed for "
                                 "%s: %s", job.get("job_id", ""), exc)
-        except Exception as exc:
-            log.error("[kill] browser job cleanup failed for run %s: %s",
-                       run_id[:8], exc)
+            last_key = resp.get("LastEvaluatedKey")
+            if not last_key:
+                break
+            scan_kwargs["ExclusiveStartKey"] = last_key
+    except Exception as exc:
+        log.error("[kill] browser job cleanup failed for run %s: %s",
+                  run_id[:8], exc)
 
     query_id = item.get("query_id")
     if query_id and query_id != "unknown":
@@ -2862,7 +2887,7 @@ _REPORT_CLASS_ALIASES = (
     ("impact report", ("impact report",)),
     ("human rights policy", ("human rights policy",)),
     ("human rights due diligence", (
-        "human due diligence", "human rights due diligence",
+        "human rights due diligence", "human due diligence",
         "human rights impact assessment",
     )),
     ("modern slavery statement", (

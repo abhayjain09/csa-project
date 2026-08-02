@@ -7,6 +7,141 @@ below are local and are not deployed yet; see "Deployment status."
 
 ## Production browser incident follow-up — 2026-08-02
 
+### Second production rerun (`csa-browser-diagnostics.ShejHn.tar.gz`)
+
+The later two-hour archive confirms the first corrective deployment improved
+coverage but exposed three additional application defects. At capture time:
+
+- JFrog run `ba2b45c6-7c10-4ff7-8179-e210b7a9fefe` had six verified downloads
+  (including its Annual Report) and eight browser jobs still represented as
+  five terminal WAF blocks plus three queued jobs.
+- Fortis run `fb2f5c55-38b0-4e61-a0b9-1206d5cbafba` displayed three direct
+  downloads. The persistent browser had also successfully verified and stored
+  the anti-bribery policy, so S3/provenance already contained a fourth result,
+  but run reconciliation hid that success until every serial browser job became
+  terminal.
+- The Fortis Annual Report job reached the official report hub but direct
+  `/drupal-data/*.pdf` requests returned HTTP 403. Candidate probing reused the
+  planner's working page, replacing the useful investor-hub DOM on every probe.
+  The planner consequently operated on the last rejected page, repeatedly
+  issued `back`, and re-tested the same links for most of its 18-step budget.
+- The primary `us.anthropic.claude-sonnet-5` verifier failed every request with
+  `ValidationException` because `temperature` is deprecated for that model.
+  The Nova fallback worked and approved the valid Fortis anti-bribery policy.
+- Browser-state IAM is now correct: encrypted state objects exist for Bilibili,
+  Fortis, and JFrog and no state-bucket AccessDenied appears in the archive.
+- Seven SQS jobs were visible and one was in flight; the DLQ was empty. The ECS
+  application and browser services were both healthy at desired/running count
+  one. The saved sessions therefore work, but the single serial worker plus the
+  old navigation loop caused the long backlog.
+- The apparent third-company omission was not a collection failure. Bilibili
+  run `a6bdfba2-16bf-4f9e-83f4-b7f4423e951a` was manually killed while its run
+  status was still `running`. Kill cleanup only cancelled browser jobs for a
+  `browser_retry_pending` run, so its queued supplier-code job ran later as an
+  orphan even though the parent run had been deleted.
+
+Additional local corrections after this archive (not deployed yet):
+
+- Candidate verification now uses an isolated probe page and never destroys
+  the visual planner's current DOM. Long investor pages retain up to 500
+  interactive/link items for deterministic discovery.
+- Candidate URLs are attempted at most twice during the navigation sweep, the
+  planner is returned to the seed that exposed the strongest report link, and
+  three identical ineffective actions stop the job instead of consuming the
+  remaining model/navigation budget.
+- The shared Bedrock Converse request uses only portable `maxTokens`; the
+  unsupported `temperature` parameter was removed, restoring Claude Sonnet 5
+  while retaining Nova fallback behavior.
+- More common WAF response markers are typed as blocking responses rather than
+  generic non-PDF failures.
+- Browser reconciliation merges each terminal downloaded job into the run/UI
+  immediately while keeping the overall run `browser_retry_pending` until all
+  jobs finish. It no longer hides a document already present in S3/provenance.
+- Deleting any active run now paginates and cancels its queued/running browser
+  jobs regardless of the parent run status, preventing orphan queue work.
+- Python compilation, shell syntax, `git diff --check`, and 104 focused
+  regression tests pass for this second corrective pass.
+
+### Iris/Vertex/browser re-audit — 2026-08-02 (current local worktree)
+
+The full discovery flow was re-audited against `iris.md`. Iris's useful generic
+pattern is: start on the attested official site, inspect structured interactive
+elements, use the company's own search with progressively broader phrases,
+refresh the page snapshot after each state change, and use external search only
+as bounded discovery. Its Capital One example also demonstrates why external
+results cannot be accepted directly: a same-query result for a different
+company appeared alongside the correct official source. Report IQ therefore
+retains its stricter byte/content/company/class/year verification gates.
+
+Additional changes from this audit (not deployed yet):
+
+- Browser observations now assign stable `riq-*` references to links, buttons,
+  fields, embedded documents, and data-backed download controls. Planner click
+  and type actions use those references first, with visible text only as a
+  fallback. This removes ambiguity on archive pages containing repeated years,
+  repeated `Download` labels, and icon-only search controls.
+- Native company-site search now receives a bounded, company-specific sequence:
+  exact company + class + year, class + year, company + class + PDF, and (for
+  undated requests) class + latest. Recent actions are supplied to the planner
+  so it does not retry the same phrase indefinitely. A fresh observation is
+  already taken after each action.
+- The browser also inspects bounded JSON/XHR responses (maximum 2 MiB and
+  10,000 scalar nodes) for official PDF/download/class-matching routes. This
+  catches JavaScript investor archives that fetch document URLs through an API
+  before rendering them, without adding a search or model call.
+- Nova 2 Lite remains the low-cost primary navigation model. Claude Sonnet 5 is
+  used only when the primary planner request errors or once after the primary
+  planner repeats an ineffective action three times. This is a targeted model
+  escalation, not a costly Sonnet call on every browser step. Existing Bedrock
+  permissions already include both model/profile ARN forms; Terraform only
+  exports the new fallback-model environment value.
+- Vertex discovery no longer launches the old broad set of near-duplicate
+  recency and LLM-generated queries. Gemini already receives the official
+  company, domain, class aliases, year/latest intent, preferred language,
+  standalone requirement, ticker, and jurisdiction as structured facts. It now
+  performs one exact official-document pass. A second, differently
+  worded official archive/library/PDF-download pass runs only if the first pass
+  does not expose an official direct document. Calls are capped at two per
+  requested class by default (`VERTEX_SEARCH_MAX_CALLS=2`).
+- The Vertex prompt now explicitly asks for both direct downloads and official
+  investor-report/governance-library landing pages, includes today's date for
+  `latest` intent, and asks for exact-title plus broader archive formulations.
+  The Lambda's source default is aligned with Terraform at
+  `gemini-2.5-flash`. No model upgrade was made because the observed failure was
+  navigation state/WAF behavior rather than model reasoning quality.
+- The bulk query label `Human Due Diligence` is corrected to `Human Rights Due
+  Diligence`; the shorter form remains only as a legacy inference alias.
+- No additional GCP service is required. Vertex AI Search would require a
+  maintained indexed datastore and is not a general arbitrary-company web
+  index; another Cloud Run browser would duplicate the persistent ECS browser;
+  and Search Console/Indexing APIs do not provide public-web document search.
+  The existing Gemini Google Search grounding + deterministic site crawl +
+  persistent browser is the appropriate layered design.
+
+The loop remains bounded and fail-closed: deterministic link probing first,
+then observe -> one constrained model action -> validate progress -> observe
+again, with two attempts per document URL, three-repeat detection, one optional
+strong-model rescue, and the existing total step limit. CAPTCHA/login bypass is
+still prohibited, and persistent cookies improve continuity but do not promise
+that an AWS egress IP will pass a source WAF.
+
+Local verification after this audit: Python compilation, Terraform formatting
+for the co-analyst stack, `git diff --check`, and 104/104 focused regression
+tests pass. Live Vertex, Bedrock, Playwright, WAF, and document-result quality
+still require deployment and a fresh canary.
+
+Deployment now requires both paths because this audit changed both services:
+
+1. From `agents/download-agent`, run `./scripts/deploy.sh <new-agent-tag>
+   <new-vertex-tag>`. That rebuilds the AgentCore image and the isolated Vertex
+   Lambda image and applies both tags.
+2. Run `.github/workflows/coanalyst-ecs-deploy.yml` for the persistent browser
+   code and fallback-model environment variable. The workflow needs no new
+   input because the Terraform variable has a safe default.
+3. Start a fresh Fortis canary after both deployments; old terminal jobs will
+   not be reopened. Inspect Annual Report first, then validate every stored
+   company/class/year before the 23-report run.
+
 The archive `csa-browser-diagnostics.ZATFWB.tar.gz` proves the queue/service
 architecture is running, but also explains why the Fortis canary still returned
 only two reports:
@@ -72,12 +207,12 @@ validates the configuration. A real plan could not be run locally because the
 current default AWS credentials return `InvalidClientTokenId`; the GitHub Actions
 OIDC deployment role must produce and review the authoritative plan.
 
-Deployment required for this follow-up: run
-`.github/workflows/coanalyst-ecs-deploy.yml`. No Download Agent application code
-changed in this corrective pass, so that runtime does not need another rebuild
-if the already-deployed version is the one emitting `browser_seed_urls`. Old
-terminal browser jobs are not automatically reopened; start a fresh Fortis
-canary after the worker service is stable.
+Deployment required for the current worktree: deploy the Download Agent plus
+Vertex Lambda with `agents/download-agent/scripts/deploy.sh`, then run
+`.github/workflows/coanalyst-ecs-deploy.yml`. The original browser-only
+corrective pass did not change Download Agent code, but the later Iris/Vertex
+re-audit does. Old terminal browser jobs are not automatically reopened; start
+a fresh Fortis canary after both services are stable.
 
 ## Persistent browser service update — 2026-08-02 (deployed baseline)
 
@@ -553,8 +688,20 @@ Real observed bug: a single company triggered via `/api/queries?trigger=true` (t
   cap. It has been replaced by the persistent SQS-backed ECS service described
   at the top of this document, which processes jobs serially and reuses browser
   sessions.
-- **`"Human Due Diligence"` query text bug** — observed in a real DynamoDB-inspected chunk result for FCX: the query text for the "human rights due diligence" class showed as `"site:fcx.com Human Due Diligence"` (missing "Rights"), suggesting a truncation/generation bug in `_REPORT_CLASS_ALIASES` or the query-templating code in `co-analyst-application/app/backend/app.py`. **Not investigated further — flagged only.**
-- **GCP Vertex/Gemini API quota is the more likely bottleneck than AWS-side limits under bulk load.** The Vertex Lambda's own Terraform ([lambda.tf:157-159](lambda.tf:157)) deliberately leaves `reserved_concurrent_executions` commented out specifically to avoid hitting Vertex QPS quota — with `BULK_COMPANY_CONCURRENCY=3 × AGENT_CHUNK_CONCURRENCY=3 × SEARCH_FANOUT_WORKERS=4` ≈ up to 36 concurrent Gemini calls against a project (`poc-corpdevvertexai`) whose name suggests it's not a high-quota production project. **Not fixed — architectural risk, not something fixable from this repo alone.**
+- **`"Human Due Diligence"` query text bug — fixed in the current worktree.**
+  The bulk UI label itself omitted `Rights`, so the backend inferred the right
+  canonical class but still sent a weaker search phrase. The UI now emits
+  `Human Rights Due Diligence`; the backend keeps the short phrase only as a
+  backward-compatible alias and prioritizes the full canonical wording.
+- **GCP Vertex/Gemini quota remains worth monitoring, but the local call
+  multiplier is now bounded.** Vertex no longer uses `SEARCH_FANOUT_WORKERS`:
+  each active document class makes one Gemini call and at most one sequential
+  rescue call. With the current `BULK_COMPANY_CONCURRENCY=3 ×
+  AGENT_CHUNK_CONCURRENCY=3`, the expected instantaneous ceiling is therefore
+  about nine calls rather than the former ~36-call fan-out. The Lambda still
+  leaves `reserved_concurrent_executions` unset; apply a cap only if production
+  metrics show GCP throttling, because a speculative cap would merely move the
+  bottleneck into Lambda throttles.
 
 ## Accuracy pass (prior session — English/US test matrix, target 90%)
 Driven by a 7-company × ~22-class test workbook, overall accuracy was 46.2% (Precision 35.3%, Recall 49.2%). Root causes and fixes (all still in place, unaffected by this session's changes):
@@ -569,7 +716,7 @@ Driven by a 7-company × ~22-class test workbook, overall accuracy was 46.2% (Pr
 
 ## Known open issues right now
 - The former stale-path test errors are fixed; the combined downloader and
-  annual-report-workflow suite passes 101/101 locally.
+  annual-report-workflow suite passes 104/104 locally.
 - Terraform IAM changes (`s3:DeleteObject`, `dynamodb:DeleteItem` for `CLEAN_RERUN_DELETE_EXISTING`) are written but not applied.
 - `co-analyst-application`'s `_refresh_timed_out_queries` reconciliation path is untested against live AWS.
 - The language gate only enforces "must be English" when English is requested — no positive-match enforcement for an explicitly-requested non-English language yet.
@@ -579,4 +726,5 @@ Driven by a 7-company × ~22-class test workbook, overall accuracy was 46.2% (Pr
 - **Found via a real bulk run, now fixed but not yet re-timed live**: the PDF-content-year fallback caused a ~4x batch-runtime regression (30-40 min → ~2 hours for 23 reports) and cut successful downloads roughly in half, because `_candidate_document_year` re-hashed/re-parsed the same candidate's PDF body on every repeated check across the official_crawl → deep_crawl → browser cascade. Fixed via memoization (see dedicated section above) and unit-tested, but the actual 23-report batch has not been re-run yet to confirm the timing is restored — rollout step 9 above.
 - The former ECS browser-worker launcher concurrency risk is fixed by the
   persistent queue consumer. GCP Vertex quota remains an external capacity risk
-  worth monitoring during bulk runs.
+  worth monitoring during bulk runs, now with at most two sequential calls per
+  active document class rather than broad query fan-out.

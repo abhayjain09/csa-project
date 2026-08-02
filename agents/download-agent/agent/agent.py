@@ -326,11 +326,17 @@ LLM_QUERY_GEN_MAX = int(os.environ.get("LLM_QUERY_GEN_MAX", "8"))
 # concurrency meant 3-5 sequential batches, each gated by the slowest variant
 # in it. Doubled to 8 to cut that to ~2-3 batches. This is a pure parallelism
 # change — it doesn't alter WHAT gets searched, so no search-quality impact —
-# but it does raise how many concurrent LAMBDA_SEARCH_FUNCTION invocations one
-# query can issue at once; watch for Lambda throttling if this is raised
-# further, especially in combination with AGENT_CHUNK_CONCURRENCY (co-analyst
-# backend) and BULK_COMPANY_CONCURRENCY, which multiply on top of this.
+# The adaptive Vertex path below bypasses this broad fan-out and runs at most
+# two calls sequentially. This worker count now mainly affects keyword/gateway
+# backends; their concurrency still multiplies with AGENT_CHUNK_CONCURRENCY and
+# BULK_COMPANY_CONCURRENCY.
 SEARCH_FANOUT_WORKERS = int(os.environ.get("SEARCH_FANOUT_WORKERS", "8"))
+# Gemini grounding already reformulates a structured request internally. Keep
+# Vertex discovery to one precise call plus one differently-scoped rescue call
+# only when the first call does not expose an official direct document. This
+# avoids the old 10-20 near-duplicate Lambda fan-out exhausting wall time.
+VERTEX_SEARCH_MAX_CALLS = max(1, int(os.environ.get(
+    "VERTEX_SEARCH_MAX_CALLS", "2")))
 ENABLE_SITEMAP = os.environ.get("ENABLE_SITEMAP", "true").lower() != "false"
 SITEMAP_MAX_URLS = int(os.environ.get("SITEMAP_MAX_URLS", "5000"))
 SITEMAP_MAX_NESTED = int(os.environ.get("SITEMAP_MAX_NESTED", "50"))
@@ -1292,7 +1298,8 @@ _IR_ONLY_CLASSES = {"annual report", "proxy statement", "remuneration report"}
 def _official_search_queries(query: str, company_ctx: dict,
                              aliases: list[str],
                              generated: list[str],
-                             report_class: str | None = None) -> list[str]:
+                             report_class: str | None = None,
+                             vertex_backend: bool = False) -> list[str]:
     """Build official-domain Google probes with safe identity enrichment.
 
     A validated ticker is a useful discovery alias on IR sites, so it gets one
@@ -1358,7 +1365,25 @@ def _official_search_queries(query: str, company_ctx: dict,
                 continue
             seen.add(key)
             out.append(scoped)
-    return out
+    if not vertex_backend or not out:
+        return out
+
+    # A grounded Gemini call can consider all class synonyms supplied in its
+    # structured payload, so dozens of alias/recency variants are redundant.
+    # Pass 1 asks for the exact document. Pass 2 has a genuinely different
+    # purpose: surface the official archive/library/landing page and direct
+    # download links that a browser can follow. _parallel_web_search runs pass
+    # 2 only when pass 1 lacks an official direct-document result.
+    primary = out[0]
+    rescue_domain = apex_domain or domain
+    target = (report_class or "official corporate document").strip()
+    if target.lower() in _IR_ONLY_CLASSES:
+        rescue_terms = "investor relations reports archive PDF download"
+    else:
+        rescue_terms = "governance policies document library PDF download"
+    rescue = _scope_to_official_domain(
+        f"{_strip_site(query)} {rescue_terms}", rescue_domain)
+    return list(dict.fromkeys([primary, rescue]))[:VERTEX_SEARCH_MAX_CALLS]
 
 
 def _discovery_route(report_class: str | None,
@@ -2258,7 +2283,9 @@ def _vertex_lambda_search(query: str, limit: int,
                           report_class: str | None = None,
                           year: int | None = None,
                           company_ctx: dict | None = None,
-                          synonyms: list[str] | None = None) -> tuple[list[dict], str]:
+                          synonyms: list[str] | None = None,
+                          preferred_language: str = "en",
+                          standalone_only: bool = False) -> tuple[list[dict], str]:
     """Tier 1 discovery via the ISOLATED Vertex grounded-search Lambda.
 
     report_class/year/company_ctx are OPTIONAL structured hints (on top of the
@@ -2290,6 +2317,12 @@ def _vertex_lambda_search(query: str, limit: int,
         payload["synonyms"] = list(dict.fromkeys(synonyms))[:8]
     if year:
         payload["year"] = year
+    else:
+        payload["prefer_latest"] = True
+    if preferred_language:
+        payload["preferred_language"] = preferred_language
+    if standalone_only:
+        payload["standalone_only"] = True
     company_name = str(ctx.get("official_name") or ctx.get("name") or "").strip()
     if company_name and company_name.lower() != "unknown":
         payload["company_name"] = company_name
@@ -2398,14 +2431,18 @@ def _single_web_search(query: str, limit: int,
                        report_class: str | None = None,
                        year: int | None = None,
                        company_ctx: dict | None = None,
-                       synonyms: list[str] | None = None) -> tuple[list[dict], str]:
+                       synonyms: list[str] | None = None,
+                       preferred_language: str = "en",
+                       standalone_only: bool = False) -> tuple[list[dict], str]:
     # ── Tier 1: Vertex Lambda backend (no global _throttle; the Lambda + Vertex
     # handle concurrency; fan-out is bounded by SEARCH_FANOUT_WORKERS).
     # Optionally falls through to the Gateway path when it returns nothing. ──
     if SEARCH_BACKEND in ("vertex", "vertex_lambda", "lambda"):
         hits, via = _vertex_lambda_search(
             query, limit, report_class=report_class, year=year,
-            company_ctx=company_ctx, synonyms=synonyms)
+            company_ctx=company_ctx, synonyms=synonyms,
+            preferred_language=preferred_language,
+            standalone_only=standalone_only)
         if hits or not (VERTEX_FALLBACK_TO_GATEWAY and GATEWAY_URL):
             return hits, via
         print(f"[search] vertex returned nothing ({via}); falling back to gateway")
@@ -5045,7 +5082,9 @@ def _find_best_document(search_queries: list[str], limit: int, company: str = ""
     primary = search_queries[0]
     fanout = _parallel_web_search(
         search_queries, limit, report_class=report_class, year=year,
-        company_ctx=company_ctx, synonyms=class_synonyms)
+        company_ctx=company_ctx, synonyms=class_synonyms,
+        preferred_language=preferred_language,
+        standalone_only=standalone_only)
     results_map: dict[str, tuple[list[dict], str]] = {}
     query_logs: list[dict] = []
     for q in search_queries:
@@ -5362,7 +5401,8 @@ def _llm_generate_search_queries(query, company, domain):
 # parallel multi-query search fan-out
 # ═══════════════════════════════════════════════════════════════════════════
 def _parallel_web_search(queries, limit, report_class=None, year=None,
-                         company_ctx=None, synonyms=None):
+                         company_ctx=None, synonyms=None,
+                         preferred_language="en", standalone_only=False):
     results = {}
     if not queries:
         return results
@@ -5372,13 +5412,56 @@ def _parallel_web_search(queries, limit, report_class=None, year=None,
         try:
             res = _single_web_search(
                 q, limit, report_class=report_class, year=year,
-                company_ctx=company_ctx, synonyms=synonyms)
+                company_ctx=company_ctx, synonyms=synonyms,
+                preferred_language=preferred_language,
+                standalone_only=standalone_only)
             # _single_web_search must return a 2-tuple; guard against a code
             # path that returns None so the fan-out map never holds a None value.
             return q, (res if res is not None else ([], "none-returned"))
         except BaseException as exc:  # noqa: BLE001  (also catches CancelledError)
             print(f"[search] worker crashed for {q!r}: {type(exc).__name__}: {exc}")
             return q, ([], "error(" + type(exc).__name__ + ")")
+
+    if SEARCH_BACKEND in ("vertex", "vertex_lambda", "lambda"):
+        # Adaptive two-pass search: do not pay for the rescue query when the
+        # precise first pass already returned an official direct document.
+        first_query = queries[0]
+        first_key, first_result = _one(first_query)
+        results[first_key] = first_result
+        first_hits = first_result[0]
+        official_domain = _domain(first_query)
+        class_terms = _keywords(report_class or "")
+        direct_official = any(
+            _host_matches(item.get("url", ""), official_domain or "")
+            and _is_doc_url(item.get("url", ""))
+            and (
+                not class_terms
+                or any(term in (
+                    str(item.get("title") or "") + " "
+                    + str(item.get("snippet") or "") + " "
+                    + unquote(urlparse(item.get("url", "")).path)
+                ).lower() for term in class_terms)
+            )
+            and (
+                not year
+                or str(year) in (
+                    str(item.get("title") or "") + " "
+                    + str(item.get("snippet") or "") + " "
+                    + unquote(urlparse(item.get("url", "")).path)
+                )
+            )
+            for item in first_hits
+        )
+        if direct_official or len(queries) == 1:
+            for skipped in queries[1:]:
+                results[skipped] = ([], "skipped-primary-sufficient")
+            return results
+        rescue_query = queries[1]
+        rescue_key, rescue_result = _one(rescue_query)
+        results[rescue_key] = rescue_result
+        for skipped in queries[2:]:
+            results[skipped] = ([], "skipped-vertex-call-cap")
+        return results
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
         for q, res in pool.map(_one, queries):
@@ -6255,8 +6338,6 @@ def _invoke_sync(payload: dict) -> dict:
                 and (domain or not REQUIRE_OFFICIAL_DOMAIN_FOR_WEB)):
             attempted_stages.append("direct_search")
             aliases = _alias_queries(prepared, region_override)
-            generated = _llm_generate_search_queries(
-                prepared, company_raw, domain)
             # Vertex/Gemini grounded search can weigh every known synonym for
             # the requested class within ONE call via an explicit hint (see
             # _vertex_lambda_search), so firing a separate full search per
@@ -6266,6 +6347,13 @@ def _invoke_sync(payload: dict) -> dict:
             # reasoning over a hint) still need the literal alias-substituted
             # query text to find synonym-titled documents at all.
             _vertex_backend = SEARCH_BACKEND in ("vertex", "vertex_lambda", "lambda")
+            # Gemini grounded search receives structured company/class/year and
+            # every known synonym. A separate Bedrock query-generation call is
+            # useful for keyword backends but just creates near-duplicate
+            # Vertex calls, so reserve it for non-Vertex backends.
+            generated = ([] if _vertex_backend else
+                         _llm_generate_search_queries(
+                             prepared, company_raw, domain))
             class_synonyms: list[str] = []
             if _vertex_backend:
                 for _canon, _rule in _matched_doc_classes(prepared):
@@ -6274,7 +6362,8 @@ def _invoke_sync(payload: dict) -> dict:
                             class_synonyms.append(_syn)
             search_queries = _official_search_queries(
                 prepared, company_ctx, ([] if _vertex_backend else aliases),
-                generated, report_class=_reg_class)
+                generated, report_class=_reg_class,
+                vertex_backend=_vertex_backend)
             found = _find_best_document(
                 search_queries, MAX_RESULTS, company=company_raw,
                 budget=_budget, reserve_verifies=browser_reserve,

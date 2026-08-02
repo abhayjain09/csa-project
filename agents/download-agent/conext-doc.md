@@ -72,6 +72,33 @@ and redeploy the prior Download Agent image if the result contract must also be
 reverted. Persistent session state expires after seven days; report objects are
 never deleted by that rollback.
 
+### GitHub Actions deployment pipeline audit
+
+`/.github/workflows/coanalyst-ecs-deploy.yml` is the actual deployment path for
+`co-analyst-application`; `scripts/deploy.sh` is not required. The workflow is
+compatible with this change without a mandatory Terraform-input change:
+
+- its push filter includes both `co-analyst-application/app/**` and
+  `co-analyst-application/terraform/**`;
+- the shared image build includes Chromium, Playwright, the API, and the
+  persistent worker, and `linux/amd64` matches `cpu_architecture = "X86_64"`;
+- Terraform 1.15.3 satisfies the stack's `>= 1.10.0` requirement;
+- the saved plan/apply flow automatically includes the new `.tf` files; and
+- `enable_browser_worker = true` in `terraform.tfvars` creates the
+  desired-count-one service.
+
+Before the first apply, confirm `AWS_DEPLOY_ROLE_ARN` can create/manage SQS,
+S3 bucket configuration/policies, CloudWatch Logs, ECS services/task
+definitions, and IAM role policies. Also confirm Bedrock access to the planner
+and verifier models and HTTPS egress from the configured private subnets.
+
+Recommended workflow hardening (not yet applied because the workflow is outside
+the two directories authorized for edits): add Terraform format/validate checks,
+a deployment concurrency group, and a post-apply step that waits for both ECS
+services to become stable and fails if the browser worker has fewer than one
+running task. Without the last check, Terraform apply can finish without proving
+that Chromium started and the worker is polling SQS.
+
 ## New-chat handoff snapshot — 2026-08-02
 
 ### Repository state

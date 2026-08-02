@@ -62,7 +62,9 @@ Corrective code now in the worktree:
 - `collect_browser_diagnostics.sh` no longer hard-codes a Fortis S3 prefix. It
   accepts table-name environment overrides and captures browser jobs and
   provenance for every recent run, making the same archive useful for any
-  company.
+  company. For multi-company reruns it also creates `run-summary.tsv`, captures
+  the deployed task/execution roles and their policies, and lists browser-state
+  object keys so IAM/session persistence can be correlated with each run.
 
 Verification of these corrective changes: Python compilation passes, 93 focused
 regression tests pass, `terraform fmt -check` passes, and Terraform 1.15.8

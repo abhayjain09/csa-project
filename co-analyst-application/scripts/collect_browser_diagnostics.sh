@@ -19,6 +19,13 @@ RUNS_TABLE="${RUNS_TABLE:-reportiq-runs}"
 QUERIES_TABLE="${QUERIES_TABLE:-reportiq-web-queries}"
 BROWSER_JOBS_TABLE="${BROWSER_JOBS_TABLE:-reportiq-browser-jobs}"
 PROVENANCE_TABLE="${PROVENANCE_TABLE:-edo-coanalyst-report-provenance}"
+ECS_CLUSTER="${ECS_CLUSTER:-reportiq-cluster}"
+APP_SERVICE="${APP_SERVICE:-reportiq}"
+BROWSER_SERVICE="${BROWSER_SERVICE:-reportiq-browser-worker}"
+APP_LOG_GROUP="${APP_LOG_GROUP:-/ecs/reportiq}"
+BROWSER_LOG_GROUP="${BROWSER_LOG_GROUP:-/ecs/reportiq-browser-worker}"
+BROWSER_QUEUE_NAME="${BROWSER_QUEUE_NAME:-reportiq-browser-jobs}"
+BROWSER_DLQ_NAME="${BROWSER_DLQ_NAME:-reportiq-browser-jobs-dlq}"
 
 for command in aws jq tar python3; do
   if ! command -v "$command" >/dev/null 2>&1; then
@@ -74,6 +81,10 @@ if [[ "${#RUN_IDS[@]}" -eq 0 ]]; then
   echo "No runs found since $CUTOFF_ISO" >"$OUT_DIR/no-recent-runs.txt"
 fi
 
+SUMMARY_FILE="$OUT_DIR/run-summary.tsv"
+printf 'company\trun_id\tquery_id\tbulk_batch_id\tstatus\tdownloaded\tfailures\tbrowser_jobs\tqueued_at\tstarted_at\tupdated_at\n' \
+  >"$SUMMARY_FILE"
+
 for current_run_id in "${RUN_IDS[@]}"; do
   safe_run_id="$(printf '%s' "$current_run_id" | tr -cd 'A-Za-z0-9._-')"
   run_file="run-${safe_run_id}.json"
@@ -109,39 +120,64 @@ for current_run_id in "${RUN_IDS[@]}"; do
     --expression-attribute-values \
       "{\":run\":{\"S\":\"$current_run_id\"}}" \
     --region "$REGION" --output json
+
+  company="$(jq -r '(.Item.company.S // "") | gsub("[\\t\\r\\n]"; " ")' \
+    "$OUT_DIR/$run_file" 2>/dev/null)"
+  summary_query_id="$(jq -r '.Item.query_id.S // ""' \
+    "$OUT_DIR/$run_file" 2>/dev/null)"
+  bulk_batch_id="$(jq -r '.Item.bulk_batch_id.S // ""' \
+    "$OUT_DIR/$run_file" 2>/dev/null)"
+  run_status="$(jq -r '.Item.status.S // ""' "$OUT_DIR/$run_file" 2>/dev/null)"
+  downloaded_count="$(jq -r \
+    '(.Item.downloaded.S // "[]" | fromjson? // []) | length' \
+    "$OUT_DIR/$run_file" 2>/dev/null)"
+  failure_count="$(jq -r \
+    '(.Item.failures.S // "[]" | fromjson? // []) | length' \
+    "$OUT_DIR/$run_file" 2>/dev/null)"
+  browser_statuses="$(jq -r \
+    '[.Items[]?.status.S // "unknown"] | sort | group_by(.) | map("\(.[0])=\(length)") | join(",")' \
+    "$OUT_DIR/browser-jobs-${safe_run_id}.json" 2>/dev/null)"
+  queued_at="$(jq -r '.Item.queued_at.S // ""' "$OUT_DIR/$run_file" 2>/dev/null)"
+  started_at="$(jq -r '.Item.started_at.S // ""' "$OUT_DIR/$run_file" 2>/dev/null)"
+  updated_at="$(jq -r '.Item.updated_at.S // ""' "$OUT_DIR/$run_file" 2>/dev/null)"
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    "$company" "$current_run_id" "$summary_query_id" "$bulk_batch_id" \
+    "$run_status" "${downloaded_count:-0}" "${failure_count:-0}" \
+    "$browser_statuses" "$queued_at" "$started_at" "$updated_at" \
+    >>"$SUMMARY_FILE"
 done
 
 capture ecs-services.json aws ecs describe-services \
-  --cluster reportiq-cluster \
-  --services reportiq reportiq-browser-worker \
+  --cluster "$ECS_CLUSTER" \
+  --services "$APP_SERVICE" "$BROWSER_SERVICE" \
   --region "$REGION" --output json
 
-for service in reportiq reportiq-browser-worker; do
+for service in "$APP_SERVICE" "$BROWSER_SERVICE"; do
   running_tasks="$(aws ecs list-tasks \
-    --cluster reportiq-cluster --service-name "$service" \
+    --cluster "$ECS_CLUSTER" --service-name "$service" \
     --desired-status RUNNING --region "$REGION" \
     --query 'taskArns[]' --output text 2>/dev/null)"
   if [[ -n "$running_tasks" && "$running_tasks" != "None" ]]; then
     # Intentional word splitting: AWS returns a tab-separated task ARN list.
     # shellcheck disable=SC2086
     capture "${service}-running-tasks.json" aws ecs describe-tasks \
-      --cluster reportiq-cluster --tasks $running_tasks \
+      --cluster "$ECS_CLUSTER" --tasks $running_tasks \
       --include TAGS --region "$REGION" --output json
   fi
 
   stopped_tasks="$(aws ecs list-tasks \
-    --cluster reportiq-cluster --service-name "$service" \
+    --cluster "$ECS_CLUSTER" --service-name "$service" \
     --desired-status STOPPED --max-items 20 --region "$REGION" \
     --query 'taskArns[]' --output text 2>/dev/null)"
   if [[ -n "$stopped_tasks" && "$stopped_tasks" != "None" ]]; then
     # shellcheck disable=SC2086
     capture "${service}-stopped-tasks.json" aws ecs describe-tasks \
-      --cluster reportiq-cluster --tasks $stopped_tasks \
+      --cluster "$ECS_CLUSTER" --tasks $stopped_tasks \
       --include TAGS --region "$REGION" --output json
   fi
 done
 
-for service in reportiq reportiq-browser-worker; do
+for service in "$APP_SERVICE" "$BROWSER_SERVICE"; do
   task_definition="$(jq -r \
     ".services[] | select(.serviceName == \"$service\") | .taskDefinition // empty" \
     "$OUT_DIR/ecs-services.json" 2>/dev/null | head -1)"
@@ -152,7 +188,54 @@ for service in reportiq reportiq-browser-worker; do
   fi
 done
 
-for queue in reportiq-browser-jobs reportiq-browser-jobs-dlq; do
+# Capture the effective ECS roles and inline/attached policies so deployment
+# regressions such as a missing browser-state permission are visible in the
+# same archive as the runtime failure.
+for service in "$APP_SERVICE" "$BROWSER_SERVICE"; do
+  task_file="$OUT_DIR/${service}-task-definition.json"
+  [[ -f "$task_file" ]] || continue
+  for role_field in taskRoleArn executionRoleArn; do
+    role_arn="$(jq -r ".taskDefinition.${role_field} // empty" \
+      "$task_file" 2>/dev/null)"
+    [[ -n "$role_arn" ]] || continue
+    role_name="${role_arn##*/}"
+    safe_role="$(printf '%s' "$role_name" | tr -cd 'A-Za-z0-9+=,.@_-')"
+    capture "iam-role-${safe_role}.json" aws iam get-role \
+      --role-name "$role_name" --output json
+    capture "iam-attached-${safe_role}.json" aws iam list-attached-role-policies \
+      --role-name "$role_name" --output json
+    capture "iam-inline-${safe_role}.json" aws iam list-role-policies \
+      --role-name "$role_name" --output json
+    inline_policies="$(jq -r '.PolicyNames[]? // empty' \
+      "$OUT_DIR/iam-inline-${safe_role}.json" 2>/dev/null)"
+    while IFS= read -r policy_name; do
+      [[ -n "$policy_name" ]] || continue
+      safe_policy="$(printf '%s' "$policy_name" | tr -cd 'A-Za-z0-9+=,.@_-')"
+      capture "iam-policy-${safe_role}-${safe_policy}.json" aws iam get-role-policy \
+        --role-name "$role_name" --policy-name "$policy_name" --output json
+    done <<<"$inline_policies"
+  done
+done
+
+worker_task_file="$OUT_DIR/${BROWSER_SERVICE}-task-definition.json"
+if [[ -f "$worker_task_file" ]]; then
+  browser_state_bucket="$(jq -r '
+    .taskDefinition.containerDefinitions[]?.environment[]?
+    | select(.name == "BROWSER_STATE_BUCKET") | .value' \
+    "$worker_task_file" 2>/dev/null | head -1)"
+  browser_state_prefix="$(jq -r '
+    .taskDefinition.containerDefinitions[]?.environment[]?
+    | select(.name == "BROWSER_WORKER_STATE_PREFIX") | .value' \
+    "$worker_task_file" 2>/dev/null | head -1)"
+  if [[ -n "$browser_state_bucket" ]]; then
+    capture browser-state-objects.json aws s3api list-objects-v2 \
+      --bucket "$browser_state_bucket" \
+      --prefix "${browser_state_prefix:-_browser-state}/" \
+      --max-keys 100 --region "$REGION" --output json
+  fi
+fi
+
+for queue in "$BROWSER_QUEUE_NAME" "$BROWSER_DLQ_NAME"; do
   queue_url="$(aws sqs get-queue-url --queue-name "$queue" \
     --region "$REGION" --query QueueUrl --output text 2>/dev/null)"
   if [[ -n "$queue_url" && "$queue_url" != "None" ]]; then
@@ -162,10 +245,10 @@ for queue in reportiq-browser-jobs reportiq-browser-jobs-dlq; do
   fi
 done
 
-capture reportiq-app.log aws logs tail /ecs/reportiq \
+capture reportiq-app.log aws logs tail "$APP_LOG_GROUP" \
   --since "$SINCE" --region "$REGION" --format short
 
-capture browser-worker.log aws logs tail /ecs/reportiq-browser-worker \
+capture browser-worker.log aws logs tail "$BROWSER_LOG_GROUP" \
   --since "$SINCE" --region "$REGION" --format short
 
 capture agentcore-log-groups.json aws logs describe-log-groups \
@@ -182,6 +265,8 @@ while IFS= read -r group; do
     --since "$SINCE" --region "$REGION" --format short
 done <<<"$agent_groups"
 
+printf '%s\n' "${RUN_IDS[@]}" >"$OUT_DIR/run-ids.txt"
+
 ARCHIVE="${OUT_DIR}.tar.gz"
 tar -czf "$ARCHIVE" -C "$(dirname "$OUT_DIR")" "$(basename "$OUT_DIR")"
 
@@ -189,7 +274,16 @@ echo
 echo "Diagnostics complete."
 echo "Lookback: $LOOKBACK_HOURS hour(s), starting $CUTOFF_ISO"
 echo "Run IDs found: ${#RUN_IDS[@]}"
+company_count="$(tail -n +2 "$SUMMARY_FILE" | cut -f1 | sed '/^$/d' | sort -u | wc -l | tr -d ' ')"
+echo "Companies found: ${company_count:-0}"
 for current_run_id in "${RUN_IDS[@]}"; do
   echo "  $current_run_id"
 done
+echo
+echo "Run summary:"
+if command -v column >/dev/null 2>&1; then
+  column -t -s $'\t' "$SUMMARY_FILE"
+else
+  cat "$SUMMARY_FILE"
+fi
 echo "Archive: $ARCHIVE"

@@ -17,39 +17,42 @@ locals {
   )
 
   container_env = {
-    AWS_REGION                     = var.region
-    QUERIES_TABLE                  = var.queries_table
-    PROVENANCE_TABLE               = var.provenance_table
-    RUNS_TABLE                     = var.runs_table
-    REPORTS_BUCKET                 = var.reports_bucket
-    AGENT_RUNTIME_ARN              = var.agent_runtime_arn
-    AGENT_QUALIFIER                = var.agent_qualifier
-    BROWSER_WORKER_ENABLED         = tostring(var.enable_browser_worker)
-    BROWSER_JOBS_TABLE             = aws_dynamodb_table.browser_jobs.name
-    BROWSER_ECS_CLUSTER            = aws_ecs_cluster.main.arn
-    BROWSER_ECS_TASK_DEFINITION    = aws_ecs_task_definition.browser_worker.arn
-    BROWSER_ECS_CONTAINER_NAME     = "browser-worker"
-    BROWSER_ECS_SUBNET_IDS         = join(",", local.browser_worker_subnet_ids)
-    BROWSER_ECS_SECURITY_GROUP_IDS = join(",", local.browser_worker_security_group_ids)
-    BROWSER_ECS_ASSIGN_PUBLIC_IP   = tostring(var.browser_worker_assign_public_ip)
-    BULK_COMPANY_CONCURRENCY       = tostring(var.bulk_company_concurrency)
-    STATIC_DIR                     = "/app/static"
-    PORT                           = "8080"
+    AWS_REGION               = var.region
+    QUERIES_TABLE            = var.queries_table
+    PROVENANCE_TABLE         = var.provenance_table
+    RUNS_TABLE               = var.runs_table
+    REPORTS_BUCKET           = var.reports_bucket
+    AGENT_RUNTIME_ARN        = var.agent_runtime_arn
+    AGENT_QUALIFIER          = var.agent_qualifier
+    BROWSER_WORKER_ENABLED   = tostring(var.enable_browser_worker)
+    BROWSER_JOBS_TABLE       = aws_dynamodb_table.browser_jobs.name
+    BROWSER_QUEUE_URL        = aws_sqs_queue.browser_jobs.url
+    BULK_COMPANY_CONCURRENCY = tostring(var.bulk_company_concurrency)
+    STATIC_DIR               = "/app/static"
+    PORT                     = "8080"
   }
 
   browser_worker_env = {
-    AWS_REGION                            = var.region
-    QUERIES_TABLE                         = var.queries_table
-    PROVENANCE_TABLE                      = var.provenance_table
-    RUNS_TABLE                            = var.runs_table
-    REPORTS_BUCKET                        = var.reports_bucket
-    BROWSER_JOBS_TABLE                    = aws_dynamodb_table.browser_jobs.name
-    CHROMIUM_PATH                         = "/usr/bin/chromium"
-    BROWSER_WORKER_MAX_ATTEMPTS           = tostring(var.browser_worker_max_attempts)
-    BROWSER_WORKER_RETRY_DELAY_SECONDS    = tostring(var.browser_worker_retry_delay_seconds)
-    BROWSER_WORKER_NAV_TIMEOUT_MS         = tostring(var.browser_worker_nav_timeout_ms)
-    BROWSER_WORKER_MAX_DOCUMENT_BYTES     = tostring(var.browser_worker_max_document_bytes)
-    BROWSER_WORKER_RUN_PATCH_WAIT_SECONDS = tostring(var.browser_worker_run_patch_wait_seconds)
+    AWS_REGION                             = var.region
+    QUERIES_TABLE                          = var.queries_table
+    PROVENANCE_TABLE                       = var.provenance_table
+    RUNS_TABLE                             = var.runs_table
+    REPORTS_BUCKET                         = var.reports_bucket
+    BROWSER_JOBS_TABLE                     = aws_dynamodb_table.browser_jobs.name
+    BROWSER_QUEUE_URL                      = aws_sqs_queue.browser_jobs.url
+    BROWSER_STATE_BUCKET                   = aws_s3_bucket.browser_state.id
+    CHROMIUM_PATH                          = "/usr/bin/chromium"
+    BROWSER_WORKER_MAX_ATTEMPTS            = tostring(var.browser_worker_max_attempts)
+    BROWSER_WORKER_RETRY_DELAY_SECONDS     = tostring(var.browser_worker_retry_delay_seconds)
+    BROWSER_WORKER_NAV_TIMEOUT_MS          = tostring(var.browser_worker_nav_timeout_ms)
+    BROWSER_WORKER_MAX_DOCUMENT_BYTES      = tostring(var.browser_worker_max_document_bytes)
+    BROWSER_WORKER_MAX_AGENT_STEPS         = tostring(var.browser_worker_max_agent_steps)
+    BROWSER_WORKER_MAX_CONTEXTS            = tostring(var.browser_worker_max_contexts)
+    BROWSER_WORKER_MAX_JOBS_PER_PROCESS    = tostring(var.browser_worker_max_jobs_per_process)
+    BROWSER_WORKER_CONTEXT_MAX_AGE_SECONDS = tostring(var.browser_worker_context_max_age_seconds)
+    BROWSER_WORKER_PLANNER_MODEL_ID        = var.browser_worker_planner_model_id
+    BROWSER_WORKER_VERIFIER_MODEL_ID       = var.browser_worker_verifier_model_id
+    BROWSER_WORKER_STATE_PREFIX            = var.browser_worker_state_prefix
   }
 }
 
@@ -249,39 +252,41 @@ data "aws_iam_policy_document" "task_perms" {
   }
 
   statement {
-    sid     = "LaunchBrowserWorker"
-    effect  = "Allow"
-    actions = ["ecs:RunTask"]
-    resources = [
-      "arn:aws:ecs:${local.region}:${local.acct}:task-definition/${local.name}-browser-worker:*"
+    sid    = "BrowserQueue"
+    effect = "Allow"
+    actions = [
+      "sqs:SendMessage",
+      "sqs:ReceiveMessage",
+      "sqs:DeleteMessage",
+      "sqs:ChangeMessageVisibility",
+      "sqs:GetQueueAttributes",
     ]
+    resources = [aws_sqs_queue.browser_jobs.arn]
   }
 
   statement {
-    sid       = "TagBrowserWorker"
-    effect    = "Allow"
-    actions   = ["ecs:TagResource"]
-    resources = ["arn:aws:ecs:${local.region}:${local.acct}:task/*"]
-    condition {
-      test     = "StringEquals"
-      variable = "ecs:CreateAction"
-      values   = ["RunTask"]
-    }
+    sid    = "BrowserSessionState"
+    effect = "Allow"
+    actions = [
+      "s3:GetObject",
+      "s3:PutObject",
+      "s3:DeleteObject",
+    ]
+    resources = ["${aws_s3_bucket.browser_state.arn}/*"]
   }
 
   statement {
-    sid     = "PassBrowserWorkerRoles"
-    effect  = "Allow"
-    actions = ["iam:PassRole"]
-    resources = [
-      aws_iam_role.execution.arn,
-      aws_iam_role.task.arn,
+    sid    = "BrowserModels"
+    effect = "Allow"
+    actions = [
+      "bedrock:InvokeModel",
+      "bedrock:InvokeModelWithResponseStream",
     ]
-    condition {
-      test     = "StringEquals"
-      variable = "iam:PassedToService"
-      values   = ["ecs-tasks.amazonaws.com"]
-    }
+    resources = [
+      "arn:aws:bedrock:*::foundation-model/*",
+      "arn:aws:bedrock:*::inference-profile/*",
+      "arn:aws:bedrock:*:${local.acct}:inference-profile/*",
+    ]
   }
 }
 
@@ -354,7 +359,7 @@ resource "aws_security_group" "tasks" {
 
 resource "aws_security_group" "browser_worker" {
   name        = "${local.name}-browser-worker-sg"
-  description = "Report IQ one-off browser worker; no inbound traffic"
+  description = "Report IQ persistent browser worker; no inbound traffic"
   vpc_id      = var.vpc_id
 
   egress {
@@ -460,6 +465,31 @@ resource "aws_ecs_task_definition" "browser_worker" {
       }
     }
   ])
+
+  tags = { Name = "${local.name}-browser-worker" }
+
+  depends_on = [
+    aws_iam_role_policy.task,
+    aws_iam_role_policy.execution_proxy_secret,
+  ]
+}
+
+resource "aws_ecs_service" "browser_worker" {
+  count           = var.enable_browser_worker ? 1 : 0
+  name            = "${local.name}-browser-worker"
+  cluster         = aws_ecs_cluster.main.id
+  task_definition = aws_ecs_task_definition.browser_worker.arn
+  desired_count   = 1
+  launch_type     = "FARGATE"
+
+  network_configuration {
+    subnets          = local.browser_worker_subnet_ids
+    security_groups  = local.browser_worker_security_group_ids
+    assign_public_ip = var.browser_worker_assign_public_ip
+  }
+
+  deployment_minimum_healthy_percent = 0
+  deployment_maximum_percent         = 100
 
   tags = { Name = "${local.name}-browser-worker" }
 

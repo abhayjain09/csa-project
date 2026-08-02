@@ -22,8 +22,20 @@ output "ecs_service" {
 }
 
 output "browser_worker_task_definition" {
-  description = "One-off WAF fallback task definition on the existing ECS cluster"
+  description = "Persistent WAF fallback task definition on the existing ECS cluster"
   value       = aws_ecs_task_definition.browser_worker.arn
+}
+
+output "browser_worker_service" {
+  value = try(aws_ecs_service.browser_worker[0].name, null)
+}
+
+output "browser_queue_url" {
+  value = aws_sqs_queue.browser_jobs.url
+}
+
+output "browser_state_bucket" {
+  value = aws_s3_bucket.browser_state.id
 }
 
 output "browser_jobs_table" {

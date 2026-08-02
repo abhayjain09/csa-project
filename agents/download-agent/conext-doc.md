@@ -4,6 +4,74 @@ the handoff snapshot immediately below as the source of truth for a new chat.
 No AWS deployment or live end-to-end validation was performed by Codex during
 this work; see "Deployment status."
 
+## Persistent browser service update — 2026-08-02 (current worktree)
+
+- Replaced one `ecs.run_task()` per WAF-blocked report with an encrypted SQS
+  queue and one always-running `reportiq-browser-worker` ECS service.
+- The Download Agent now returns up to 12 bounded official landing-page URLs as
+  `browser_seed_urls` alongside exact blocked PDF candidates. Vertex/search
+  discovery therefore survives into the long browser fallback instead of only
+  the first landing page being used.
+- The persistent worker keeps one Chromium process and isolated per-domain
+  Playwright contexts. Cookies and local storage are saved to a separate,
+  encrypted, seven-day S3 state bucket and restored after task/context recycle.
+- The worker first retries exact URLs with the live session, then runs one
+  bounded LLM/vision navigation loop over all supplied landing pages and the
+  official root. Allowed actions are constrained to observed/seed URLs and
+  visible controls; arbitrary Playwright code, CAPTCHA bypass, login bypass,
+  and untrusted page instructions are prohibited.
+- It captures native downloads, PDF responses/viewers, iframe/embed/data URLs,
+  and eligible HTML policies rendered to PDF. Every result still requires PDF
+  integrity, deterministic company/class signals, and a high-confidence Bedrock
+  company/class/year/standalone decision before S3/provenance writes.
+- Browser jobs are processed serially by the single service, eliminating the
+  former unbounded Fargate task launcher. Jobs that finish before their parent
+  run are reconciled from DynamoDB without blocking the queue consumer.
+- Native temporary downloads are explicitly deleted. Persistent browser state
+  is kept outside the reports bucket and expires automatically.
+- New infrastructure: SQS queue + DLQ, encrypted browser-state S3 bucket,
+  persistent ECS service, queue/model/session-state IAM, and SQS/Bedrock Runtime
+  access through the worker's already-approved HTTPS egress path.
+- Local verification: Python compilation, Terraform formatting, focused browser
+  regressions, Annual Report workflow regressions, and the combined 101-test
+  suite pass. Terraform formatting and `terraform validate` also pass using a
+  temporary Terraform 1.15.8 binary (the system Terraform remains 1.6.5, below
+  this project's >=1.10.0 requirement). A real `terraform plan` still must run
+  against the deployment backend/account before apply.
+- Not deployed or live-tested. Deployment now requires rebuilding the Download
+  Agent first (new result contract), then rebuilding/applying
+  `co-analyst-application` (queue, service, state bucket, IAM, and worker).
+
+### Deployment recommendation
+
+**Yes—deploy this as a controlled canary, not as an unreviewed full-company
+production rollout.** The local code and Terraform checks are green, and the
+existing browser fallback cannot recover the observed Fortis WAF failures. The
+remaining uncertainty is operational: real source-site behavior, Bedrock model
+access, approved subnet HTTPS egress, ECS memory, and runtime cost can only be
+confirmed in AWS.
+
+Deployment order:
+
+1. Run a real Terraform plan for both changed deployables and review IAM,
+   replacement, and deletion actions. Do not apply a plan containing unexpected
+   destructive changes.
+2. Build and deploy `agents/download-agent` first so WAF results include the new
+   `browser_seed_urls` contract.
+3. Build and deploy `co-analyst-application`; its apply creates the SQS/DLQ,
+   browser-state bucket, IAM additions, and desired-count-one browser service.
+4. Confirm the browser ECS service is stable, queue polling is active, and no
+   AccessDenied/network/model errors appear in
+   `/ecs/reportiq-browser-worker`.
+5. Canary one previously failing company (Fortis is the best current case),
+   inspect every downloaded document for correct company/class/year, then run
+   the 23-report batch only after the canary succeeds.
+
+Rollback is to disable `enable_browser_worker`, apply the application stack,
+and redeploy the prior Download Agent image if the result contract must also be
+reverted. Persistent session state expires after seven days; report objects are
+never deleted by that rollback.
+
 ## New-chat handoff snapshot — 2026-08-02
 
 ### Repository state
@@ -380,8 +448,12 @@ Real observed bug: a single company triggered via `/api/queries?trigger=true` (t
 - `HEARTBEAT_STALE_MINUTES`: 18 → **30** ([app.py:230](../../co-analyst-application/app/backend/app.py:230)), kept above `AGENT_READ_TIMEOUT` with margin, matching the runtime's `idleRuntimeSessionTimeout`.
 - The existing `timed_out_pending_check` / `_refresh_timed_out_queries()` DynamoDB-provenance-polling reconciliation (from a prior session) is unchanged and still the mechanism that recovers a false-timeout — but with the corrected ladder, it should trigger far less often since queries mostly finish inside the deadline now.
 
-### Known-but-unfixed bugs, found this session, NOT yet addressed
-- **`/api/browser-jobs` ECS launcher has no concurrency cap** ([app.py:1027](../../co-analyst-application/app/backend/app.py:1027) `_enqueue_browser_retries`) — every `blocked_by_source_waf` result immediately calls `ecs.run_task()` with zero rate limiting. Confirmed via live AWS CLI investigation this session: one company (DaVita) alone produced 5+ simultaneous browser-worker Fargate tasks. Scaled across a 10-company bulk run with similar WAF-block rates, this risks the account's Fargate on-demand vCPU service quota or ECS API throttling. **Not fixed — flagged as a real operational risk, no code change made.**
+### Other issues found in that session
+- **Browser-worker concurrency risk — fixed in the current worktree.** The old
+  `/api/browser-jobs` path launched one Fargate task per blocked report with no
+  cap. It has been replaced by the persistent SQS-backed ECS service described
+  at the top of this document, which processes jobs serially and reuses browser
+  sessions.
 - **`"Human Due Diligence"` query text bug** — observed in a real DynamoDB-inspected chunk result for FCX: the query text for the "human rights due diligence" class showed as `"site:fcx.com Human Due Diligence"` (missing "Rights"), suggesting a truncation/generation bug in `_REPORT_CLASS_ALIASES` or the query-templating code in `co-analyst-application/app/backend/app.py`. **Not investigated further — flagged only.**
 - **GCP Vertex/Gemini API quota is the more likely bottleneck than AWS-side limits under bulk load.** The Vertex Lambda's own Terraform ([lambda.tf:157-159](lambda.tf:157)) deliberately leaves `reserved_concurrent_executions` commented out specifically to avoid hitting Vertex QPS quota — with `BULK_COMPANY_CONCURRENCY=3 × AGENT_CHUNK_CONCURRENCY=3 × SEARCH_FANOUT_WORKERS=4` ≈ up to 36 concurrent Gemini calls against a project (`poc-corpdevvertexai`) whose name suggests it's not a high-quota production project. **Not fixed — architectural risk, not something fixable from this repo alone.**
 
@@ -397,8 +469,8 @@ Driven by a 7-company × ~22-class test workbook, overall accuracy was 46.2% (Pr
 - **Still not re-verified live**: the 7-company matrix hasn't been re-run since these fixes to confirm ≥90% — that's the only real proof, and it hasn't happened yet, compounded now by this session's additional changes on top.
 
 ## Known open issues right now
-- The former 35 stale-path test errors are fixed; the combined downloader and
-  annual-report-workflow suite passes 97/97 locally.
+- The former stale-path test errors are fixed; the combined downloader and
+  annual-report-workflow suite passes 101/101 locally.
 - Terraform IAM changes (`s3:DeleteObject`, `dynamodb:DeleteItem` for `CLEAN_RERUN_DELETE_EXISTING`) are written but not applied.
 - `co-analyst-application`'s `_refresh_timed_out_queries` reconciliation path is untested against live AWS.
 - The language gate only enforces "must be English" when English is requested — no positive-match enforcement for an explicitly-requested non-English language yet.
@@ -406,6 +478,6 @@ Driven by a 7-company × ~22-class test workbook, overall accuracy was 46.2% (Pr
 - **This session's entire timeout-ladder, crawl-efficiency, content-over-filename, synonym-injection, and bulk-concurrency fix set is unverified against live AWS** — see "Deployment status" above for the specific things to watch on the first live test run.
 - **New this write-up — also unverified against live AWS**: the `SITE_FIRST_WHEN_LATEST_CLASSES` routing change and `_candidate_document_year`'s PDF-content fallback. Logic is unit-tested and spot-checked against a real downloaded PDF (see the dedicated section above), but never run through the actual deployed agent against `bilibili.com`/EDGAR live — rollout step 8 above is the first real test.
 - **Found via a real bulk run, now fixed but not yet re-timed live**: the PDF-content-year fallback caused a ~4x batch-runtime regression (30-40 min → ~2 hours for 23 reports) and cut successful downloads roughly in half, because `_candidate_document_year` re-hashed/re-parsed the same candidate's PDF body on every repeated check across the official_crawl → deep_crawl → browser cascade. Fixed via memoization (see dedicated section above) and unit-tested, but the actual 23-report batch has not been re-run yet to confirm the timing is restored — rollout step 9 above.
-- The ECS browser-worker launcher concurrency risk and the GCP Vertex quota risk (both above) are flagged but not fixed — worth a follow-up session if bulk runs at scale (10+ companies) become routine.
-
-Want me to go deeper into any one tier, the live-test results once you have them, or start on the ECS browser-worker concurrency cap / Vertex quota risk next?
+- The former ECS browser-worker launcher concurrency risk is fixed by the
+  persistent queue consumer. GCP Vertex quota remains an external capacity risk
+  worth monitoring during bulk runs.

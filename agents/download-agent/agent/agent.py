@@ -6293,7 +6293,7 @@ def _invoke_sync(payload: dict) -> dict:
                     and urlparse(candidate.get("url", "")).scheme in {
                         "http", "https",
                     })
-            ][:3]
+            ][:12]
             decision = found["decision"]
             base_log["via"] = found.get("via")
             base_log["domain_mode"] = found.get("domain_mode")
@@ -6535,12 +6535,14 @@ def _invoke_sync(payload: dict) -> dict:
                 "status": failure_status,
                 "reason": failure_reason,
                 "candidate_urls": blocked_urls,
+                "browser_seed_urls": browser_landing_pages,
                 "candidates_verified": False if blocked_by_waf else None,
                 "report_class": _reg_class,
                 "year": _reg_year,
                 "preferred_language": preferred_language,
                 "prefer_latest": latest_discovery_mode,
                 "official_domain": domain,
+                "standalone_only": standalone_only,
             })
             query_results.append({
                 "request_id": request_id,
@@ -6549,12 +6551,14 @@ def _invoke_sync(payload: dict) -> dict:
                 "status": failure_status,
                 "reason": failure_reason,
                 "candidate_urls": blocked_urls,
+                "browser_seed_urls": browser_landing_pages,
                 "candidates_verified": False if blocked_by_waf else None,
                 "report_class": _reg_class,
                 "year": _reg_year,
                 "preferred_language": preferred_language,
                 "prefer_latest": latest_discovery_mode,
                 "official_domain": domain,
+                "standalone_only": standalone_only,
             })
             if blocked_by_waf:
                 print(f"[result] BLOCKED BY SOURCE WAF: {prepared!r} "

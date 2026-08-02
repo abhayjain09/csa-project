@@ -13,7 +13,7 @@ cpu_architecture         = "X86_64"
 assign_public_ip         = false
 
 # These private subnets have approved public HTTPS egress through the attached
-# Transit Gateway, so one-off browser tasks do not need NAT or public IPs.
+# Transit Gateway, so the persistent browser service does not need a public IP.
 enable_browser_worker = true
 
 manage_dynamo_tables = false

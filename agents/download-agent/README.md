@@ -27,8 +27,11 @@ The per-document route is:
 
 When an exact official candidate is still denied with a WAF response, the agent
 returns `blocked_by_source_waf` plus bounded candidate URLs. The Report IQ portal
-can then launch its separate, longer-running one-off ECS browser task; see
-`reportiq-ecs/README.md` for its egress/proxy and fail-closed validation rules.
+then queues the candidates and official landing-page seeds for its separate,
+persistent ECS browser service. That service reuses an isolated per-domain
+Chromium session and performs bounded LLM/vision-guided navigation; see
+`co-analyst-application/README.md` for its egress, session-state, and fail-closed
+validation rules.
 
 If no official domain can be established, normal web discovery fails closed.
 Deterministic registry lookup may still succeed when an authoritative CIK or

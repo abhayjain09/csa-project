@@ -99,9 +99,9 @@ Patches in this revision (1-6, plus 7-8 below):
      `duplicate` flag so the portal can show "(already in S3)" without
      treating it as anything other than success.
   9. WAF BROWSER FALLBACK. A typed blocked_by_source_waf result creates an
-     idempotent DynamoDB job and launches a one-off Chromium task on the
-     existing ECS cluster. Worker and read-path reconciliation update the
-     original per-query row without racing the normal chunk flush.
+     idempotent DynamoDB job and queues it for one persistent Chromium ECS
+     service. Worker and read-path reconciliation update the original
+     per-query row without racing the normal chunk flush.
  10. BULK COMPANY QUEUE. Multi-company submissions persist every run as queued
      and execute at most BULK_COMPANY_CONCURRENCY companies simultaneously
      (default 3); each completion automatically starts the next company.
@@ -140,25 +140,13 @@ STATIC_DIR        = os.environ.get("STATIC_DIR",
     os.path.join(os.path.dirname(__file__), "..", "static"))
 
 # Durable browser fallback. AgentCore remains the synchronous discovery tier;
-# only a typed blocked_by_source_waf result can launch this longer ECS task.
+# only a typed blocked_by_source_waf result can enqueue work for the persistent
+# browser service.
 BROWSER_WORKER_ENABLED = os.environ.get(
     "BROWSER_WORKER_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
 BROWSER_JOBS_TABLE = os.environ.get(
     "BROWSER_JOBS_TABLE", "reportiq-browser-jobs")
-BROWSER_ECS_CLUSTER = os.environ.get("BROWSER_ECS_CLUSTER", "")
-BROWSER_ECS_TASK_DEFINITION = os.environ.get(
-    "BROWSER_ECS_TASK_DEFINITION", "")
-BROWSER_ECS_CONTAINER_NAME = os.environ.get(
-    "BROWSER_ECS_CONTAINER_NAME", "browser-worker")
-BROWSER_ECS_SUBNET_IDS = [
-    item.strip() for item in os.environ.get(
-        "BROWSER_ECS_SUBNET_IDS", "").split(",") if item.strip()]
-BROWSER_ECS_SECURITY_GROUP_IDS = [
-    item.strip() for item in os.environ.get(
-        "BROWSER_ECS_SECURITY_GROUP_IDS", "").split(",") if item.strip()]
-BROWSER_ECS_ASSIGN_PUBLIC_IP = os.environ.get(
-    "BROWSER_ECS_ASSIGN_PUBLIC_IP", "false").strip().lower() in {
-        "1", "true", "yes", "on"}
+BROWSER_QUEUE_URL = os.environ.get("BROWSER_QUEUE_URL", "").strip()
 
 # PageIndex runtime
 PAGEINDEX_RUNTIME_ARN = os.environ.get(
@@ -390,8 +378,8 @@ def _s3_pdf_integrity_error(s3, s3_key: str) -> str:
     return ""
 
 
-def get_ecs():
-    return boto3.client("ecs", region_name=REGION)
+def get_sqs():
+    return boto3.client("sqs", region_name=REGION)
 
 def get_agentcore():
     """AgentCore client with long read timeout — used by PageIndex invocations."""
@@ -1057,7 +1045,7 @@ def _pair_queries_with_results(chunk_queries: list, downloaded: list,
             queued = bool(
                 match.get("browser_job_id")
                 and browser_job_status in {
-                    None, "queued", "launched", "running"})
+                    None, "queued", "running"})
             results.append({
                 "request_id": request_id,
                 "query": q,
@@ -1068,6 +1056,7 @@ def _pair_queries_with_results(chunk_queries: list, downloaded: list,
                     "The official source blocked automated access."),
                 "browser_job_id": match.get("browser_job_id", ""),
                 "candidate_urls": match.get("candidate_urls") or [],
+                "browser_seed_urls": match.get("browser_seed_urls") or [],
                 "candidates_verified": match.get("candidates_verified"),
                 "annual_report_reference_eligible": False,
                 "report_class": match.get("report_class"),
@@ -1124,11 +1113,11 @@ def _pair_queries_with_results(chunk_queries: list, downloaded: list,
 
 def _enqueue_browser_retries(agent_results: list, company: str, run_id: str,
                              query_id: str) -> list:
-    """Create idempotent browser jobs and launch one-off tasks on this cluster.
+    """Create idempotent browser jobs for the persistent browser service.
 
     The agent controls admission by returning the typed WAF status. Candidate
-    URLs are bounded, exact URLs discovered for the requested report, and the
-    worker independently revalidates scheme/domain/content before storing.
+    and landing-page URLs are bounded discovery seeds. The worker independently
+    revalidates scheme/domain/content before storing anything.
     """
     results = [
         dict(item) if isinstance(item, dict) else item
@@ -1136,19 +1125,13 @@ def _enqueue_browser_retries(agent_results: list, company: str, run_id: str,
     ]
     if not BROWSER_WORKER_ENABLED:
         return results
-    required = (
-        BROWSER_ECS_CLUSTER,
-        BROWSER_ECS_TASK_DEFINITION,
-        BROWSER_ECS_SUBNET_IDS,
-        BROWSER_ECS_SECURITY_GROUP_IDS,
-    )
-    if not all(required):
-        log.error("[browser-fallback] enabled but ECS network/task settings "
-                  "are incomplete; refusing to launch")
+    if not BROWSER_QUEUE_URL:
+        log.error("[browser-fallback] enabled but BROWSER_QUEUE_URL is empty; "
+                  "refusing to enqueue")
         return results
 
     jobs = get_dynamo().Table(BROWSER_JOBS_TABLE)
-    ecs = get_ecs()
+    sqs = get_sqs()
     now_iso = datetime.now(timezone.utc).isoformat()
     for item in results:
         if not isinstance(item, dict):
@@ -1159,10 +1142,17 @@ def _enqueue_browser_retries(agent_results: list, company: str, run_id: str,
             str(url).strip() for url in (item.get("candidate_urls") or [])
             if str(url).strip().lower().startswith("https://")
         ][:8]
-        if not candidates:
+        seed_urls = [
+            str(url).strip() for url in (item.get("browser_seed_urls") or [])
+            if str(url).strip().lower().startswith("https://")
+        ][:12]
+        # Some JS-heavy sites expose no direct PDF during discovery. Preserve
+        # those jobs when Vertex/search supplied an official landing page so
+        # the visual browser can use site search and visible navigation.
+        if not candidates and not seed_urls:
             continue
         request_id = str(item.get("request_id") or "")
-        identity = "\n".join([run_id, request_id, *candidates])
+        identity = "\n".join([run_id, request_id, *candidates, *seed_urls])
         job_id = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:32]
         record = {
             "job_id": job_id,
@@ -1177,8 +1167,10 @@ def _enqueue_browser_retries(agent_results: list, company: str, run_id: str,
             "preferred_language": str(
                 item.get("preferred_language") or "en"),
             "prefer_latest": bool(item.get("prefer_latest", True)),
+            "standalone_only": bool(item.get("standalone_only", True)),
             "official_domain": str(item.get("official_domain") or ""),
             "candidate_urls": json.dumps(candidates),
+            "browser_seed_urls": json.dumps(seed_urls),
             "status": "queued",
             "created_at": now_iso,
             "updated_at": now_iso,
@@ -1196,7 +1188,7 @@ def _enqueue_browser_retries(agent_results: list, company: str, run_id: str,
                 existing = jobs.get_item(
                     Key={"job_id": job_id}).get("Item", {})
                 existing_status = existing.get("status", "queued")
-                if existing_status in {"queued", "launched", "running"}:
+                if existing_status in {"queued", "running"}:
                     item["browser_job_id"] = job_id
                 elif existing_status == "downloaded" and existing.get("s3_key"):
                     item.update({
@@ -1213,55 +1205,19 @@ def _enqueue_browser_retries(agent_results: list, company: str, run_id: str,
             continue
 
         try:
-            response = ecs.run_task(
-                cluster=BROWSER_ECS_CLUSTER,
-                taskDefinition=BROWSER_ECS_TASK_DEFINITION,
-                launchType="FARGATE",
-                count=1,
-                platformVersion="LATEST",
-                networkConfiguration={
-                    "awsvpcConfiguration": {
-                        "subnets": BROWSER_ECS_SUBNET_IDS,
-                        "securityGroups": BROWSER_ECS_SECURITY_GROUP_IDS,
-                        "assignPublicIp": (
-                            "ENABLED" if BROWSER_ECS_ASSIGN_PUBLIC_IP
-                            else "DISABLED"),
-                    },
+            sqs.send_message(
+                QueueUrl=BROWSER_QUEUE_URL,
+                MessageBody=json.dumps({"job_id": job_id}),
+                MessageAttributes={
+                    "run_id": {"DataType": "String", "StringValue": run_id},
+                    "request_id": {
+                        "DataType": "String", "StringValue": request_id},
                 },
-                overrides={
-                    "containerOverrides": [{
-                        "name": BROWSER_ECS_CONTAINER_NAME,
-                        "environment": [
-                            {"name": "BROWSER_JOB_ID", "value": job_id},
-                        ],
-                    }],
-                },
-                startedBy="reportiq-waf-fallback",
-                tags=[
-                    {"key": "ReportIqRunId", "value": run_id},
-                    {"key": "ReportIqBrowserJobId", "value": job_id},
-                ],
-                enableECSManagedTags=True,
-                propagateTags="TASK_DEFINITION",
-            )
-            failures = response.get("failures") or []
-            tasks = response.get("tasks") or []
-            if failures or not tasks:
-                raise RuntimeError(
-                    f"ECS RunTask returned no task: {failures}")
-            task_arn = tasks[0].get("taskArn", "")
-            jobs.update_item(
-                Key={"job_id": job_id},
-                UpdateExpression=(
-                    "SET #st = :s, task_arn = :t, updated_at = :u"),
-                ExpressionAttributeNames={"#st": "status"},
-                ExpressionAttributeValues={
-                    ":s": "launched", ":t": task_arn, ":u": now_iso},
             )
             item["browser_job_id"] = job_id
-            item["browser_job_status"] = "launched"
-            log.info("[browser-fallback] launched job=%s task=%s run=%s",
-                     job_id, task_arn.rsplit("/", 1)[-1], run_id[:8])
+            item["browser_job_status"] = "queued"
+            log.info("[browser-fallback] queued job=%s run=%s seeds=%d",
+                     job_id, run_id[:8], len(seed_urls))
         except Exception as exc:
             jobs.update_item(
                 Key={"job_id": job_id},
@@ -1269,14 +1225,14 @@ def _enqueue_browser_retries(agent_results: list, company: str, run_id: str,
                     "SET #st = :s, error_msg = :e, updated_at = :u"),
                 ExpressionAttributeNames={"#st": "status"},
                 ExpressionAttributeValues={
-                    ":s": "launch_failed",
+                    ":s": "queue_failed",
                     ":e": str(exc)[:1000],
                     ":u": datetime.now(timezone.utc).isoformat(),
                 },
             )
             item["browser_job_id"] = job_id
-            item["browser_job_status"] = "launch_failed"
-            log.error("[browser-fallback] launch failed job=%s: %s",
+            item["browser_job_status"] = "queue_failed"
+            log.error("[browser-fallback] queue failed job=%s: %s",
                       job_id, exc)
     return results
 
@@ -1284,10 +1240,10 @@ def _enqueue_browser_retries(agent_results: list, company: str, run_id: str,
 def _refresh_browser_retry_run(run: dict, dynamo=None) -> dict:
     """Reconcile terminal browser jobs into a run.
 
-    The worker normally performs this patch itself. This read-path safety net
-    also handles a task that downloaded the file but exited before patching, or
-    a Fargate task that stopped before Python started (for example image-pull or
-    network initialization failure).
+    The persistent worker normally performs this patch itself. This read-path
+    safety net handles a job that finished while the normal AgentCore chunk
+    still owned the run row, so the queue consumer never has to block waiting
+    for the parent run.
     """
     if run.get("status") != "browser_retry_pending":
         return run
@@ -1310,60 +1266,9 @@ def _refresh_browser_retry_run(run: dict, dynamo=None) -> dict:
     if not jobs:
         return run
 
-    active_statuses = {"queued", "launched", "running"}
-    task_arns = [
-        job.get("task_arn") for job in jobs
-        if job.get("status") in active_statuses and job.get("task_arn")
-    ]
-    if task_arns and BROWSER_ECS_CLUSTER:
-        try:
-            descriptions = get_ecs().describe_tasks(
-                cluster=BROWSER_ECS_CLUSTER, tasks=task_arns)
-            tasks_by_arn = {
-                task.get("taskArn"): task
-                for task in descriptions.get("tasks", [])
-            }
-            for job in jobs:
-                if job.get("status") not in active_statuses:
-                    continue
-                task = tasks_by_arn.get(job.get("task_arn"))
-                if not task or task.get("lastStatus") != "STOPPED":
-                    continue
-                reason = (
-                    task.get("stoppedReason")
-                    or "ECS task stopped before worker reported a result")
-                try:
-                    jobs_table.update_item(
-                        Key={"job_id": job["job_id"]},
-                        UpdateExpression=(
-                            "SET #st = :st, error_msg = :e, "
-                            "updated_at = :u"),
-                        ConditionExpression="#st IN (:q, :l, :r)",
-                        ExpressionAttributeNames={"#st": "status"},
-                        ExpressionAttributeValues={
-                            ":st": "failed",
-                            ":q": "queued",
-                            ":l": "launched",
-                            ":r": "running",
-                            ":e": reason[:1000],
-                            ":u": datetime.now(timezone.utc).isoformat(),
-                        },
-                    )
-                    job["status"] = "failed"
-                    job["error_msg"] = reason[:1000]
-                except ClientError as exc:
-                    if exc.response.get("Error", {}).get(
-                            "Code") != "ConditionalCheckFailedException":
-                        raise
-                    refreshed = jobs_table.get_item(
-                        Key={"job_id": job["job_id"]}).get("Item", {})
-                    job.update(refreshed)
-        except Exception as exc:
-            log.warning("[browser-fallback] task reconciliation failed for "
-                        "run=%s: %s", run.get("run_id", "")[:8], exc)
-
     terminal = {
-        "downloaded", "blocked_by_source_waf", "failed", "launch_failed",
+        "downloaded", "blocked_by_source_waf", "failed", "queue_failed",
+        "cancelled",
     }
     if not all(job.get("status") in terminal for job in jobs):
         return run
@@ -2246,10 +2151,9 @@ def kill_run(run_id):
     never writes to this run_id again — so deleting the row here is final,
     not something a lagging background write can resurrect.
 
-    For a run in browser_retry_pending, the ECS browser-worker task(s) for it
-    are also stopped directly, since that separate process's own patch-back
-    (browser_worker.py:_patch_run) would otherwise recreate the row after we
-    delete it.
+    For a run in browser_retry_pending, durable browser jobs are marked
+    cancelled. The persistent worker discards queued messages for cancelled
+    jobs and never recreates the deleted run.
     """
     dynamo   = get_dynamo()
     runs_tbl = dynamo.Table(RUNS_TABLE)
@@ -2259,7 +2163,7 @@ def kill_run(run_id):
 
     _mark_run_killed(run_id)
 
-    if item.get("status") == "browser_retry_pending" and BROWSER_ECS_CLUSTER:
+    if item.get("status") == "browser_retry_pending":
         try:
             jobs_tbl = dynamo.Table(BROWSER_JOBS_TABLE)
             resp = jobs_tbl.scan(
@@ -2268,24 +2172,15 @@ def kill_run(run_id):
                 ExpressionAttributeValues={":run": run_id},
             )
             for job in resp.get("Items", []):
-                if job.get("status") not in {"queued", "launched", "running"}:
+                if job.get("status") not in {"queued", "running"}:
                     continue
-                task_arn = job.get("task_arn")
-                if task_arn:
-                    try:
-                        get_ecs().stop_task(
-                            cluster=BROWSER_ECS_CLUSTER, task=task_arn,
-                            reason="Killed from Report IQ portal")
-                    except Exception as exc:
-                        log.warning("[kill] stop_task failed for %s: %s",
-                                    task_arn, exc)
                 try:
                     jobs_tbl.update_item(
                         Key={"job_id": job["job_id"]},
                         UpdateExpression="SET #st = :s, updated_at = :u",
                         ExpressionAttributeNames={"#st": "status"},
                         ExpressionAttributeValues={
-                            ":s": "failed",
+                            ":s": "cancelled",
                             ":u": datetime.now(timezone.utc).isoformat(),
                         },
                     )

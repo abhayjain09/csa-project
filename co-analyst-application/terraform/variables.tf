@@ -76,7 +76,7 @@ variable "assign_public_ip" {
 }
 
 variable "enable_browser_worker" {
-  description = "Launch one-off Fargate browser tasks for typed blocked_by_source_waf results"
+  description = "Run one persistent queue-driven Fargate browser service for typed blocked_by_source_waf results"
   type        = bool
   default     = false
 }
@@ -88,13 +88,13 @@ variable "browser_jobs_table" {
 }
 
 variable "browser_worker_cpu" {
-  description = "CPU units for each one-off Chromium Fargate task"
+  description = "CPU units for the persistent Chromium Fargate service"
   type        = number
   default     = 1024
 }
 
 variable "browser_worker_memory" {
-  description = "Memory in MiB for each one-off Chromium Fargate task"
+  description = "Memory in MiB for the persistent Chromium Fargate service"
   type        = number
   default     = 2048
 }
@@ -147,10 +147,52 @@ variable "browser_worker_max_document_bytes" {
   default     = 52428800
 }
 
-variable "browser_worker_run_patch_wait_seconds" {
-  description = "Maximum time a browser task waits for the normal AgentCore chunk run to finish before patching its result"
+variable "browser_worker_visibility_timeout_seconds" {
+  description = "SQS visibility timeout for one bounded browser job"
   type        = number
-  default     = 7200
+  default     = 1800
+}
+
+variable "browser_worker_max_agent_steps" {
+  description = "Maximum LLM-directed Playwright actions per browser job"
+  type        = number
+  default     = 18
+}
+
+variable "browser_worker_max_contexts" {
+  description = "Maximum live isolated per-domain browser contexts retained by the worker"
+  type        = number
+  default     = 8
+}
+
+variable "browser_worker_max_jobs_per_process" {
+  description = "Jobs handled before Chromium exits cleanly and ECS restarts it to bound memory growth"
+  type        = number
+  default     = 100
+}
+
+variable "browser_worker_context_max_age_seconds" {
+  description = "Maximum age of a live domain browser context before recycling"
+  type        = number
+  default     = 21600
+}
+
+variable "browser_worker_planner_model_id" {
+  description = "Bedrock multimodal model for bounded browser navigation decisions"
+  type        = string
+  default     = "us.amazon.nova-2-lite-v1:0"
+}
+
+variable "browser_worker_verifier_model_id" {
+  description = "Bedrock model for strict company and document-class verification"
+  type        = string
+  default     = "us.anthropic.claude-sonnet-5"
+}
+
+variable "browser_worker_state_prefix" {
+  description = "Encrypted S3 prefix for per-domain Playwright cookie and local-storage state"
+  type        = string
+  default     = "_browser-state"
 }
 
 variable "alb_ingress_cidrs" {

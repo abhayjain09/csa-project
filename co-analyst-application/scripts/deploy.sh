@@ -47,6 +47,10 @@ echo ""
 echo "Watch it come up:"
 echo "  aws ecs wait services-stable --cluster \$(terraform output -raw ecs_cluster) \\"
 echo "    --services \$(terraform output -raw ecs_service) --region us-east-1"
+if terraform output -raw browser_worker_service >/dev/null 2>&1; then
+  echo "  aws ecs wait services-stable --cluster \$(terraform output -raw ecs_cluster) \\"
+  echo "    --services \$(terraform output -raw browser_worker_service) --region us-east-1"
+fi
 echo ""
 echo "Target health:"
 echo "  aws elbv2 describe-target-health --target-group-arn \$(terraform output -raw target_group_arn) \\"
@@ -54,3 +58,4 @@ echo "    --region us-east-1 --query 'TargetHealthDescriptions[*].[Target.Id,Tar
 echo ""
 echo "Logs:"
 echo "  aws logs tail \$(terraform output -raw log_group) --follow --region us-east-1"
+echo "  aws logs tail /ecs/reportiq-browser-worker --follow --region us-east-1"

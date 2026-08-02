@@ -4,7 +4,7 @@ Containerised version of the Report IQ portal running on **ECS Fargate** behind 
 internal ALB. No EC2 to manage.
 
 ```
-reportiq-ecs/
+co-analyst-application/
 ├── app/                       ← the container
 │   ├── Dockerfile
 │   ├── .dockerignore
@@ -15,6 +15,8 @@ reportiq-ecs/
 │   ├── providers.tf
 │   ├── variables.tf
 │   ├── main.tf                ← ECR, ECS, ALB, IAM, SGs, DynamoDB
+│   ├── browser_queue.tf       ← SQS queue + dead-letter queue
+│   ├── browser_state.tf       ← encrypted, expiring browser session state
 │   ├── outputs.tf
 │   └── terraform.tfvars.example
 └── scripts/
@@ -32,7 +34,9 @@ reportiq-ecs/
 | ECR repo | `reportiq` |
 | ECS cluster | `reportiq-cluster` (Fargate, Container Insights on) |
 | ECS service + task | `reportiq` (1 task, 0.5 vCPU / 1 GB) |
-| Browser fallback task | `reportiq-browser-worker` (one-off; same cluster and image) |
+| Browser fallback service | `reportiq-browser-worker` (1 persistent Chromium task) |
+| Browser job queue | `reportiq-browser-jobs` + dead-letter queue |
+| Browser session state | `reportiq-browser-state-<account>-<region>` (encrypted, expiring) |
 | Internal ALB | `reportiq-internal-alb` |
 | Target group | `reportiq-tg` (IP target, /health check) |
 | Security groups | `reportiq-alb-sg`, `reportiq-tasks-sg` |
@@ -114,10 +118,22 @@ If your workstation can't route to that subnet, ECS does not change that; you'd 
 
 ### WAF browser fallback
 
-The portal only launches the one-off browser task when AgentCore returns the
-typed `blocked_by_source_waf` status with exact official PDF candidates. The
-worker keeps a Chromium session alive across bounded retries, then verifies the
-company and report class before writing to S3.
+The portal only enqueues a browser job when AgentCore returns the typed
+`blocked_by_source_waf` status. The handoff includes exact PDF candidates and
+all bounded official landing pages discovered through Vertex/search. One ECS
+service long-polls SQS and keeps Chromium warm. It maintains isolated contexts
+per official domain, persists encrypted cookies/local storage across task
+restarts, and recycles contexts periodically.
+
+For hard sites, a constrained Bedrock planner receives the visible DOM,
+interactive controls, a viewport screenshot, and the supplied URL seeds. It
+may navigate, click, use native site search, scroll, wait, or stop; it cannot
+execute arbitrary Playwright code or leave the official/attested hosts. Native
+downloads, PDF viewers, iframes, data links, and PDF network responses are
+captured. Every candidate still requires high-confidence company/class/year/
+standalone verification before S3 storage. Download temp files are deleted
+after verification/upload, and browser state lives in a separate encrypted
+bucket rather than the reports corpus.
 
 It is disabled by default because the worker requires an approved outbound
 route. Enable it after configuring public HTTPS egress through NAT, a Transit
@@ -176,6 +192,9 @@ must allow 8080 from `reportiq-alb-sg` (Terraform sets this automatically).
 **Browser fallback status:**
 ```bash
 aws logs tail /ecs/reportiq-browser-worker --follow --region us-east-1
+aws sqs get-queue-attributes --queue-url "$(cd terraform && terraform output -raw browser_queue_url)" \
+  --attribute-names ApproximateNumberOfMessages ApproximateNumberOfMessagesNotVisible \
+  --region us-east-1
 aws dynamodb get-item --table-name reportiq-browser-jobs \
   --key '{"job_id":{"S":"JOB_ID"}}' --region us-east-1
 ```

@@ -44,7 +44,7 @@ def _seed_sec_cache():
 
 
 def _load_pairing_function():
-    path = REPO_ROOT / "reportiq-ecs/app/backend/app.py"
+    path = REPO_ROOT / "co-analyst-application/app/backend/app.py"
     tree = ast.parse(path.read_text(encoding="utf-8"))
     node = next(
         item for item in tree.body
@@ -58,8 +58,40 @@ def _load_pairing_function():
     return namespace["_pair_queries_with_results"]
 
 
+def _load_enqueue_browser_retries(dynamo, sqs):
+    class ClientError(Exception):
+        response = {"Error": {"Code": ""}}
+
+    path = REPO_ROOT / "co-analyst-application/app/backend/app.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    node = next(
+        item for item in tree.body
+        if isinstance(item, ast.FunctionDef)
+        and item.name == "_enqueue_browser_retries")
+    module = ast.Module(body=[node], type_ignores=[])
+    ast.fix_missing_locations(module)
+    namespace = {
+        "BROWSER_WORKER_ENABLED": True,
+        "BROWSER_QUEUE_URL": "https://sqs.example/browser",
+        "BROWSER_JOBS_TABLE": "browser-jobs",
+        "get_dynamo": lambda: dynamo,
+        "get_sqs": lambda: sqs,
+        "datetime": datetime,
+        "timezone": timezone,
+        "timedelta": __import__("datetime").timedelta,
+        "hashlib": __import__("hashlib"),
+        "json": json,
+        "ClientError": ClientError,
+        "log": types.SimpleNamespace(
+            info=lambda *args, **kwargs: None,
+            error=lambda *args, **kwargs: None),
+    }
+    exec(compile(module, str(path), "exec"), namespace)
+    return namespace["_enqueue_browser_retries"]
+
+
 def _load_worker_validation_helpers():
-    path = REPO_ROOT / "reportiq-ecs/app/backend/browser_worker.py"
+    path = REPO_ROOT / "co-analyst-application/app/backend/browser_worker.py"
     tree = ast.parse(path.read_text(encoding="utf-8"))
     wanted = {
         "_normalize_text", "_company_matches", "_class_matches",
@@ -72,6 +104,11 @@ def _load_worker_validation_helpers():
                 and any(isinstance(target, ast.Name)
                         and target.id == "_NON_ENGLISH_CODES"
                         for target in item.targets)):
+            nodes.append(item)
+        elif (isinstance(item, ast.Assign)
+              and any(isinstance(target, ast.Name)
+                      and target.id in {"_CLASS_ALIASES", "_NEAR_NEIGHBOUR_REJECTS"}
+                      for target in item.targets)):
             nodes.append(item)
         elif isinstance(item, ast.FunctionDef) and item.name in wanted:
             nodes.append(item)
@@ -92,7 +129,7 @@ def _load_worker_validation_helpers():
 
 
 def _load_bulk_queue_helpers(dynamo, executor, invoke_fn):
-    path = REPO_ROOT / "reportiq-ecs/app/backend/app.py"
+    path = REPO_ROOT / "co-analyst-application/app/backend/app.py"
     tree = ast.parse(path.read_text(encoding="utf-8"))
     wanted = {"_queue_bulk_invocations", "_chunk_web_queries"}
     nodes = [
@@ -122,7 +159,7 @@ def _load_bulk_queue_helpers(dynamo, executor, invoke_fn):
 
 
 def _load_structured_payload_helpers():
-    path = REPO_ROOT / "reportiq-ecs/app/backend/app.py"
+    path = REPO_ROOT / "co-analyst-application/app/backend/app.py"
     tree = ast.parse(path.read_text(encoding="utf-8"))
     wanted_functions = {"_infer_report_class", "_build_chunk_payload"}
     nodes = []
@@ -161,7 +198,7 @@ def _load_pdf_integrity_helper(relative_path: str, function_name: str):
 
 
 def _load_manual_source_url_helper():
-    path = REPO_ROOT / "reportiq-ecs/app/backend/app.py"
+    path = REPO_ROOT / "co-analyst-application/app/backend/app.py"
     tree = ast.parse(path.read_text(encoding="utf-8"))
     node = next(
         item for item in tree.body
@@ -176,7 +213,7 @@ def _load_manual_source_url_helper():
 
 
 def _load_worker_terminal_helper(jobs_table):
-    path = REPO_ROOT / "reportiq-ecs/app/backend/browser_worker.py"
+    path = REPO_ROOT / "co-analyst-application/app/backend/browser_worker.py"
     tree = ast.parse(path.read_text(encoding="utf-8"))
     node = next(
         item for item in tree.body
@@ -188,7 +225,8 @@ def _load_worker_terminal_helper(jobs_table):
     namespace = {
         "jobs_table": jobs_table,
         "_TERMINAL_JOB_STATUSES": {
-            "downloaded", "blocked_by_source_waf", "failed", "launch_failed",
+            "downloaded", "blocked_by_source_waf", "failed", "queue_failed",
+            "cancelled",
         },
     }
     exec(compile(module, str(path), "exec"), namespace)
@@ -196,9 +234,7 @@ def _load_worker_terminal_helper(jobs_table):
 
 
 def _load_current_language_helpers():
-    """AST-extracts _language_preference_score/_is_localized_variant_url from
-    the CURRENT agent.py (unlike _load_language_and_scope_helpers above,
-    which points at the stale infra/agentcore-report/... path)."""
+    """Extract current language helpers from the Download Agent."""
     path = REPO_ROOT / "agents/download-agent/agent/agent.py"
     tree = ast.parse(path.read_text(encoding="utf-8"))
     wanted_assignments = {"_NON_ENGLISH_LANGUAGE_CODES", "_NON_ENGLISH_LANGUAGE_WORDS"}
@@ -219,9 +255,7 @@ def _load_current_language_helpers():
 
 
 def _load_current_confidence_function():
-    """AST-extracts _confident from the CURRENT agent.py (unlike
-    _load_confidence_function above, which points at the stale
-    infra/agentcore-report/... path)."""
+    """Extract the current fail-closed confidence helper."""
     path = REPO_ROOT / "agents/download-agent/agent/agent.py"
     tree = ast.parse(path.read_text(encoding="utf-8"))
     node = next(
@@ -240,10 +274,7 @@ def _load_current_confidence_function():
 
 def _load_page_render_helpers():
     """AST-extracts _PageRenderAttempts/_try_page_render_fallback from the
-    CURRENT agent.py in this repo (agents/download-agent/agent/agent.py) —
-    unlike the other _load_* helpers above, which point at infra/agentcore-
-    report/... and reportiq-ecs/... paths that do not exist in this repo
-    layout (pre-existing staleness, unrelated to this test)."""
+    current Download Agent."""
     path = REPO_ROOT / "agents/download-agent/agent/agent.py"
     tree = ast.parse(path.read_text(encoding="utf-8"))
     wanted = {"_PageRenderAttempts", "_try_page_render_fallback"}
@@ -265,7 +296,7 @@ def _load_page_render_helpers():
 
 
 def _load_vertex_helpers():
-    path = REPO_ROOT / "infra/agentcore-report/vertex_search/lambda.py"
+    path = REPO_ROOT / "agents/download-agent/vertex_search/lambda.py"
     tree = ast.parse(path.read_text(encoding="utf-8"))
     wanted = {"_parse_first_json_object", "_clean_identity_hint"}
     nodes = [
@@ -280,7 +311,7 @@ def _load_vertex_helpers():
 
 
 def _load_confidence_function():
-    path = REPO_ROOT / "infra/agentcore-report/agent/agent.py"
+    path = REPO_ROOT / "agents/download-agent/agent/agent.py"
     tree = ast.parse(path.read_text(encoding="utf-8"))
     node = next(
         item for item in tree.body
@@ -297,7 +328,7 @@ def _load_confidence_function():
 
 
 def _load_routing_helpers():
-    path = REPO_ROOT / "infra/agentcore-report/agent/agent.py"
+    path = REPO_ROOT / "agents/download-agent/agent/agent.py"
     tree = ast.parse(path.read_text(encoding="utf-8"))
     wanted = {
         "_scope_to_official_domain",
@@ -319,10 +350,14 @@ def _load_routing_helpers():
         "LATEST_DOCUMENT_SEARCH_VARIANTS": 6,
         "LATEST_COMPLETED_FISCAL_YEAR_LAG": 1,
         "CURRENT_YEAR": 2026,
+        "_IR_ONLY_CLASSES": {
+            "annual report", "proxy statement", "remuneration report"},
         "_extract_year_intent": lambda value: {
             int(year) for year in re.findall(r"\b20\d{2}\b", value or "")
         },
         "_clean_domain": lambda value: str(value or "").lower().strip(),
+        "_registrable": lambda value: ".".join(
+            str(value or "").split(".")[-2:]),
         "_strip_site": lambda value: re.sub(
             r"site:\s*\S+", "", value or "", flags=re.I).strip(),
         "_query_variant_preserves_years": lambda original, variant: True,
@@ -332,7 +367,7 @@ def _load_routing_helpers():
 
 
 def _load_language_and_scope_helpers():
-    path = REPO_ROOT / "infra/agentcore-report/agent/agent.py"
+    path = REPO_ROOT / "agents/download-agent/agent/agent.py"
     tree = ast.parse(path.read_text(encoding="utf-8"))
     wanted_assignments = {
         "_NON_ENGLISH_LANGUAGE_CODES",
@@ -375,7 +410,7 @@ def _load_language_and_scope_helpers():
 
 
 def _load_document_link_helpers():
-    path = REPO_ROOT / "infra/agentcore-report/agent/agent.py"
+    path = REPO_ROOT / "agents/download-agent/agent/agent.py"
     tree = ast.parse(path.read_text(encoding="utf-8"))
     wanted = {"_registrable", "_is_official_source_page", "_doc_links"}
     nodes = [
@@ -481,6 +516,99 @@ class ResultMappingTests(unittest.TestCase):
         self.assertEqual(results[0]["browser_job_id"], "job-123")
         self.assertEqual(results[0]["candidate_urls"], [candidate])
 
+    def test_waf_result_preserves_all_browser_landing_seeds(self):
+        pair = _load_pairing_function()
+        seeds = [
+            "https://example.com/investors/reports",
+            "https://example.com/corporate-governance/policies",
+        ]
+        results = pair(
+            ["Example Environmental Policy"], [], [], [{
+                "request_id": "1:1",
+                "status": "blocked_by_source_waf",
+                "candidate_urls": ["https://example.com/policy.pdf"],
+                "browser_seed_urls": seeds,
+                "browser_job_id": "job-seeds",
+            }], chunk_index=1)
+        self.assertEqual(results[0]["browser_seed_urls"], seeds)
+
+    def test_waf_job_is_queued_with_candidates_and_vertex_landing_pages(self):
+        class Table:
+            def __init__(self):
+                self.item = None
+
+            def put_item(self, **kwargs):
+                self.item = kwargs["Item"]
+
+        class Dynamo:
+            def __init__(self, table):
+                self.table = table
+
+            def Table(self, _name):
+                return self.table
+
+        class Sqs:
+            def __init__(self):
+                self.messages = []
+
+            def send_message(self, **kwargs):
+                self.messages.append(kwargs)
+
+        table, sqs = Table(), Sqs()
+        enqueue = _load_enqueue_browser_retries(Dynamo(table), sqs)
+        candidate = "https://example.com/docs/policy.pdf"
+        seeds = ["https://example.com/governance/policies"]
+        results = enqueue([{
+            "request_id": "3:1",
+            "query": "Example Anti-Bribery Policy",
+            "prepared_query": "Example Anti-Bribery Policy site:example.com",
+            "status": "blocked_by_source_waf",
+            "candidate_urls": [candidate],
+            "browser_seed_urls": seeds,
+            "report_class": "anti-bribery and corruption policy",
+            "official_domain": "example.com",
+        }], "Example Inc", "run-1", "query-1")
+        self.assertEqual(results[0]["browser_job_status"], "queued")
+        self.assertEqual(json.loads(table.item["candidate_urls"]), [candidate])
+        self.assertEqual(json.loads(table.item["browser_seed_urls"]), seeds)
+        self.assertEqual(len(sqs.messages), 1)
+
+    def test_waf_job_can_start_visual_navigation_from_seed_only(self):
+        class Table:
+            def put_item(self, **kwargs):
+                self.item = kwargs["Item"]
+
+        class Dynamo:
+            def __init__(self, table):
+                self.table = table
+
+            def Table(self, _name):
+                return self.table
+
+        class Sqs:
+            def __init__(self):
+                self.messages = []
+
+            def send_message(self, **kwargs):
+                self.messages.append(kwargs)
+
+        table, sqs = Table(), Sqs()
+        enqueue = _load_enqueue_browser_retries(Dynamo(table), sqs)
+        seed = "https://example.com/investors/reports"
+        results = enqueue([{
+            "request_id": "3:2",
+            "query": "Example Annual Report",
+            "status": "blocked_by_source_waf",
+            "candidate_urls": [],
+            "browser_seed_urls": [seed],
+            "report_class": "annual report",
+            "official_domain": "example.com",
+        }], "Example Inc", "run-2", "query-2")
+        self.assertEqual(results[0]["browser_job_status"], "queued")
+        self.assertEqual(json.loads(table.item["candidate_urls"]), [])
+        self.assertEqual(json.loads(table.item["browser_seed_urls"]), [seed])
+        self.assertEqual(len(sqs.messages), 1)
+
 
 class BrowserWorkerValidationTests(unittest.TestCase):
     def test_sp_global_vendor_code_matches_company_and_specific_class(self):
@@ -504,6 +632,25 @@ class BrowserWorkerValidationTests(unittest.TestCase):
             "",
         )
         self.assertFalse(ok)
+
+    def test_ampersand_canonical_class_uses_normalized_aliases(self):
+        helpers = _load_worker_validation_helpers()
+        ok, _ = helpers["_class_matches"](
+            "occupational health & safety policy",
+            "Example Limited Occupational Health and Safety Policy",
+            "https://example.com/ohs-policy.pdf",
+            "",
+        )
+        self.assertTrue(ok)
+
+    def test_persistent_browser_infrastructure_replaces_run_task(self):
+        app_source = (REPO_ROOT / "co-analyst-application/app/backend/app.py").read_text(
+            encoding="utf-8")
+        terraform_source = (REPO_ROOT / "co-analyst-application/terraform/main.tf").read_text(
+            encoding="utf-8")
+        self.assertNotIn("ecs.run_task(", app_source)
+        self.assertIn("sqs.send_message(", app_source)
+        self.assertIn('resource "aws_ecs_service" "browser_worker"', terraform_source)
 
     def test_latest_fiscal_range_url_outranks_older_report(self):
         helpers = _load_worker_validation_helpers()
@@ -529,7 +676,7 @@ class BrowserWorkerValidationTests(unittest.TestCase):
             stale, [latest], False))
 
     def test_transport_integrity_failure_remains_retryable(self):
-        path = REPO_ROOT / "infra/agentcore-report/agent/agent.py"
+        path = REPO_ROOT / "agents/download-agent/agent/agent.py"
         tree = ast.parse(path.read_text(encoding="utf-8"))
         function = next(
             item for item in tree.body
@@ -594,7 +741,7 @@ class StructuredPayloadTests(unittest.TestCase):
             "Anti-Corruption and Bribery Policy":
                 "anti-bribery and corruption policy",
             "Environment, Health and Safety Policy":
-                "occupational health & safety policy",
+                "environment, health & safety policy",
             "Tax Strategy and Policy Document":
                 "tax strategy and governance",
             "Supplier Code of Conduct":
@@ -616,7 +763,7 @@ class PdfIntegrityTests(unittest.TestCase):
 
     def test_agent_rejects_html_disguised_as_pdf(self):
         validate = _load_pdf_integrity_helper(
-            "infra/agentcore-report/agent/agent.py",
+            "agents/download-agent/agent/agent.py",
             "_document_integrity_error",
         )
         error = validate(
@@ -628,7 +775,7 @@ class PdfIntegrityTests(unittest.TestCase):
 
     def test_agent_accepts_parseable_pdf(self):
         validate = _load_pdf_integrity_helper(
-            "infra/agentcore-report/agent/agent.py",
+            "agents/download-agent/agent/agent.py",
             "_document_integrity_error",
         )
         self.assertEqual(
@@ -642,7 +789,7 @@ class PdfIntegrityTests(unittest.TestCase):
 
     def test_portal_manual_upload_uses_same_pdf_gate(self):
         validate = _load_pdf_integrity_helper(
-            "reportiq-ecs/app/backend/app.py",
+            "co-analyst-application/app/backend/app.py",
             "_pdf_integrity_error",
         )
         self.assertTrue(validate(
@@ -677,7 +824,7 @@ class BrowserWorkerPatchTests(unittest.TestCase):
 
 class FrontendDownloadTests(unittest.TestCase):
     def test_citation_uses_verified_download_flow_not_json_endpoint(self):
-        path = REPO_ROOT / "reportiq-ecs/app/static/index.html"
+        path = REPO_ROOT / "co-analyst-application/app/static/index.html"
         source = path.read_text(encoding="utf-8")
         self.assertNotIn(
             'href="/api/sources/download-url?key=', source)
@@ -685,7 +832,7 @@ class FrontendDownloadTests(unittest.TestCase):
             "downloadFileVerified(decB64(", source)
 
     def test_terminal_fargate_failure_offers_manual_download_and_upload(self):
-        path = REPO_ROOT / "reportiq-ecs/app/static/index.html"
+        path = REPO_ROOT / "co-analyst-application/app/static/index.html"
         source = path.read_text(encoding="utf-8")
         self.assertIn("browserFinishedWithoutDownload", source)
         self.assertIn("↗ Manual download", source)

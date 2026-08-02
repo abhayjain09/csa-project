@@ -7,7 +7,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# The API and one-off browser worker intentionally share one image so the
+# The API and persistent browser worker intentionally share one image so the
 # existing ECR/deploy pipeline publishes an atomic backend+worker version.
 # Playwright uses Debian's Chromium package; no browser binary is downloaded
 # from the public internet during application startup.

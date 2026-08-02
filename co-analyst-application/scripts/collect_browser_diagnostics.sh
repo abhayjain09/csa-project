@@ -1,25 +1,22 @@
 #!/usr/bin/env bash
-# Collect read-only diagnostics for one CoAnalyst download run.
+# Collect read-only diagnostics for recent CoAnalyst download runs or one ID.
 #
-# Usage:
-#   AWS_PROFILE=my-profile ./collect_browser_diagnostics.sh RUN_ID [QUERY_ID]
+# Usage (default AWS profile, every run from the last two hours):
+#   ./collect_browser_diagnostics.sh
 #
 # Optional:
-#   AWS_REGION=us-east-1 LOG_SINCE=8h ./collect_browser_diagnostics.sh RUN_ID
+#   AWS_PROFILE=my-profile LOOKBACK_HOURS=4 ./collect_browser_diagnostics.sh
+#   ./collect_browser_diagnostics.sh RUN_ID [QUERY_ID]
 
 set -u
 
 RUN_ID="${1:-}"
 QUERY_ID="${2:-}"
 REGION="${AWS_REGION:-us-east-1}"
-SINCE="${LOG_SINCE:-8h}"
+LOOKBACK_HOURS="${LOOKBACK_HOURS:-2}"
+SINCE="${LOG_SINCE:-${LOOKBACK_HOURS}h}"
 
-if [[ -z "$RUN_ID" ]]; then
-  echo "Usage: AWS_PROFILE=my-profile $0 RUN_ID [QUERY_ID]" >&2
-  exit 2
-fi
-
-for command in aws jq tar; do
+for command in aws jq tar python3; do
   if ! command -v "$command" >/dev/null 2>&1; then
     echo "Required command not found: $command" >&2
     exit 2
@@ -43,31 +40,64 @@ capture() {
 capture identity.json aws sts get-caller-identity \
   --region "$REGION" --output json
 
-capture run-record.json aws dynamodb get-item \
-  --table-name reportiq-runs \
-  --key "{\"run_id\":{\"S\":\"$RUN_ID\"}}" \
-  --consistent-read --region "$REGION" --output json
+CUTOFF_ISO="$(python3 - "$LOOKBACK_HOURS" <<'PY'
+import sys
+from datetime import datetime, timedelta, timezone
 
-if [[ -z "$QUERY_ID" ]]; then
-  QUERY_ID="$(jq -r '.Item.query_id.S // empty' "$OUT_DIR/run-record.json" 2>/dev/null)"
-fi
+hours = float(sys.argv[1])
+print((datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat())
+PY
+)"
 
-if [[ -n "$QUERY_ID" ]]; then
-  capture query-record.json aws dynamodb get-item \
-    --table-name reportiq-web-queries \
-    --key "{\"query_id\":{\"S\":\"$QUERY_ID\"}}" \
-    --consistent-read --region "$REGION" --output json
+RUN_IDS=()
+if [[ -n "$RUN_ID" ]]; then
+  RUN_IDS+=("$RUN_ID")
 else
-  echo "No query_id was supplied or found in the run row." \
-    >"$OUT_DIR/query-record.txt"
+  capture recent-runs.json aws dynamodb scan \
+    --table-name reportiq-runs \
+    --filter-expression "#started >= :cutoff OR #updated >= :cutoff OR #queued >= :cutoff" \
+    --expression-attribute-names \
+      '{"#started":"started_at","#updated":"updated_at","#queued":"queued_at"}' \
+    --expression-attribute-values "{\":cutoff\":{\"S\":\"$CUTOFF_ISO\"}}" \
+    --region "$REGION" --output json
+
+  while IFS= read -r recent_run_id; do
+    [[ -n "$recent_run_id" ]] && RUN_IDS+=("$recent_run_id")
+  done < <(jq -r '.Items[]?.run_id.S // empty' "$OUT_DIR/recent-runs.json" 2>/dev/null)
 fi
 
-capture browser-jobs.json aws dynamodb scan \
-  --table-name reportiq-browser-jobs \
-  --filter-expression "#run = :run" \
-  --expression-attribute-names '{"#run":"run_id"}' \
-  --expression-attribute-values "{\":run\":{\"S\":\"$RUN_ID\"}}" \
-  --max-items 500 --region "$REGION" --output json
+if [[ "${#RUN_IDS[@]}" -eq 0 ]]; then
+  echo "No runs found since $CUTOFF_ISO" >"$OUT_DIR/no-recent-runs.txt"
+fi
+
+for current_run_id in "${RUN_IDS[@]}"; do
+  safe_run_id="$(printf '%s' "$current_run_id" | tr -cd 'A-Za-z0-9._-')"
+  run_file="run-${safe_run_id}.json"
+  capture "$run_file" aws dynamodb get-item \
+    --table-name reportiq-runs \
+    --key "{\"run_id\":{\"S\":\"$current_run_id\"}}" \
+    --consistent-read --region "$REGION" --output json
+
+  current_query_id="$QUERY_ID"
+  if [[ -z "$current_query_id" ]]; then
+    current_query_id="$(jq -r '.Item.query_id.S // empty' \
+      "$OUT_DIR/$run_file" 2>/dev/null)"
+  fi
+  if [[ -n "$current_query_id" ]]; then
+    capture "query-${safe_run_id}.json" aws dynamodb get-item \
+      --table-name reportiq-web-queries \
+      --key "{\"query_id\":{\"S\":\"$current_query_id\"}}" \
+      --consistent-read --region "$REGION" --output json
+  fi
+
+  capture "browser-jobs-${safe_run_id}.json" aws dynamodb scan \
+    --table-name reportiq-browser-jobs \
+    --filter-expression "#run = :run" \
+    --expression-attribute-names '{"#run":"run_id"}' \
+    --expression-attribute-values \
+      "{\":run\":{\"S\":\"$current_run_id\"}}" \
+    --region "$REGION" --output json
+done
 
 capture ecs-services.json aws ecs describe-services \
   --cluster reportiq-cluster \
@@ -150,6 +180,9 @@ tar -czf "$ARCHIVE" -C "$(dirname "$OUT_DIR")" "$(basename "$OUT_DIR")"
 
 echo
 echo "Diagnostics complete."
-echo "Run ID: $RUN_ID"
-echo "Query ID: ${QUERY_ID:-not found}"
+echo "Lookback: $LOOKBACK_HOURS hour(s), starting $CUTOFF_ISO"
+echo "Run IDs found: ${#RUN_IDS[@]}"
+for current_run_id in "${RUN_IDS[@]}"; do
+  echo "  $current_run_id"
+done
 echo "Archive: $ARCHIVE"

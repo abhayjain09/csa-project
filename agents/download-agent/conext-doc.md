@@ -1,7 +1,151 @@
-Here's how the EDO Co-Analyst Download Agent works, end to end — originally written after a session that fixed the timeout architecture, crawl efficiency, and class-verification generalization, and now updated after a follow-up session that added site-first-for-latest annual report routing and a PDF-content year fallback (see the dedicated section below). Everything below is current as of this write-up; **nothing in this doc has been deployed or run against live AWS yet** — see "Deployment status."
+Here's how the EDO Co-Analyst Download Agent works, end to end. This document
+contains historical implementation notes followed by the current behavior. Use
+the handoff snapshot immediately below as the source of truth for a new chat.
+No AWS deployment or live end-to-end validation was performed by Codex during
+this work; see "Deployment status."
+
+## New-chat handoff snapshot — 2026-08-02
+
+### Repository state
+
+- Branch: `main`; current HEAD at the time of this snapshot: `8fb0a19`.
+- The annual-report implementation landed primarily in `4d6eade` and was
+  finalized with isolated Download Agent coverage logic in `a550653`; focused
+  tests were committed in `ab95414`.
+- The worktree was clean before this documentation-only update.
+- The final design changes **two deployable services only**: the Download Agent
+  and `co-analyst-application`.
+- The existing PageIndex agent is not used by this feature. Its temporary Annual
+  Report coverage additions were removed and its original indexing behavior was
+  restored. Do not deploy PageIndex for this feature.
+
+### Final product behavior
+
+1. For a full-company 23-report run, the application removes the Annual Report
+   query from the normal queue and invokes it first as a single dependency.
+2. For an undated Annual Report request, discovery tries the official company
+   site first, then SEC/other configured official registries. Explicit-year
+   Annual Report requests retain registry-first behavior.
+3. Once the verified Annual Report is stored in S3, all other reports start
+   immediately with bounded parallelism. Defaults are one report per AgentCore
+   invocation and three report invocations in flight per company
+   (`AGENT_CHUNK_SIZE=1`, `AGENT_CHUNK_CONCURRENCY=3`).
+4. Every non-annual structured report is sent with `standalone_only=true`.
+   Therefore an Annual Report section cannot be downloaded and stored under a
+   standalone Code of Conduct/policy/report class.
+5. After all standalone searches finish, the application collects only results
+   carrying the explicit `annual_report_reference_eligible=true` marker. This
+   marker is set only for an authoritative agent `failed`/`no_document_found`
+   discovery miss—not for a generic UI-level `failed` result.
+6. If there are no eligible clean misses, or no Annual Report was downloaded,
+   coverage analysis is skipped entirely.
+7. Otherwise the application invokes the **Download Agent once more** with
+   `mode=annual_report_coverage`, the Annual Report S3 key, and only the eligible
+   failed classes. This mode exits before normal cleanup/discovery and cannot
+   delete or download company files.
+8. The isolated `annual_coverage.py` module reads the stored PDF (100 MiB default
+   limit), scans all extractable text pages, embedded bookmarks, printed TOC
+   entries grounded back to real physical pages, topic-bearing headings, and
+   section-opening text. It uses the downloader's existing `pypdf` dependency.
+9. The Download Agent calls `DEEP_SCAN_MODEL_ID` once for strict classification.
+   A result is accepted only when it is high confidence and its exact heading
+   and physical page range exist in the extracted index. Invented headings,
+   adjusted page numbers, medium/low confidence, and passing mentions are
+   rejected.
+10. The application validates the response again and writes the durable manifest
+    to `<company>/_manifests/annual-report-coverage.json` in the reports bucket.
+    Only then are matching clean misses converted to
+    `referenced_in_existing_document`.
+
+### Failure and WAF boundaries
+
+- `blocked_by_source_waf`, `browser_retry_queued`,
+  `timed_out_pending_check`, transport/chunk errors, storage failures, and
+  unmapped results never enter Annual Report fallback.
+- A WAF-blocked report keeps its bounded HTTPS candidate URLs. The portal shows
+  **Manual download** and **Upload file**, including while the longer browser
+  retry is pending. It is never changed to `in annual report`.
+- Proxy Statements and Wolfsberg Questionnaires are never eligible for Annual
+  Report section fallback. Only classes in
+  `ANNUAL_REPORT_REFERENCE_CLASSES` can be considered.
+- If coverage extraction/model invocation fails, the manifest is not created
+  and all original failed statuses remain unchanged (fail closed).
+- Image-only/scanned Annual Reports have no OCR path in the Download Agent.
+  Those pages produce no coverage reference rather than an uncertain match.
+
+### Stored result and provenance behavior
+
+- A real standalone file remains `status=downloaded` and keeps its own
+  class-scoped S3 object and provenance row.
+- An Annual Report section is a reference, not a second download. Its typed
+  result includes `referenced_s3_key`, `manifest_s3_key`, exact heading,
+  physical page range, evidence, and `confidence=high`.
+- The Annual Report keeps one provenance row. References are stored in the run
+  diagnostics and manifest, avoiding collisions in the existing
+  `company + s3_key` DynamoDB key.
+- The portal shows an **in annual report** badge and downloads the already stored
+  Annual Report when the user clicks the reference action.
+
+### Implementation map
+
+- `agents/download-agent/agent/agent.py`: `standalone_only` enforcement and the
+  early `annual_report_coverage` invocation route.
+- `agents/download-agent/agent/annual_coverage.py`: independent PDF heading/TOC
+  extraction, strict model classification, S3 read boundary, and coverage
+  response. This file is included in the Download Agent Docker image.
+- `agents/download-agent/agent/report_specs.py`: Annual Report first in the
+  canonical report catalog.
+- `agents/download-agent/agent/Dockerfile`: copies `annual_coverage.py`.
+- `co-analyst-application/app/backend/app.py`: Annual-first partitioning,
+  bounded parallel phase, clean-miss marker, one post-search Download Agent
+  coverage call, manifest persistence, and typed reference application.
+- `co-analyst-application/app/static/index.html`: Annual Report first in bulk
+  queries, `in annual report` rendering, safe S3-key downloads, and WAF manual
+  recovery URL/action.
+- `tests/test_annual_report_workflow.py` and
+  `agents/download-agent/agent/tests/test_accuracy_guards.py`: focused and
+  regression coverage. They are not deployed.
+
+### Local verification completed
+
+- Python compilation passed for the downloader, isolated coverage module,
+  application backend, and unchanged PageIndex runtime.
+- Frontend inline JavaScript parsed successfully with Node.js.
+- `git diff --check` passed.
+- Combined focused/regression suite: **97/97 passing**.
+- Tests cover Annual Report isolation, post-parallel one-time coverage ordering,
+  standalone payloads, clean-miss eligibility, WAF/timeout/error exclusion,
+  stable manifest path, exact high-confidence matching, invented heading/page
+  rejection, printed-TOC grounding, Download Agent—not PageIndex—invocation,
+  Docker packaging, and WAF manual recovery rendering.
+
+### Deployment and live validation still required
+
+Deploy in this order:
+
+1. Rebuild/deploy `agents/download-agent` with a new image tag.
+2. After its DEFAULT endpoint advances, rebuild/deploy
+   `co-analyst-application` with a new image tag.
+3. Do not rebuild/deploy PageIndex for this feature.
+
+No Terraform source or dependency change is required for this feature. The
+application already has authority to invoke the Download Agent, and the Download
+Agent already reads/writes the reports bucket. Still confirm the configured
+`DEEP_SCAN_MODEL_ID` is enabled in the target Bedrock account.
+
+Live checks not yet performed:
+
+- Docker builds for the two final images.
+- A deployed `annual_report_coverage` invocation reading a real S3 PDF.
+- Manifest creation and metadata/provenance enrichment in AWS.
+- A positive clean-miss → Annual Report section reference.
+- A passing mention/invented heading negative test against a real report.
+- A WAF/manual-download run proving it never becomes an Annual Report reference.
+- A full 23-report run confirming ordering, concurrency, final UI behavior, and
+  elapsed time after the earlier PDF-year memoization performance fix.
 
 ## Purpose
-Given a company (by name/ticker/CIK), the agent finds, verifies, and downloads specific classes of official corporate compliance documents — annual reports, ESG/sustainability reports, codes of conduct, anti-bribery policies, proxy statements, whistleblowing policies, insider trading policies, tax strategy documents, etc. (21 classes total) — into the S3 corpus, with every stored object backed by a provenance record. The whole design philosophy is **fail-closed**: if the agent can't verify a document with confidence, it stores nothing rather than storing something wrong.
+Given a company (by name/ticker/CIK), the agent finds, verifies, and downloads specific classes of official corporate compliance documents — annual reports, ESG/sustainability reports, codes of conduct, anti-bribery policies, proxy statements, whistleblowing policies, insider trading policies, tax strategy documents, etc. (23 classes total) — into the S3 corpus, with every stored object backed by a provenance record. The whole design philosophy is **fail-closed**: if the agent can't verify a document with confidence, it stores nothing rather than storing something wrong.
 
 ## The five-tier discovery cascade
 For a given company + document class, the agent tries tiers in order, stopping as soon as one produces a verified match:
@@ -260,8 +404,8 @@ Driven by a 7-company × ~22-class test workbook, overall accuracy was 46.2% (Pr
 - The language gate only enforces "must be English" when English is requested — no positive-match enforcement for an explicitly-requested non-English language yet.
 - `page.pdf()` viability over AgentCore's managed browser session (HTML-page-as-document rendering fallback) is still unconfirmed.
 - **This session's entire timeout-ladder, crawl-efficiency, content-over-filename, synonym-injection, and bulk-concurrency fix set is unverified against live AWS** — see "Deployment status" above for the specific things to watch on the first live test run.
-- **New this write-up — also unverified against live AWS**: the `SITE_FIRST_WHEN_LATEST_CLASSES` routing change and `_candidate_document_year`'s PDF-content fallback. Logic is unit-tested and spot-checked against a real downloaded PDF (see the dedicated section above), but never run through the actual deployed agent against `bilibili.com`/EDGAR live — rollout step 7 above is the first real test.
-- **Found via a real bulk run, now fixed but not yet re-timed live**: the PDF-content-year fallback caused a ~4x batch-runtime regression (30-40 min → ~2 hours for 23 reports) and cut successful downloads roughly in half, because `_candidate_document_year` re-hashed/re-parsed the same candidate's PDF body on every repeated check across the official_crawl → deep_crawl → browser cascade. Fixed via memoization (see dedicated section above) and unit-tested, but the actual 23-report batch has not been re-run yet to confirm the timing is restored — rollout step 8 above.
+- **New this write-up — also unverified against live AWS**: the `SITE_FIRST_WHEN_LATEST_CLASSES` routing change and `_candidate_document_year`'s PDF-content fallback. Logic is unit-tested and spot-checked against a real downloaded PDF (see the dedicated section above), but never run through the actual deployed agent against `bilibili.com`/EDGAR live — rollout step 8 above is the first real test.
+- **Found via a real bulk run, now fixed but not yet re-timed live**: the PDF-content-year fallback caused a ~4x batch-runtime regression (30-40 min → ~2 hours for 23 reports) and cut successful downloads roughly in half, because `_candidate_document_year` re-hashed/re-parsed the same candidate's PDF body on every repeated check across the official_crawl → deep_crawl → browser cascade. Fixed via memoization (see dedicated section above) and unit-tested, but the actual 23-report batch has not been re-run yet to confirm the timing is restored — rollout step 9 above.
 - The ECS browser-worker launcher concurrency risk and the GCP Vertex quota risk (both above) are flagged but not fixed — worth a follow-up session if bulk runs at scale (10+ companies) become routine.
 
 Want me to go deeper into any one tier, the live-test results once you have them, or start on the ECS browser-worker concurrency cap / Vertex quota risk next?

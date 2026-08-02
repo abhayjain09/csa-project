@@ -51,6 +51,8 @@ locals {
     BROWSER_WORKER_MAX_JOBS_PER_PROCESS         = tostring(var.browser_worker_max_jobs_per_process)
     BROWSER_WORKER_CONTEXT_MAX_AGE_SECONDS      = tostring(var.browser_worker_context_max_age_seconds)
     BROWSER_WORKER_VISIBILITY_EXTENSION_SECONDS = tostring(var.browser_worker_visibility_timeout_seconds)
+    BROWSER_WORKER_WAF_CIRCUIT_THRESHOLD        = tostring(var.browser_worker_waf_circuit_threshold)
+    BROWSER_WORKER_WAF_CIRCUIT_COOLDOWN_SECONDS = tostring(var.browser_worker_waf_circuit_cooldown_seconds)
     BROWSER_WORKER_PLANNER_MODEL_ID             = var.browser_worker_planner_model_id
     BROWSER_WORKER_PLANNER_FALLBACK_MODEL_ID    = var.browser_worker_planner_fallback_model_id
     BROWSER_WORKER_VERIFIER_MODEL_ID            = var.browser_worker_verifier_model_id
@@ -481,6 +483,17 @@ resource "aws_ecs_task_definition" "browser_worker" {
           "awslogs-region"        = var.region
           "awslogs-stream-prefix" = "ecs"
         }
+      }
+
+      healthCheck = {
+        command = [
+          "CMD-SHELL",
+          "test -r /proc/1/cmdline && tr '\\0' ' ' < /proc/1/cmdline | grep -q browser_worker.py"
+        ]
+        interval    = 30
+        timeout     = 5
+        retries     = 3
+        startPeriod = 60
       }
     }
   ])

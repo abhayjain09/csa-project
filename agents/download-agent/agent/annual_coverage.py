@@ -11,6 +11,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
+import tempfile
 from html.parser import HTMLParser
 from io import BytesIO
 from typing import Callable
@@ -115,6 +117,12 @@ def _locate_toc_title(title: str, page_texts: list[str],
     words = normalized.split()
     for page_number in range(max(1, toc_page + 1), len(page_texts) + 1):
         for line in page_texts[page_number - 1].splitlines():
+            # Some landscape PDFs contain megabytes of positioning whitespace
+            # on one logical line. Never feed an unbounded line to regex/string
+            # matching: it adds no useful heading evidence and can dominate the
+            # whole AgentCore lifetime.
+            if len(line) > 4_000:
+                continue
             candidate = re.sub(
                 r"[^a-z0-9]+", " ", line.casefold()).strip()
             if (normalized == candidate
@@ -122,6 +130,105 @@ def _locate_toc_title(title: str, page_texts: list[str],
                         and len(candidate) <= len(normalized) + 80)):
                 return page_number
     return None
+
+
+def _bounded_page_text(value: str, max_chars: int) -> str:
+    """Normalize extractor output without retaining pathological layout lines."""
+    kept = []
+    used = 0
+    for raw_line in str(value or "").splitlines():
+        if len(raw_line) > 4_000:
+            # Preserve words while collapsing the positioning whitespace that
+            # made pypdf layout output grow to millions of characters.
+            raw_line = re.sub(r"\s+", " ", raw_line).strip()
+        if len(raw_line) > 4_000:
+            raw_line = raw_line[:4_000]
+        remaining = max_chars - used
+        if remaining <= 0:
+            break
+        line = raw_line[:remaining]
+        kept.append(line)
+        used += len(line) + 1
+    return "\n".join(kept)
+
+
+def _parse_toc_row(raw_line: str) -> tuple[str, int] | None:
+    """Parse ``Title .... 123`` / ``Title   123`` in strictly linear time."""
+    value = str(raw_line or "").rstrip()
+    if not value:
+        return None
+    end = len(value)
+    start_digits = end
+    while start_digits > 0 and value[start_digits - 1].isdigit():
+        start_digits -= 1
+    digits = value[start_digits:end]
+    if not (1 <= len(digits) <= 4):
+        return None
+    separator_start = start_digits
+    while (separator_start > 0
+           and (value[separator_start - 1].isspace()
+                or value[separator_start - 1] == ".")):
+        separator_start -= 1
+    separator = value[separator_start:start_digits]
+    if not (separator.count(".") >= 2
+            or sum(char.isspace() for char in separator) >= 3):
+        return None
+    title = _clean_heading(value[:separator_start])
+    if not title:
+        return None
+    return title, int(digits)
+
+
+def _extract_pdf_page_texts(body: bytes, reader: PdfReader) -> tuple[list[str], str]:
+    """Extract page text with a hard wall-clock and memory bound.
+
+    Poppler is the primary extractor because it handles complex/landscape PDFs
+    much more predictably than pypdf's layout mode. The container installs it.
+    Plain pypdf extraction remains a compatibility fallback, but layout mode is
+    deliberately never used here.
+    """
+    timeout = max(5, int(os.environ.get(
+        "ANNUAL_COVERAGE_PDFTEXT_TIMEOUT_SECONDS", "60")))
+    max_page_chars = max(20_000, int(os.environ.get(
+        "ANNUAL_COVERAGE_MAX_PAGE_TEXT_CHARS", "250000")))
+    max_pages = max(1, int(os.environ.get(
+        "ANNUAL_COVERAGE_MAX_PAGES", "2000")))
+    expected_pages = min(len(reader.pages), max_pages)
+
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".pdf") as handle:
+            handle.write(body)
+            handle.flush()
+            completed = subprocess.run(
+                ["pdftotext", "-layout", "-enc", "UTF-8", handle.name, "-"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=timeout,
+                check=False,
+            )
+        if completed.returncode == 0 and completed.stdout:
+            decoded = completed.stdout.decode("utf-8", errors="replace")
+            pages = decoded.split("\f")
+            if pages and not pages[-1].strip():
+                pages.pop()
+            pages = [
+                _bounded_page_text(page, max_page_chars)
+                for page in pages[:expected_pages]
+            ]
+            if len(pages) < expected_pages:
+                pages.extend([""] * (expected_pages - len(pages)))
+            return pages, "pdftotext-layout-bounded"
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as exc:
+        print(f"[annual-coverage] pdftotext unavailable/failed: {exc}")
+
+    pages = []
+    for page in reader.pages[:expected_pages]:
+        try:
+            text = page.extract_text() or ""
+        except Exception:
+            text = ""
+        pages.append(_bounded_page_text(text, max_page_chars))
+    return pages, "pypdf-plain-bounded"
 
 
 def extract_heading_index(body: bytes) -> list[dict]:
@@ -132,30 +239,23 @@ def extract_heading_index(body: bytes) -> list[dict]:
     references because this runtime intentionally has no OCR dependency.
     """
     reader = PdfReader(BytesIO(body), strict=False)
-    page_texts = []
-    for page in reader.pages:
-        try:
-            text = page.extract_text(extraction_mode="layout") or ""
-        except Exception:
-            try:
-                text = page.extract_text() or ""
-            except Exception:
-                text = ""
-        page_texts.append(text)
+    page_texts, extractor = _extract_pdf_page_texts(body, reader)
+    print(f"[annual-coverage] extracted {len(page_texts)} PDF page(s) "
+          f"using {extractor}; chars={sum(map(len, page_texts))}")
 
     candidates = _outline_headings(reader)
     topic_terms = list(dict.fromkeys(
         term.casefold() for aliases in ALIASES.values() for term in aliases
     ))
 
-    toc_row = re.compile(
-        r"^\s*(.{4,180}?)\s*(?:\.{2,}|\s{3,})\s*(\d{1,4})\s*$")
     for toc_page, page_text in enumerate(page_texts[:40], start=1):
         for raw_line in page_text.splitlines():
-            match = toc_row.match(raw_line)
-            if not match:
+            if len(raw_line) > 4_000:
                 continue
-            title = _clean_heading(match.group(1))
+            toc_entry = _parse_toc_row(raw_line)
+            if not toc_entry:
+                continue
+            title, _printed_page = toc_entry
             if not (2 <= len(title.split()) <= 24):
                 continue
             actual_page = _locate_toc_title(title, page_texts, toc_page)
@@ -171,6 +271,8 @@ def extract_heading_index(body: bytes) -> list[dict]:
     # section-opening text and exact heading/page validation.
     for page_number, page_text in enumerate(page_texts, start=1):
         for raw_line in page_text.splitlines():
+            if len(raw_line) > 4_000:
+                continue
             title = _clean_heading(raw_line)
             words = re.findall(r"[A-Za-z][A-Za-z&'/-]*", title)
             if not (2 <= len(words) <= 20 and 4 <= len(title) <= 180):
@@ -553,7 +655,7 @@ def run(payload: dict, *, configured_bucket: str, s3_client,
             "status": "ok",
             "doc_name": s3_key.rsplit("/", 1)[-1],
             "document_kind": document_kind,
-            "extractor": "download-agent-annual-coverage-v2",
+            "extractor": "download-agent-annual-coverage-v3-bounded",
             "headings": [{
                 "heading_id": item.get("heading_id"),
                 "title": item.get("title"),

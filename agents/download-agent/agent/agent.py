@@ -333,10 +333,11 @@ LLM_QUERY_GEN_MAX = int(os.environ.get("LLM_QUERY_GEN_MAX", "8"))
 SEARCH_FANOUT_WORKERS = int(os.environ.get("SEARCH_FANOUT_WORKERS", "8"))
 # Gemini grounding already reformulates a structured request internally. Keep
 # Vertex discovery to one precise call plus one differently-scoped rescue call
-# only when the first call does not expose an official direct document. This
-# avoids the old 10-20 near-duplicate Lambda fan-out exhausting wall time.
+# only when the first call does not expose an official direct document. Annual
+# reports may use one additional archive/year probe. This avoids the old 10-20
+# near-duplicate Lambda fan-out exhausting wall time.
 VERTEX_SEARCH_MAX_CALLS = max(1, int(os.environ.get(
-    "VERTEX_SEARCH_MAX_CALLS", "2")))
+    "VERTEX_SEARCH_MAX_CALLS", "3")))
 ENABLE_SITEMAP = os.environ.get("ENABLE_SITEMAP", "true").lower() != "false"
 SITEMAP_MAX_URLS = int(os.environ.get("SITEMAP_MAX_URLS", "5000"))
 SITEMAP_MAX_NESTED = int(os.environ.get("SITEMAP_MAX_NESTED", "50"))
@@ -1333,14 +1334,18 @@ def _official_search_queries(query: str, company_ctx: dict,
     candidates = [query]
     candidates.extend(recency_probes)
     validation = (company_ctx or {}).get("_identity_validation") or {}
+    ticker = ""
     if validation.get("status") == "validated":
         ticker = str((company_ctx or {}).get("ticker") or "").upper().strip()
-        if ticker and not re.search(
-                rf"\b(?:ticker|stock\s+symbol)\s*:?\s*[\"']?"
-                rf"{re.escape(ticker)}(?:[\"']|\b)",
-                query.upper(), re.I):
-            candidates.append(
-                f'{_strip_site(query)} ticker "{ticker}"')
+    elif (company_ctx or {}).get("web_search_ticker"):
+        ticker = str(
+            (company_ctx or {}).get("web_search_ticker") or "").upper().strip()
+    if ticker and not re.search(
+            rf"\b(?:ticker|stock\s+symbol)\s*:?\s*[\"']?"
+            rf"{re.escape(ticker)}(?:[\"']|\b)",
+            query.upper(), re.I):
+        candidates.append(
+            f'{_strip_site(query)} ticker "{ticker}"')
     candidates.extend(aliases or [])
     candidates.extend(generated or [])
     # A dedicated filetype:pdf probe: many policy/report documents are published
@@ -1383,7 +1388,21 @@ def _official_search_queries(query: str, company_ctx: dict,
         rescue_terms = "governance policies document library PDF download"
     rescue = _scope_to_official_domain(
         f"{_strip_site(query)} {rescue_terms}", rescue_domain)
-    return list(dict.fromkeys([primary, rescue]))[:VERTEX_SEARCH_MAX_CALLS]
+    probes = [primary, rescue]
+    if (report_class or "").strip().lower() == "annual report":
+        # A distinct third annual-only probe targets archive terminology and
+        # the two plausible latest fiscal labels. This is intentionally not
+        # applied to all 23 classes: it buys recall where accepting a stale
+        # annual report is costly without tripling every Vertex bill.
+        latest_completed = CURRENT_YEAR - max(
+            1, LATEST_COMPLETED_FISCAL_YEAR_LAG)
+        annual_rescue = _scope_to_official_domain(
+            f'"annual reports" archive FY{CURRENT_YEAR} FY{latest_completed} '
+            f'investor relations {_strip_site(query)}',
+            rescue_domain,
+        )
+        probes.append(annual_rescue)
+    return list(dict.fromkeys(probes))[:VERTEX_SEARCH_MAX_CALLS]
 
 
 def _discovery_route(report_class: str | None,
@@ -2329,7 +2348,8 @@ def _vertex_lambda_search(query: str, limit: int,
     company_name = str(ctx.get("official_name") or ctx.get("name") or "").strip()
     if company_name and company_name.lower() != "unknown":
         payload["company_name"] = company_name
-    ticker = str(ctx.get("ticker") or "").strip()
+    ticker = str(
+        ctx.get("ticker") or ctx.get("web_search_ticker") or "").strip()
     if ticker:
         payload["ticker"] = ticker
     jurisdiction = str(ctx.get("jurisdiction") or "").strip()
@@ -5426,44 +5446,46 @@ def _parallel_web_search(queries, limit, report_class=None, year=None,
             return q, ([], "error(" + type(exc).__name__ + ")")
 
     if SEARCH_BACKEND in ("vertex", "vertex_lambda", "lambda"):
-        # Adaptive two-pass search: do not pay for the rescue query when the
-        # precise first pass already returned an official direct document.
-        first_query = queries[0]
-        first_key, first_result = _one(first_query)
-        results[first_key] = first_result
-        first_hits = first_result[0]
-        official_domain = _domain(first_query)
+        # Adaptive bounded search: stop as soon as an official direct document
+        # is returned. Annual reports may receive a third, archive-focused
+        # probe; other classes remain at two probes.
+        official_domain = _domain(queries[0])
         class_terms = _keywords(report_class or "")
-        direct_official = any(
-            _host_matches(item.get("url", ""), official_domain or "")
-            and _is_doc_url(item.get("url", ""))
-            and (
-                not class_terms
-                or any(term in (
-                    str(item.get("title") or "") + " "
-                    + str(item.get("snippet") or "") + " "
-                    + unquote(urlparse(item.get("url", "")).path)
-                ).lower() for term in class_terms)
-            )
-            and (
-                not year
-                or str(year) in (
-                    str(item.get("title") or "") + " "
-                    + str(item.get("snippet") or "") + " "
-                    + unquote(urlparse(item.get("url", "")).path)
+
+        def _has_direct_official(hits):
+            return any(
+                _host_matches(item.get("url", ""), official_domain or "")
+                and _is_doc_url(item.get("url", ""))
+                and (
+                    not class_terms
+                    or any(term in (
+                        str(item.get("title") or "") + " "
+                        + str(item.get("snippet") or "") + " "
+                        + unquote(urlparse(item.get("url", "")).path)
+                    ).lower() for term in class_terms)
                 )
+                and (
+                    not year
+                    or str(year) in (
+                        str(item.get("title") or "") + " "
+                        + str(item.get("snippet") or "") + " "
+                        + unquote(urlparse(item.get("url", "")).path)
+                    )
+                )
+                for item in hits
             )
-            for item in first_hits
-        )
-        if direct_official or len(queries) == 1:
-            for skipped in queries[1:]:
-                results[skipped] = ([], "skipped-primary-sufficient")
-            return results
-        rescue_query = queries[1]
-        rescue_key, rescue_result = _one(rescue_query)
-        results[rescue_key] = rescue_result
-        for skipped in queries[2:]:
-            results[skipped] = ([], "skipped-vertex-call-cap")
+
+        satisfied = False
+        for query_index, query in enumerate(queries):
+            if query_index >= VERTEX_SEARCH_MAX_CALLS:
+                results[query] = ([], "skipped-vertex-call-cap")
+                continue
+            if satisfied:
+                results[query] = ([], "skipped-earlier-probe-sufficient")
+                continue
+            key, result = _one(query)
+            results[key] = result
+            satisfied = _has_direct_official(result[0])
         return results
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
@@ -5878,9 +5900,41 @@ def _invoke_sync(payload: dict) -> dict:
                 company_ctx["domain"] = inferred
                 break
 
-    identity_hint = _vertex_company_identity_hint(company_ctx)
+    supplied_identity_hint = (payload or {}).get("company_identity_hint")
+    if not isinstance(supplied_identity_hint, dict):
+        supplied_identity_hint = {}
+    # The portal reuses the first chunk's grounded hint across the remaining
+    # chunks in the same company run. Registry enrichment below still performs
+    # its authoritative validation; this only avoids paying for the identical
+    # Vertex identity lookup up to 23 times.
+    identity_hint = {
+        key: supplied_identity_hint.get(key)
+        for key in (
+            "legal_name", "ticker", "cik", "official_domain",
+            "jurisdiction", "_domain_attested", "_grounding_sources",
+        )
+        if supplied_identity_hint.get(key) not in (None, "", [], {})
+    }
+    if identity_hint:
+        print(f"[identity] reusing caller-supplied grounded identity hint "
+              f"for {company_ctx.get('name')!r}; authoritative registry "
+              f"validation remains enabled")
+    else:
+        identity_hint = _vertex_company_identity_hint(company_ctx)
     company_ctx = registry_tier.enrich_company_identity(
         company_ctx, identity_hint=identity_hint)
+    # SEC validation remains mandatory for EDGAR access, but SEC-only
+    # validation must not erase a useful discovery hint for non-US issuers.
+    # A ticker can assist official-domain web search only when the grounding
+    # sources attest the company's own domain and it agrees with the caller's
+    # official scope. It is never promoted to registry identity.
+    hinted_web_ticker = str(identity_hint.get("ticker") or "").upper().strip()
+    hinted_web_domain = _clean_domain(identity_hint.get("official_domain"))
+    if (hinted_web_ticker and identity_hint.get("_domain_attested") is True
+            and hinted_web_domain and company_ctx.get("domain")
+            and _registrable(hinted_web_domain)
+            == _registrable(company_ctx.get("domain") or "")):
+        company_ctx["web_search_ticker"] = hinted_web_ticker[:24]
     company_raw = company_ctx["name"]
     company = _slug(company_raw)
 
@@ -6032,6 +6086,14 @@ def _invoke_sync(payload: dict) -> dict:
         "company": company,
         "company_raw": company_raw,
         "company_identity": company_ctx.get("_identity_validation") or {},
+        "company_identity_hint": {
+            key: identity_hint.get(key)
+            for key in (
+                "legal_name", "ticker", "cik", "official_domain",
+                "jurisdiction", "_domain_attested", "_grounding_sources",
+            )
+            if identity_hint.get(key) not in (None, "", [], {})
+        },
         "identity_grounding_sources": identity_hint.get("_grounding_sources", []),
         "code_version": CODE_VERSION,
         "search_backend": SEARCH_BACKEND,

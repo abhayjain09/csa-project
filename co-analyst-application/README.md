@@ -118,12 +118,23 @@ If your workstation can't route to that subnet, ECS does not change that; you'd 
 
 ### WAF browser fallback
 
-The portal only enqueues a browser job when AgentCore returns the typed
-`blocked_by_source_waf` status. The handoff includes exact PDF candidates and
-all bounded official landing pages discovered through Vertex/search. One ECS
+The portal always enqueues a browser job when AgentCore returns the typed
+`blocked_by_source_waf` status. It may also enqueue a clean miss only when
+search found a class-specific HTTPS path on the official domain; generic
+homepage misses are excluded. The handoff includes exact PDF candidates and all
+bounded official landing pages discovered through Vertex/search. One ECS
 service long-polls SQS and keeps Chromium warm. It maintains isolated contexts
 per official domain, persists encrypted cookies/local storage across task
 restarts, and recycles contexts periodically.
+
+The worker establishes cookies and referer state on the strongest official
+landing page before probing a raw document URL. Repeated hard WAF responses open
+a bounded direct-probe circuit (two events, 30-minute default cooldown), while
+visible landing-page navigation stays enabled. An eligible official HTML policy
+may be printed to PDF only after strict company/class/year/standalone and LLM
+verification; provenance labels it `verified_official_html_render`, never an
+original publisher PDF. Temporary native downloads are still deleted after S3
+upload.
 
 For hard sites, a constrained Bedrock planner receives the visible DOM,
 interactive controls, a viewport screenshot, and the supplied URL seeds. It

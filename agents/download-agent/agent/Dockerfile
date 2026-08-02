@@ -8,6 +8,7 @@ ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
 # CDP WebSocket to AgentCore Browser all go over TLS).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
+    poppler-utils \
  && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

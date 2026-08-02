@@ -135,6 +135,28 @@ variable "browser_worker_retry_delay_seconds" {
   default     = 20
 }
 
+variable "browser_worker_waf_circuit_threshold" {
+  description = "Hard WAF responses before direct URL probes for that domain enter cooldown; landing-page navigation remains enabled"
+  type        = number
+  default     = 2
+
+  validation {
+    condition     = var.browser_worker_waf_circuit_threshold >= 1 && var.browser_worker_waf_circuit_threshold <= 10
+    error_message = "browser_worker_waf_circuit_threshold must be between 1 and 10."
+  }
+}
+
+variable "browser_worker_waf_circuit_cooldown_seconds" {
+  description = "Cooldown for exact URLs and domains returning repeated 401/403/406/412/429/522 responses"
+  type        = number
+  default     = 1800
+
+  validation {
+    condition     = var.browser_worker_waf_circuit_cooldown_seconds >= 60 && var.browser_worker_waf_circuit_cooldown_seconds <= 86400
+    error_message = "browser_worker_waf_circuit_cooldown_seconds must be between 60 and 86400."
+  }
+}
+
 variable "browser_worker_nav_timeout_ms" {
   description = "Chromium navigation timeout for each official URL"
   type        = number

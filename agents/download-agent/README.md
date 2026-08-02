@@ -9,13 +9,17 @@ in DynamoDB, and **returns the S3 key(s)**.
 
 Company identity is resolved before any document candidate can be accepted.
 Google-grounded Vertex may suggest the legal name, official domain, ticker, and
-CIK, but ticker/CIK are trusted only after they converge on the same official SEC
-record. A validated ticker is added to an official-domain Google query variant;
-the exact CIK is sent directly to EDGAR rather than used as noisy web-search text.
+CIK, but ticker/CIK are trusted for registry access only after they converge on
+the same official SEC record. A source-attested ticker may enrich scoped web
+search for a non-US issuer when its grounded domain matches the supplied
+official domain; it never unlocks EDGAR. The portal resolves this grounded hint
+once in the Annual Report phase and reuses it across the remaining chunks.
 
 The per-document route is:
 
 1. Direct Google URL search restricted to the established official domain.
+   Search is adaptive: exact query, then an archive/library rescue; unresolved
+   Annual Reports alone may receive a third latest-fiscal-year archive probe.
 2. Official sitemap and relevant landing-page crawl.
 3. In-depth same-domain static crawl.
 4. AgentCore Browser first retries exact ranked official PDF URLs in its live
@@ -66,6 +70,10 @@ ECR repo · S3 reports bucket (versioned, KMS, private) · DynamoDB provenance t
 target** · **AgentCore Runtime (+ auto DEFAULT endpoint)** · **AgentCore Browser
 tool** (in-AWS headless Chromium, no third-party egress).
 All six mandatory tags applied via `default_tags`.
+
+The runtime image includes Poppler. Annual-report section coverage uses bounded
+`pdftotext` extraction with a hard timeout and falls back to bounded plain
+pypdf extraction; it never uses unbounded pypdf layout text.
 
 
 ## Prerequisites

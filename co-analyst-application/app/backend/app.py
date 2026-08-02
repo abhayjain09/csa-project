@@ -116,7 +116,7 @@ from datetime import datetime, timezone, timedelta
 from io import BytesIO
 from pathlib import PurePosixPath
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from urllib.parse import urlsplit, quote
+from urllib.parse import urlsplit, quote, unquote
 from flask import Flask, request, jsonify, send_from_directory, Response, stream_with_context
 from flask_cors import CORS
 from werkzeug.exceptions import NotFound as WerkzeugNotFound
@@ -1125,9 +1125,11 @@ def _enqueue_browser_retries(agent_results: list, company: str, run_id: str,
                              query_id: str) -> list:
     """Create idempotent browser jobs for the persistent browser service.
 
-    The agent controls admission by returning the typed WAF status. Candidate
-    and landing-page URLs are bounded discovery seeds. The worker independently
-    revalidates scheme/domain/content before storing anything.
+    Typed WAF failures are always eligible. A clean miss is eligible only when
+    search found a strong class-specific URL on the official domain; this lets
+    the persistent visual browser recover JS-only HTML policies without
+    enqueueing every generic homepage miss. The worker independently revalidates
+    scheme/domain/content before storing anything.
     """
     results = [
         dict(item) if isinstance(item, dict) else item
@@ -1146,8 +1148,6 @@ def _enqueue_browser_retries(agent_results: list, company: str, run_id: str,
     for item in results:
         if not isinstance(item, dict):
             continue
-        if item.get("status") != "blocked_by_source_waf":
-            continue
         candidates = [
             str(url).strip() for url in (item.get("candidate_urls") or [])
             if str(url).strip().lower().startswith("https://")
@@ -1156,6 +1156,48 @@ def _enqueue_browser_retries(agent_results: list, company: str, run_id: str,
             str(url).strip() for url in (item.get("browser_seed_urls") or [])
             if str(url).strip().lower().startswith("https://")
         ][:12]
+        status = str(item.get("status") or "")
+        clean_miss_admitted = False
+        if status != "blocked_by_source_waf":
+            if status != "failed":
+                continue
+            official = str(item.get("official_domain") or "").lower()
+            official = official.removeprefix("www.").strip(".")
+            report_class = str(item.get("report_class") or "").lower()
+            aliases = next((
+                values for canonical, values in _REPORT_CLASS_ALIASES
+                if canonical == report_class
+            ), (report_class,))
+            class_terms = {
+                term for alias in aliases
+                for term in re.findall(r"[a-z0-9]+", alias.lower())
+                if len(term) >= 4 and term not in {
+                    "report", "policy", "statement", "governance",
+                    "mechanism", "questionnaire",
+                }
+            }
+
+            def _strong_official_url(value: str) -> bool:
+                try:
+                    parsed = urlsplit(value)
+                except ValueError:
+                    return False
+                host = (parsed.hostname or "").lower().removeprefix("www.")
+                if (parsed.scheme != "https" or not official
+                        or not (host == official
+                                or host.endswith("." + official))):
+                    return False
+                path = unquote(parsed.path or "").lower()
+                if path in {"", "/"}:
+                    return False
+                return bool(class_terms) and any(
+                    term in path for term in class_terms)
+
+            clean_miss_admitted = any(
+                _strong_official_url(url)
+                for url in candidates + seed_urls)
+            if not clean_miss_admitted:
+                continue
         # Some JS-heavy sites expose no direct PDF during discovery. Preserve
         # those jobs when Vertex/search supplied an official landing page so
         # the visual browser can use site search and visible navigation.
@@ -1181,6 +1223,9 @@ def _enqueue_browser_retries(agent_results: list, company: str, run_id: str,
             "official_domain": str(item.get("official_domain") or ""),
             "candidate_urls": json.dumps(candidates),
             "browser_seed_urls": json.dumps(seed_urls),
+            "admission_reason": (
+                "strong_official_clean_miss"
+                if clean_miss_admitted else "blocked_by_source_waf"),
             "status": "queued",
             "created_at": now_iso,
             "updated_at": now_iso,
@@ -2997,7 +3042,8 @@ def _partition_annual_report_phase(query_record: dict, company: str,
 
 
 def _build_chunk_payload(company: str, run_id: str, search_query: str,
-                         chunk_queries: list, chunk_index: int) -> dict:
+                         chunk_queries: list, chunk_index: int,
+                         company_identity_hint: dict | None = None) -> dict:
     """
     One chunk = one normal small AgentCore payload.
 
@@ -3019,6 +3065,8 @@ def _build_chunk_payload(company: str, run_id: str, search_query: str,
         },
         "reports": [],
     }
+    if isinstance(company_identity_hint, dict) and company_identity_hint:
+        payload["company_identity_hint"] = company_identity_hint
     for i, q in enumerate(chunk_queries, start=1):
         key = "web_query" + str(i)
         request_id = f"{chunk_index}:{i}"
@@ -3619,9 +3667,12 @@ log.info("Annual coverage reconciler started (every 30s)")
 
 
 def _invoke_one_chunk(chunk_index: int, chunk_queries: list, company: str,
-                      run_id: str, query_id: str, search_query: str) -> dict:
+                      run_id: str, query_id: str, search_query: str,
+                      company_identity_hint: dict | None = None) -> dict:
     """Invoke a single chunk and normalise its response into a result dict."""
-    payload = _build_chunk_payload(company, run_id, search_query, chunk_queries, chunk_index)
+    payload = _build_chunk_payload(
+        company, run_id, search_query, chunk_queries, chunk_index,
+        company_identity_hint=company_identity_hint)
     log.info("[run %s] chunk %d — invoking %d queries", run_id[:8], chunk_index, len(chunk_queries))
     invoked_at = datetime.now(timezone.utc).isoformat()
     try:
@@ -4062,13 +4113,19 @@ def _do_invoke_inner(run_id: str, query_record: dict):
 
     # ── Phase 1: acquire the Annual Report before all other searches ──
     annual_report_s3_key = ""
+    shared_identity_hint: dict = {}
     for index, chunk in enumerate(annual_chunks, start=1):
         if _is_run_killed(run_id):
             break
         try:
             result = _invoke_one_chunk(
-                index, chunk, company, run_id, query_id, search_q)
+                index, chunk, company, run_id, query_id, search_q,
+                company_identity_hint=shared_identity_hint)
             _handle_result(result)
+            candidate_hint = (result.get("diagnostics") or {}).get(
+                "company_identity_hint")
+            if isinstance(candidate_hint, dict) and candidate_hint:
+                shared_identity_hint = candidate_hint
             annual_report_s3_key = (
                 _annual_report_key_from_chunk(result, company)
                 or annual_report_s3_key)
@@ -4082,7 +4139,7 @@ def _do_invoke_inner(run_id: str, query_record: dict):
         futures = [
             ex.submit(
                 _invoke_one_chunk, phase2_start + offset, chunk,
-                company, run_id, query_id, search_q)
+                company, run_id, query_id, search_q, shared_identity_hint)
             for offset, chunk in enumerate(remaining_chunks)
         ]
         for fut in as_completed(futures):

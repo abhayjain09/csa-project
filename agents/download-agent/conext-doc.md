@@ -5,6 +5,101 @@ The first persistent-browser version was deployed and its production diagnostic
 archive was analyzed on 2026-08-02. The corrective changes described immediately
 below are local and are not deployed yet; see "Deployment status."
 
+## HH3Xse production diagnosis and corrective implementation — 2026-08-03
+
+The four-hour `csa-browser-diagnostics.HH3Xse.tar.gz` archive confirmed that the
+deployed ECS application, persistent browser task, AgentCore runtime, Vertex
+Lambda, queues, browser-state S3 writes, and IAM permissions were operating.
+The remaining failures were application behavior: PDF annual-coverage text
+expansion, repeated identity/search work, stale annual selection, repeated WAF
+probes, direct-download-before-referer navigation, and rejection of verified
+official HTML policies simply because the source was not a PDF.
+
+The following corrections are now present in the local worktree and are **not
+deployed yet**:
+
+- Annual PDF coverage uses Poppler `pdftotext` as the primary extractor with a
+  60-second subprocess timeout. Text is bounded per page, pathological
+  positioning whitespace is collapsed, and no unbounded line reaches the TOC
+  or topic-heading regular expressions. Plain non-layout pypdf extraction is a
+  compatibility fallback. The runtime image now installs `poppler-utils`, and
+  manifests identify the extractor as
+  `download-agent-annual-coverage-v3-bounded`. This directly fixes the Fujimi
+  4.4-million-character layout expansion and should remove the Fujimi/Fortis
+  1,620-second coverage timeouts instead of extending them again.
+- The first (Annual Report) chunk returns its grounded Vertex identity hint;
+  the ECS application passes that hint to every remaining one-report chunk.
+  Each chunk still performs authoritative registry validation, but it no longer
+  repeats the same paid Vertex identity lookup up to 23 times. The existing
+  divide-and-conquer shape remains one report per AgentCore call with three
+  calls concurrently, avoiding a return to multi-report timeout coupling.
+- For non-US issuers, an attested ticker may enrich official-domain web search
+  when the grounded official domain matches the supplied domain. It is never
+  promoted to SEC/registry identity and cannot unlock EDGAR access.
+- Vertex remains adaptive. All classes retain the exact query and archive/
+  library rescue query. Only an unresolved Annual Report may use a third query
+  targeted at the annual-report archive and current/prior fiscal labels. Calls
+  stop early as soon as an official direct document is found. This improves
+  latest Annual Report recall without tripling all 23 classes' cost.
+- The ECS browser visits the official root and strongest non-PDF landing seed
+  before direct document probes, using the resulting page as the referer. Hard
+  401/403/406/412/429/522 responses open exact-URL and domain direct-probe
+  circuits after two events for 30 minutes. Landing-page navigation and visible
+  link interaction remain available; only repeated raw URL hammering is
+  suppressed. When every direct candidate is already in cooldown, the job goes
+  to bounded visual navigation immediately instead of sleeping through three
+  identical attempts.
+- Strong clean misses may now enter the persistent browser only when a
+  class-specific official HTTPS candidate/landing path was discovered. Generic
+  homepage misses are still excluded. Typed WAF failures remain eligible as
+  before.
+- HTML-render-eligible policy classes can be preserved as PDF only after the
+  official page's visible company, exact class, year, standalone status, and
+  high-confidence LLM verification all pass. The generated object and its
+  provenance/sidecar are labelled
+  `capture_method=verified_official_html_render`; it is never represented as an
+  original publisher PDF. Annual reports remain ineligible for this pathway.
+- The browser ECS container now has a process health check, so ECS reports task
+  health instead of `UNKNOWN`. Terraform exports the WAF circuit threshold and
+  cooldown as validated variables. Existing provider `default_tags` apply the
+  mandatory tags to these task-definition changes; no IAM permission expansion
+  is required.
+
+Verification performed locally: Python compilation succeeds, `git diff
+--check` succeeds, Terraform formatting succeeds, and all **115/115** focused
+accuracy/browser/annual-coverage tests pass. A new pathological-layout test
+processes a synthetic 4.4-million-space line within the configured bound. The
+exact production Fujimi source PDF (`a82238391744634.pdf`, 5.9 MiB, 30 pages)
+was then downloaded read-only from its public source URL: the final bounded
+extractor completed in **4.4 seconds**, retained about 491,000 text characters,
+and built 190 grounded heading candidates. The original backtracking TOC regex
+was replaced with a strictly linear parser after this real-data test exposed it
+as the last remaining hotspot. Local `terraform validate` could not run because
+the installed Terraform is 1.6.5
+while this project requires >=1.10; the existing GitHub workflow installs
+Terraform 1.15.3 and performs plan/apply.
+
+Deployment order is important:
+
+1. Deploy `agents/download-agent` with a new unique image tag using its own
+   deployment workflow/script. This publishes Poppler, bounded annual coverage,
+   shared identity-hint support, and annual-only third Vertex search.
+2. Deploy `co-analyst-application` through
+   `.github/workflows/coanalyst-ecs-deploy.yml`. Its path filters include both
+   `co-analyst-application/app/**` and `co-analyst-application/terraform/**`, so
+   the application/browser image and Terraform task-definition changes are both
+   covered; `deploy.sh` is not required.
+3. Run a fresh three-company canary. Do not compare against an in-flight run
+   created before both deployments, because old chunk payloads cannot reuse the
+   identity hint and old browser jobs do not contain the new admission reason.
+
+First live checks: coverage should log `pdftotext-layout-bounded` and complete
+well below the AgentCore timeout; one company should emit one Vertex identity
+lookup followed by reused-hint messages; Fortis should stop repeating the same
+hard-blocked PDF three times per job; the Code of Conduct page should either
+store a labelled verified HTML render or fail with a specific company/class/LLM
+reason; and the browser ECS task should report `HEALTHY` after its start period.
+
 ## SEC HTML and post-browser annual coverage correction — 2026-08-02
 
 The `csa-browser-diagnostics.Zwbry0.tar.gz` archive produced zero Annual Report

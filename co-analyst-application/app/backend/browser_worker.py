@@ -70,6 +70,10 @@ VERIFIER_FALLBACK_MODEL_ID = os.environ.get(
     "BROWSER_WORKER_VERIFIER_FALLBACK_MODEL_ID", PLANNER_MODEL_ID).strip()
 VISIBILITY_EXTENSION_SECONDS = max(300, int(os.environ.get(
     "BROWSER_WORKER_VISIBILITY_EXTENSION_SECONDS", "1800")))
+WAF_CIRCUIT_THRESHOLD = max(1, int(os.environ.get(
+    "BROWSER_WORKER_WAF_CIRCUIT_THRESHOLD", "2")))
+WAF_CIRCUIT_COOLDOWN_SECONDS = max(60, int(os.environ.get(
+    "BROWSER_WORKER_WAF_CIRCUIT_COOLDOWN_SECONDS", "1800")))
 
 dynamo = boto3.resource("dynamodb", region_name=REGION)
 s3 = boto3.client("s3", region_name=REGION)
@@ -81,6 +85,8 @@ queries_table = dynamo.Table(QUERIES_TABLE)
 provenance_table = dynamo.Table(PROVENANCE_TABLE)
 
 _STOP = False
+_BLOCKED_URL_UNTIL: OrderedDict[str, float] = OrderedDict()
+_DOMAIN_WAF_STATE: OrderedDict[str, tuple[int, float]] = OrderedDict()
 _BLOCK_MARKERS = (
     "access denied", "request rejected", "reference #", "akamai",
     "bot detection", "captcha", "verify you are human", "cloudflare",
@@ -598,6 +604,42 @@ def _reason_is_blocked(reason: str) -> bool:
     )
 
 
+def _prune_waf_circuits() -> None:
+    now = time.monotonic()
+    for url, until in list(_BLOCKED_URL_UNTIL.items()):
+        if until <= now:
+            _BLOCKED_URL_UNTIL.pop(url, None)
+    for host, (count, until) in list(_DOMAIN_WAF_STATE.items()):
+        if until <= now:
+            _DOMAIN_WAF_STATE.pop(host, None)
+    while len(_BLOCKED_URL_UNTIL) > 2_000:
+        _BLOCKED_URL_UNTIL.popitem(last=False)
+    while len(_DOMAIN_WAF_STATE) > 200:
+        _DOMAIN_WAF_STATE.popitem(last=False)
+
+
+def _direct_probe_circuit_open(url: str) -> bool:
+    _prune_waf_circuits()
+    now = time.monotonic()
+    if _BLOCKED_URL_UNTIL.get(url, 0) > now:
+        return True
+    host = (urlparse(url).hostname or "").lower()
+    count, until = _DOMAIN_WAF_STATE.get(host, (0, 0))
+    return count >= WAF_CIRCUIT_THRESHOLD and until > now
+
+
+def _note_direct_waf(url: str) -> None:
+    _prune_waf_circuits()
+    now = time.monotonic()
+    until = now + WAF_CIRCUIT_COOLDOWN_SECONDS
+    _BLOCKED_URL_UNTIL[url] = until
+    host = (urlparse(url).hostname or "").lower()
+    count, previous_until = _DOMAIN_WAF_STATE.get(host, (0, 0))
+    _DOMAIN_WAF_STATE[host] = (count + 1, max(until, previous_until))
+    print(f"[browser-worker] WAF circuit noted host={host} "
+          f"events={count + 1} cooldown={WAF_CIRCUIT_COOLDOWN_SECONDS}s")
+
+
 def _failure_kind(reason: str, blocked: bool = False) -> str:
     value = str(reason or "").lower()
     if blocked or _reason_is_blocked(value):
@@ -1028,11 +1070,14 @@ def _native_download_from_click(page, locator, job: dict) -> tuple | None:
                 pass
 
 
-def _try_url(context, page, job: dict, url: str, referer: str) -> tuple:
+def _try_url(context, page, job: dict, url: str, referer: str,
+             *, observed_on_page: bool = False) -> tuple:
     # Never navigate the agent's working page while probing a candidate. The
     # old implementation destroyed the investor-hub DOM on every probe, so
     # the visual planner ended up operating on the final rejected URL and
     # repeatedly pressed Back instead of clicking the real download link.
+    if not observed_on_page and _direct_probe_circuit_open(url):
+        return None, "cached HTTP 403/522 WAF circuit", True
     probe = None
     try:
         probe = context.new_page()
@@ -1048,6 +1093,7 @@ def _try_url(context, page, job: dict, url: str, referer: str) -> tuple:
             except Exception:
                 pass
     if status in {401, 403, 406, 412, 429, 522} or marker:
+        _note_direct_waf(url)
         return None, marker or f"HTTP {status}", True
     if not body:
         probe, download = None, None
@@ -1097,15 +1143,33 @@ def _render_current_page(page, job: dict) -> tuple | None:
     normalized = _normalize_text(observation.get("text", ""))
     if not any(alias in normalized for alias in aliases):
         return None
+    visible_text = " ".join(filter(None, (
+        observation.get("title", ""), observation.get("text", ""))))
+    if not _company_matches(job.get("company", ""), visible_text, page.url):
+        print("[browser-agent] HTML render rejected: company identity absent")
+        return None
+    static_ok, static_reason = _class_matches(
+        job.get("report_class", ""), visible_text, page.url,
+        job.get("year", ""))
+    if not static_ok:
+        print(f"[browser-agent] HTML render rejected: {static_reason}")
+        return None
+    llm_ok, llm_reason = _llm_document_match(job, page.url, visible_text)
+    if not llm_ok:
+        print(f"[browser-agent] HTML render rejected by verifier: {llm_reason}")
+        return None
     try:
         body = page.pdf(print_background=True, format="A4")
     except Exception:
         return None
-    ok, reason, _ = _verify_pdf(job, page.url, body)
-    if ok:
-        return page.url, body
-    print(f"[browser-agent] rendered page rejected: {reason}")
-    return None
+    if (not body.startswith(b"%PDF") or len(body) > MAX_DOCUMENT_BYTES
+            or len(body) < 1_000):
+        print("[browser-agent] rendered page rejected: invalid generated PDF")
+        return None
+    # The actual official HTML content was verified above. Requiring the
+    # generated PDF's first extracted pages to repeat company branding caused
+    # valid policy pages to be discarded after successful verification.
+    return page.url, body
 
 
 def _agent_navigate(context, page, job: dict, seed_urls: list[str],
@@ -1216,7 +1280,8 @@ def _agent_navigate(context, page, job: dict, seed_urls: list[str],
             if not _safe_candidate(url, domain, allowed_urls):
                 continue
             found, reason, was_blocked = _try_url(
-                context, page, job, url, page.url or root)
+                context, page, job, url, page.url or root,
+                observed_on_page=True)
             blocked = blocked or was_blocked
             last_reason = reason
             if found:
@@ -1229,7 +1294,8 @@ def _agent_navigate(context, page, job: dict, seed_urls: list[str],
             rendered_attempted.add(page.url)
             rendered = _render_current_page(page, job)
             if rendered:
-                return rendered[0], rendered[1], "application/pdf", blocked
+                return (rendered[0], rendered[1],
+                        "application/pdf;capture=html-render", blocked)
 
         next_seed = next(
             (url for url in start_urls if url not in attempted_seeds), "")
@@ -1420,9 +1486,29 @@ def _download(job: dict, pool: BrowserContextPool, heartbeat) -> tuple:
                 _dismiss_cookie_modals(page)
             except Exception:
                 pass
+            # Establish the strongest known official landing-page session and
+            # referer before touching raw document URLs. This covers common
+            # hotlink/session-token protection without bypassing challenges.
+            referer = root
+            landing_seed = next((
+                url for url in seed_urls
+                if not urlparse(url).path.lower().endswith(".pdf")
+            ), "")
+            if landing_seed:
+                try:
+                    page.goto(
+                        landing_seed, wait_until="domcontentloaded",
+                        timeout=NAV_TIMEOUT_MS)
+                    page.wait_for_timeout(1200)
+                    _dismiss_cookie_modals(page)
+                    referer = page.url or landing_seed
+                except Exception as exc:
+                    print(f"[browser-worker] landing seed failed before "
+                          f"candidate probes: {type(exc).__name__}: {exc}")
             for url in candidates:
                 heartbeat()
-                found, reason, was_blocked = _try_url(context, page, job, url, root)
+                found, reason, was_blocked = _try_url(
+                    context, page, job, url, referer)
                 blocked = blocked or was_blocked
                 last_reason = reason
                 if found:
@@ -1449,13 +1535,17 @@ def _download(job: dict, pool: BrowserContextPool, heartbeat) -> tuple:
             # the expensive visual/LLM navigation loop once, after those
             # transport retries, so one job can never consume
             # MAX_ATTEMPTS * MAX_AGENT_STEPS model calls.
-            if attempt == MAX_ATTEMPTS:
+            circuits_open = bool(candidates) and all(
+                _direct_probe_circuit_open(url) for url in candidates)
+            if attempt == MAX_ATTEMPTS or circuits_open:
                 url, body, detail, agent_blocked = _agent_navigate(
                     context, page, job, seed_urls, candidates, heartbeat)
                 blocked = blocked or agent_blocked
                 if url and body:
                     return url, body, detail, False
                 last_reason = detail or last_reason
+                if circuits_open:
+                    break
         finally:
             try:
                 page.close()
@@ -1468,6 +1558,11 @@ def _download(job: dict, pool: BrowserContextPool, heartbeat) -> tuple:
 
 
 def _store(job: dict, url: str, body: bytes, ctype: str) -> dict:
+    capture_method = (
+        "verified_official_html_render"
+        if "capture=html-render" in str(ctype or "").lower()
+        else "original_file")
+    ctype = str(ctype or "application/pdf").split(";", 1)[0]
     digest = hashlib.sha256(body).hexdigest()
     company_slug = _slug(job.get("company", ""))
     class_slug = _slug(job.get("report_class", "")) or "uncategorized"
@@ -1480,6 +1575,7 @@ def _store(job: dict, url: str, body: bytes, ctype: str) -> dict:
         "sha256": digest,
         "run_id": job.get("run_id", ""),
         "browser_job_id": job.get("job_id", ""),
+        "capture_method": capture_method,
     }
     s3.put_object(
         Bucket=REPORTS_BUCKET, Key=s3_key, Body=body,
@@ -1498,6 +1594,7 @@ def _store(job: dict, url: str, body: bytes, ctype: str) -> dict:
         "query": job.get("query", ""),
         "prepared_query": job.get("prepared_query", ""),
         "resolved_via": "persistent_ecs_browser_agent",
+        "capture_method": capture_method,
     }
     s3.put_object(
         Bucket=REPORTS_BUCKET, Key=s3_key + ".metadata.json",
@@ -1519,6 +1616,7 @@ def _store(job: dict, url: str, body: bytes, ctype: str) -> dict:
         "downloaded": _now(),
         "rag_status": "Pending",
         "resolved_via": "persistent_ecs_browser_agent",
+        "capture_method": capture_method,
     })
     return {
         "s3_key": s3_key,

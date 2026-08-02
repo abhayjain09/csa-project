@@ -82,7 +82,14 @@ def _load_enqueue_browser_retries(dynamo, sqs):
         "timedelta": __import__("datetime").timedelta,
         "hashlib": __import__("hashlib"),
         "json": json,
+        "re": re,
         "ClientError": ClientError,
+        "urlsplit": urlparse,
+        "unquote": unquote,
+        "_REPORT_CLASS_ALIASES": (
+            ("annual report", ("annual report", "report and accounts")),
+            ("code of conduct", ("code of conduct", "code of ethics")),
+        ),
         "log": types.SimpleNamespace(
             info=lambda *args, **kwargs: None,
             error=lambda *args, **kwargs: None),
@@ -379,7 +386,7 @@ def _load_routing_helpers():
         "LATEST_DOCUMENT_SEARCH_VARIANTS": 6,
         "LATEST_COMPLETED_FISCAL_YEAR_LAG": 1,
         "CURRENT_YEAR": 2026,
-        "VERTEX_SEARCH_MAX_CALLS": 2,
+        "VERTEX_SEARCH_MAX_CALLS": 3,
         "_IR_ONLY_CLASSES": {
             "annual report", "proxy statement", "remuneration report"},
         "_extract_year_intent": lambda value: {
@@ -639,8 +646,85 @@ class ResultMappingTests(unittest.TestCase):
         self.assertEqual(json.loads(table.item["browser_seed_urls"]), [seed])
         self.assertEqual(len(sqs.messages), 1)
 
+    def test_strong_official_clean_miss_is_queued_for_visual_html_recovery(self):
+        class Table:
+            def put_item(self, **kwargs):
+                self.item = kwargs["Item"]
+
+        class Dynamo:
+            def __init__(self, table):
+                self.table = table
+
+            def Table(self, _name):
+                return self.table
+
+        class Sqs:
+            def __init__(self):
+                self.messages = []
+
+            def send_message(self, **kwargs):
+                self.messages.append(kwargs)
+
+        table, sqs = Table(), Sqs()
+        enqueue = _load_enqueue_browser_retries(Dynamo(table), sqs)
+        seed = "https://example.com/investors/annual-reports/476"
+        result = enqueue([{
+            "request_id": "1:1",
+            "query": "Example Annual Report",
+            "status": "failed",
+            "candidate_urls": [],
+            "browser_seed_urls": [seed],
+            "report_class": "annual report",
+            "official_domain": "example.com",
+        }], "Example Inc", "run-clean", "query-clean")
+        self.assertEqual(result[0]["browser_job_status"], "queued")
+        self.assertEqual(
+            table.item["admission_reason"], "strong_official_clean_miss")
+        self.assertEqual(len(sqs.messages), 1)
+
 
 class BrowserWorkerValidationTests(unittest.TestCase):
+    def test_verified_official_html_can_be_captured_without_pdf_reverification(self):
+        path = REPO_ROOT / "co-analyst-application/app/backend/browser_worker.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        node = next(
+            item for item in tree.body
+            if isinstance(item, ast.FunctionDef)
+            and item.name == "_render_current_page"
+        )
+        module = ast.Module(body=[node], type_ignores=[])
+        ast.fix_missing_locations(module)
+
+        class Page:
+            url = "https://example.com/governance/code-of-conduct"
+
+            def pdf(self, **_kwargs):
+                return b"%PDF-1.7\n" + (b"x" * 2_000)
+
+        namespace = {
+            "_normalize_text": lambda value: str(value or "").lower(),
+            "_HTML_RENDER_ELIGIBLE": {"code of conduct"},
+            "_page_observation": lambda _page: {
+                "title": "Example Inc Code of Conduct",
+                "text": "Example Inc Code of Conduct for all employees.",
+            },
+            "_CLASS_ALIASES": {
+                "code of conduct": ("code of conduct", "code of ethics")},
+            "_company_matches": lambda *_args: True,
+            "_class_matches": lambda *_args: (True, "verified"),
+            "_llm_document_match": lambda *_args: (True, "verified"),
+            "MAX_DOCUMENT_BYTES": 10_000,
+        }
+        exec(compile(module, str(path), "exec"), namespace)
+        rendered = namespace["_render_current_page"](
+            Page(), {
+                "company": "Example Inc",
+                "report_class": "code of conduct",
+                "standalone_only": True,
+            })
+        self.assertEqual(rendered[0], Page.url)
+        self.assertTrue(rendered[1].startswith(b"%PDF"))
+
     def test_bedrock_converse_uses_model_portable_inference_config(self):
         path = REPO_ROOT / "co-analyst-application/app/backend/browser_worker.py"
         tree = ast.parse(path.read_text(encoding="utf-8"))
@@ -704,6 +788,8 @@ class BrowserWorkerValidationTests(unittest.TestCase):
         namespace = {
             "_response_body": response_body,
             "_verify_pdf": lambda *_args: (False, "not used", ""),
+            "_direct_probe_circuit_open": lambda _url: False,
+            "_note_direct_waf": lambda _url: None,
             "MAX_DOCUMENT_BYTES": 1024,
             "NAV_TIMEOUT_MS": 1000,
         }
@@ -989,6 +1075,27 @@ class BrowserWorkerValidationTests(unittest.TestCase):
 
 
 class AnnualCoverageTests(unittest.TestCase):
+    def test_toc_row_parser_is_linear_and_strict(self):
+        self.assertEqual(
+            annual_coverage._parse_toc_row("Code of Conduct ........ 72"),
+            ("Code of Conduct", 72),
+        )
+        self.assertEqual(
+            annual_coverage._parse_toc_row("Risk Management   105"),
+            ("Risk Management", 105),
+        )
+        self.assertIsNone(annual_coverage._parse_toc_row("Revenue 2025"))
+
+    def test_pathological_layout_line_is_bounded_before_heading_regex(self):
+        started = time.monotonic()
+        text = annual_coverage._bounded_page_text(
+            "Annual Report" + (" " * 4_400_000) + "2025\nCode of Conduct",
+            250_000,
+        )
+        self.assertLess(len(text), 250_001)
+        self.assertIn("Annual Report 2025", text)
+        self.assertLess(time.monotonic() - started, 2)
+
     def test_late_sec_item_is_not_crowded_out_by_earlier_risk_headings(self):
         headings = [{
             "heading_id": f"heading-{index:04d}",
@@ -1227,6 +1334,19 @@ class StructuredPayloadTests(unittest.TestCase):
             payload["web_query_ids"],
             {"web_query1": "4:1", "web_query2": "4:2"},
         )
+
+    def test_chunk_payload_reuses_grounded_company_identity_hint(self):
+        helpers = _load_structured_payload_helpers()
+        hint = {
+            "ticker": "ACME",
+            "official_domain": "acme.com",
+            "_domain_attested": True,
+        }
+        payload = helpers["_build_chunk_payload"](
+            "Acme", "run-identity", "", ["Acme annual report"], 1,
+            company_identity_hint=hint,
+        )
+        self.assertEqual(payload["company_identity_hint"], hint)
 
     def test_unknown_class_uses_stable_fallback_not_uncategorized(self):
         infer = _load_structured_payload_helpers()["_infer_report_class"]
@@ -1615,12 +1735,14 @@ class LanguageScopeAndDomainTests(unittest.TestCase):
             report_class="annual report",
             vertex_backend=True,
         )
-        self.assertEqual(len(queries), 2)
+        self.assertEqual(len(queries), 3)
         self.assertTrue(queries[0].endswith("site:investors.acme.com"))
         self.assertIn("reports archive PDF download", queries[1])
+        self.assertIn('"annual reports" archive', queries[2])
         # Annual-report discovery stays on the supplied IR subdomain rather
         # than broadening to the apex domain.
-        self.assertTrue(queries[1].endswith("site:investors.acme.com"))
+        self.assertTrue(all(
+            query.endswith("site:investors.acme.com") for query in queries))
 
     def test_vertex_rescue_call_is_adaptive(self):
         path = REPO_ROOT / "agents/download-agent/agent/agent.py"
@@ -1646,6 +1768,7 @@ class LanguageScopeAndDomainTests(unittest.TestCase):
             "concurrent": __import__("concurrent"),
             "SEARCH_BACKEND": "vertex_lambda",
             "SEARCH_FANOUT_WORKERS": 8,
+            "VERTEX_SEARCH_MAX_CALLS": 3,
             "_single_web_search": search,
             "_domain": lambda _query: "acme.com",
             "_host_matches": lambda url, domain: domain in url,
@@ -1673,7 +1796,8 @@ class LanguageScopeAndDomainTests(unittest.TestCase):
         namespace["_single_web_search"] = direct_search
         results = namespace["_parallel_web_search"](queries, 10)
         self.assertEqual(calls, [queries[0]])
-        self.assertEqual(results[queries[1]][1], "skipped-primary-sufficient")
+        self.assertEqual(
+            results[queries[1]][1], "skipped-earlier-probe-sufficient")
 
     def test_web_discovery_fails_closed_without_official_domain(self):
         helpers = _load_routing_helpers()

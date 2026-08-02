@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Collect read-only diagnostics for recent CoAnalyst download runs or one ID.
 #
-# Usage (default AWS profile, every run from the last two hours):
+# Usage (default AWS credential chain, every run from the last hour):
 #   ./collect_browser_diagnostics.sh
 #
 # Optional:
@@ -13,7 +13,7 @@ set -u
 RUN_ID="${1:-}"
 QUERY_ID="${2:-}"
 REGION="${AWS_REGION:-us-east-1}"
-LOOKBACK_HOURS="${LOOKBACK_HOURS:-2}"
+LOOKBACK_HOURS="${LOOKBACK_HOURS:-1}"
 SINCE="${LOG_SINCE:-${LOOKBACK_HOURS}h}"
 RUNS_TABLE="${RUNS_TABLE:-reportiq-runs}"
 QUERIES_TABLE="${QUERIES_TABLE:-reportiq-web-queries}"
@@ -24,8 +24,12 @@ APP_SERVICE="${APP_SERVICE:-reportiq}"
 BROWSER_SERVICE="${BROWSER_SERVICE:-reportiq-browser-worker}"
 APP_LOG_GROUP="${APP_LOG_GROUP:-/ecs/reportiq}"
 BROWSER_LOG_GROUP="${BROWSER_LOG_GROUP:-/ecs/reportiq-browser-worker}"
+DOWNLOAD_AGENT_LOG_GROUP="${DOWNLOAD_AGENT_LOG_GROUP:-/aws/bedrock-agentcore/edo-coanalyst-report}"
+VERTEX_FUNCTION_NAME="${VERTEX_FUNCTION_NAME:-edo-coanalyst-report-vertex-search}"
+VERTEX_LOG_GROUP="${VERTEX_LOG_GROUP:-/aws/lambda/${VERTEX_FUNCTION_NAME}}"
 BROWSER_QUEUE_NAME="${BROWSER_QUEUE_NAME:-reportiq-browser-jobs}"
 BROWSER_DLQ_NAME="${BROWSER_DLQ_NAME:-reportiq-browser-jobs-dlq}"
+OUTPUT_DIR="${OUTPUT_DIR:-$PWD}"
 
 for command in aws jq tar python3; do
   if ! command -v "$command" >/dev/null 2>&1; then
@@ -82,8 +86,11 @@ if [[ "${#RUN_IDS[@]}" -eq 0 ]]; then
 fi
 
 SUMMARY_FILE="$OUT_DIR/run-summary.tsv"
-printf 'company\trun_id\tquery_id\tbulk_batch_id\tstatus\tdownloaded\tfailures\tbrowser_jobs\tqueued_at\tstarted_at\tupdated_at\n' \
+BROWSER_SUMMARY_FILE="$OUT_DIR/browser-job-summary.tsv"
+printf 'company\trun_id\tquery_id\tbulk_batch_id\tstatus\tdownloaded\tfailures\tbrowser_jobs\tqueued_at\tstarted_at\tupdated_at\terror\n' \
   >"$SUMMARY_FILE"
+printf 'company\trun_id\tjob_id\tdocument\tstatus\tattempts\tcreated_at\tupdated_at\terror\n' \
+  >"$BROWSER_SUMMARY_FILE"
 
 for current_run_id in "${RUN_IDS[@]}"; do
   safe_run_id="$(printf '%s' "$current_run_id" | tr -cd 'A-Za-z0-9._-')"
@@ -140,11 +147,27 @@ for current_run_id in "${RUN_IDS[@]}"; do
   queued_at="$(jq -r '.Item.queued_at.S // ""' "$OUT_DIR/$run_file" 2>/dev/null)"
   started_at="$(jq -r '.Item.started_at.S // ""' "$OUT_DIR/$run_file" 2>/dev/null)"
   updated_at="$(jq -r '.Item.updated_at.S // ""' "$OUT_DIR/$run_file" 2>/dev/null)"
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+  run_error="$(jq -r '(.Item.error_msg.S // .Item.error.S // "") | gsub("[\\t\\r\\n]"; " ")' \
+    "$OUT_DIR/$run_file" 2>/dev/null)"
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
     "$company" "$current_run_id" "$summary_query_id" "$bulk_batch_id" \
     "$run_status" "${downloaded_count:-0}" "${failure_count:-0}" \
-    "$browser_statuses" "$queued_at" "$started_at" "$updated_at" \
+    "$browser_statuses" "$queued_at" "$started_at" "$updated_at" "$run_error" \
     >>"$SUMMARY_FILE"
+
+  jq -r --arg company "$company" --arg run "$current_run_id" '
+    .Items[]? | [
+      $company,
+      $run,
+      (.job_id.S // ""),
+      (.document_name.S // .report_class.S // .query.S // ""),
+      (.status.S // ""),
+      (.attempts.N // .attempt_count.N // ""),
+      (.created_at.S // .queued_at.S // ""),
+      (.updated_at.S // ""),
+      ((.error_msg.S // .error.S // "") | gsub("[\\t\\r\\n]"; " "))
+    ] | @tsv' "$OUT_DIR/browser-jobs-${safe_run_id}.json" \
+    >>"$BROWSER_SUMMARY_FILE" 2>/dev/null || true
 done
 
 capture ecs-services.json aws ecs describe-services \
@@ -251,12 +274,29 @@ capture reportiq-app.log aws logs tail "$APP_LOG_GROUP" \
 capture browser-worker.log aws logs tail "$BROWSER_LOG_GROUP" \
   --since "$SINCE" --region "$REGION" --format short
 
+capture vertex-search.log aws logs tail "$VERTEX_LOG_GROUP" \
+  --since "$SINCE" --region "$REGION" --format short
+
+capture vertex-function.json aws lambda get-function \
+  --function-name "$VERTEX_FUNCTION_NAME" --region "$REGION" \
+  --query '{Configuration:{FunctionName:Configuration.FunctionName,LastModified:Configuration.LastModified,State:Configuration.State,LastUpdateStatus:Configuration.LastUpdateStatus,PackageType:Configuration.PackageType,Architectures:Configuration.Architectures,MemorySize:Configuration.MemorySize,Timeout:Configuration.Timeout,RevisionId:Configuration.RevisionId},Code:{ImageUri:Code.ImageUri,ResolvedImageUri:Code.ResolvedImageUri}}' \
+  --output json
+
+# This command is intentionally best-effort: older AWS CLI installations may
+# not yet expose the AgentCore control subcommands. The resulting error is still
+# useful in the archive and never aborts collection.
+capture agentcore-runtimes.json aws bedrock-agentcore-control list-agent-runtimes \
+  --region "$REGION" --output json
+
 capture agentcore-log-groups.json aws logs describe-log-groups \
   --log-group-name-prefix /aws/bedrock-agentcore/ \
   --region "$REGION" --output json
 
-agent_groups="$(jq -r \
-  '.logGroups[].logGroupName | select(test("edo.*coanalyst.*report"; "i"))' \
+agent_groups="$(jq -r --arg configured "$DOWNLOAD_AGENT_LOG_GROUP" '
+  [.logGroups[]?.logGroupName,
+   $configured]
+  | unique[]
+  | select(test("coanalyst|reportiq|download.agent|edo.*report"; "i"))' \
   "$OUT_DIR/agentcore-log-groups.json" 2>/dev/null)"
 while IFS= read -r group; do
   [[ -z "$group" ]] && continue
@@ -267,7 +307,7 @@ done <<<"$agent_groups"
 
 printf '%s\n' "${RUN_IDS[@]}" >"$OUT_DIR/run-ids.txt"
 
-ARCHIVE="${OUT_DIR}.tar.gz"
+ARCHIVE="${OUTPUT_DIR%/}/$(basename "$OUT_DIR").tar.gz"
 tar -czf "$ARCHIVE" -C "$(dirname "$OUT_DIR")" "$(basename "$OUT_DIR")"
 
 echo
@@ -285,5 +325,12 @@ if command -v column >/dev/null 2>&1; then
   column -t -s $'\t' "$SUMMARY_FILE"
 else
   cat "$SUMMARY_FILE"
+fi
+echo
+echo "Browser job summary:"
+if command -v column >/dev/null 2>&1; then
+  column -t -s $'\t' "$BROWSER_SUMMARY_FILE"
+else
+  cat "$BROWSER_SUMMARY_FILE"
 fi
 echo "Archive: $ARCHIVE"

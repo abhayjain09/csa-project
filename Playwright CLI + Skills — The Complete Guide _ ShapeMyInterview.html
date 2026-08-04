@@ -1,0 +1,1994 @@
+<!DOCTYPE html>
+<!-- saved from url=(0087)https://www.shapemyinterview.com/study/playwright-cli-skills-guide.html?v=2026-07-10#s1 -->
+<html lang="en" data-theme="light"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Playwright CLI + Skills — The Complete Guide | ShapeMyInterview</title>
+<meta name="description" content="A practical, step-by-step guide to installing Playwright CLI + Skills with Claude Code, running Planner-Generator-Healer via CLI, and understanding why CLI beats MCP for most workflows.">
+<meta name="author" content="Naveen Khunteta">
+<meta property="og:title" content="Playwright CLI + Skills — The Complete Guide">
+<meta property="og:description" content="Claude Code + Playwright CLI + Skills. 40x cheaper than MCP. Full SauceDemo walkthrough.">
+<meta property="og:type" content="article">
+
+<link rel="preconnect" href="https://fonts.googleapis.com/">
+<link rel="preconnect" href="https://fonts.gstatic.com/" crossorigin="">
+<link href="./Playwright CLI + Skills — The Complete Guide _ ShapeMyInterview_files/css2" rel="stylesheet">
+<link rel="stylesheet" href="./Playwright CLI + Skills — The Complete Guide _ ShapeMyInterview_files/github.min.css" id="hljs-light">
+<link rel="stylesheet" href="./Playwright CLI + Skills — The Complete Guide _ ShapeMyInterview_files/github-dark.min.css" id="hljs-dark" disabled="">
+
+<style>
+:root {
+  --bg: #FCFCFA;
+  --bg-elevated: #FFFFFF;
+  --bg-code: #F5F3EE;
+  --bg-sidebar: #F8F6F1;
+  --bg-subtle: #F0EDE4;
+  --text: #0A0A0A;
+  --text-muted: #666666;
+  --text-subtle: #999999;
+  --border: #E5E1D8;
+  --border-strong: #C9C4B6;
+  --accent: #C4341C;
+  --accent-hover: #A02A15;
+  --accent-soft: #FDEEEA;
+  --success: #067647;
+  --success-soft: #ECFDF3;
+  --warning: #B54708;
+  --warning-soft: #FEF7EC;
+  --danger: #B42318;
+  --danger-soft: #FEF3F2;
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+  --text-3xl: 1.875rem;
+  --text-4xl: 2.5rem;
+  --text-5xl: 3.75rem;
+  --sidebar-width: 280px;
+  --content-max: 720px;
+  --header-height: 60px;
+  --radius: 6px;
+  --radius-lg: 10px;
+}
+
+[data-theme="dark"] {
+  --bg: #0F0F0E;
+  --bg-elevated: #191917;
+  --bg-code: #1E1D1A;
+  --bg-sidebar: #14140F;
+  --bg-subtle: #1A1A16;
+  --text: #F5F3EE;
+  --text-muted: #A8A29E;
+  --text-subtle: #78716C;
+  --border: #2A2823;
+  --border-strong: #3E3B33;
+  --accent: #FF5A3D;
+  --accent-hover: #FF8A75;
+  --accent-soft: #2A1512;
+  --success: #12B76A;
+  --success-soft: #0F2419;
+  --warning: #F79009;
+  --warning-soft: #2A1D0A;
+  --danger: #F04438;
+  --danger-soft: #2A1414;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; scroll-padding-top: calc(var(--header-height) + 1rem); }
+body {
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  line-height: 1.65;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background 0.2s, color 0.2s;
+}
+.progress-bar {
+  position: fixed; top: 0; left: 0; height: 3px;
+  background: var(--accent); z-index: 200; width: 0;
+  transition: width 0.1s;
+}
+.header {
+  position: fixed; top: 0; left: 0; right: 0;
+  height: var(--header-height);
+  background: var(--bg); border-bottom: 1px solid var(--border);
+  z-index: 100; display: flex; align-items: center; padding: 0 1.5rem;
+}
+.header-inner {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%; max-width: 1400px; margin: 0 auto;
+}
+.brand {
+  display: flex; align-items: center; gap: 0.75rem;
+  font-family: var(--font-display); font-weight: 500;
+  font-size: var(--text-lg); color: var(--text); text-decoration: none;
+  letter-spacing: -0.01em;
+}
+.brand-mark {
+  width: 32px; height: 32px; border-radius: 8px;
+  background: var(--accent); color: white;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-mono); font-weight: 600; font-size: var(--text-sm);
+}
+.header-actions { display: flex; align-items: center; gap: 0.75rem; }
+.theme-toggle, .menu-toggle {
+  background: transparent; border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 0.5rem 0.75rem;
+  color: var(--text-muted); cursor: pointer;
+  font-family: inherit; font-size: var(--text-sm);
+  display: flex; align-items: center; gap: 0.5rem;
+  transition: all 0.15s;
+}
+.theme-toggle:hover, .menu-toggle:hover { color: var(--text); border-color: var(--border-strong); }
+.menu-toggle { display: none; }
+
+.layout {
+  display: grid;
+  grid-template-columns: var(--sidebar-width) 1fr;
+  max-width: 1400px; margin: 0 auto;
+  padding-top: var(--header-height); min-height: 100vh;
+}
+
+.sidebar {
+  position: sticky; top: var(--header-height);
+  height: calc(100vh - var(--header-height));
+  overflow-y: auto; padding: 2rem 1.5rem;
+  border-right: 1px solid var(--border);
+  background: var(--bg-sidebar);
+}
+.sidebar-title {
+  font-family: var(--font-mono); text-transform: uppercase;
+  font-size: var(--text-xs); letter-spacing: 0.08em;
+  color: var(--text-subtle); margin-bottom: 1rem; font-weight: 500;
+}
+.sidebar-nav {
+  list-style: none; display: flex; flex-direction: column; gap: 0.25rem;
+}
+.sidebar-nav a {
+  display: block; padding: 0.5rem 0.75rem;
+  color: var(--text-muted); text-decoration: none;
+  font-size: var(--text-sm); border-radius: var(--radius);
+  border-left: 2px solid transparent; line-height: 1.4;
+  transition: all 0.15s;
+}
+.sidebar-nav a:hover { color: var(--text); background: var(--bg-elevated); }
+.sidebar-nav a.active {
+  color: var(--accent); border-left-color: var(--accent);
+  background: var(--accent-soft); font-weight: 500;
+}
+.sidebar-nav .sub { padding-left: 1.5rem; font-size: 0.8rem; }
+
+.main {
+  padding: 3rem 2rem 6rem;
+  max-width: calc(var(--content-max) + 4rem);
+  width: 100%; margin: 0 auto;
+}
+.content { max-width: var(--content-max); }
+
+.hero {
+  margin-bottom: 4rem; padding-bottom: 3rem;
+  border-bottom: 1px solid var(--border);
+}
+.hero-eyebrow {
+  font-family: var(--font-mono); text-transform: uppercase;
+  font-size: var(--text-xs); letter-spacing: 0.1em;
+  color: var(--accent); margin-bottom: 1rem; font-weight: 500;
+}
+.hero-title {
+  font-family: var(--font-display); font-size: var(--text-5xl);
+  font-weight: 500; line-height: 1.02; letter-spacing: -0.03em;
+  color: var(--text); margin-bottom: 1.5rem;
+  font-variation-settings: "opsz" 144;
+}
+.hero-subtitle {
+  font-size: var(--text-xl); line-height: 1.5;
+  color: var(--text-muted); margin-bottom: 2rem; max-width: 600px;
+}
+.hero-meta {
+  display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap;
+  font-size: var(--text-sm); color: var(--text-subtle);
+}
+.hero-meta-item { display: flex; align-items: center; gap: 0.5rem; }
+.author-avatar {
+  width: 40px; height: 40px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+  color: white; display: flex; align-items: center; justify-content: center;
+  font-weight: 600; font-size: var(--text-sm);
+}
+.author-name { color: var(--text); font-weight: 500; }
+
+h1, h2, h3, h4, h5, h6 { color: var(--text); line-height: 1.25; letter-spacing: -0.02em; }
+.section-title {
+  font-family: var(--font-display); font-size: var(--text-4xl);
+  font-weight: 500; margin-top: 5rem; margin-bottom: 2rem;
+  padding-top: 1rem; font-variation-settings: "opsz" 144;
+  scroll-margin-top: 80px;
+}
+.section-number {
+  font-family: var(--font-mono); color: var(--accent);
+  font-size: 0.7em; font-weight: 500; margin-right: 0.75rem;
+  vertical-align: 0.15em;
+}
+h3.subsection {
+  font-family: var(--font-display); font-size: var(--text-2xl);
+  font-weight: 500; margin-top: 3rem; margin-bottom: 1rem;
+  scroll-margin-top: 80px;
+}
+h4.subsubsection {
+  font-family: var(--font-body); font-size: var(--text-lg);
+  font-weight: 600; margin-top: 2rem; margin-bottom: 0.75rem;
+}
+p { margin-bottom: 1rem; color: var(--text); }
+.content p { font-size: var(--text-lg); line-height: 1.7; }
+strong { font-weight: 600; }
+em { font-style: italic; }
+a { color: var(--accent); text-decoration: none; border-bottom: 1px solid transparent; transition: border 0.15s; }
+a:hover { border-bottom-color: var(--accent); }
+ul, ol { margin-bottom: 1rem; padding-left: 1.5rem; }
+.content li { font-size: var(--text-lg); line-height: 1.7; margin-bottom: 0.5rem; }
+hr { border: none; height: 1px; background: var(--border); margin: 3rem 0; }
+
+code {
+  font-family: var(--font-mono); font-size: 0.88em;
+  background: var(--bg-code); padding: 0.15em 0.4em;
+  border-radius: 4px; color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.code-block {
+  margin: 1.5rem 0; border: 1px solid var(--border);
+  border-radius: var(--radius-lg); overflow: hidden;
+  background: var(--bg-code);
+}
+.code-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.75rem 1rem; background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono); font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+.code-header-left { display: flex; align-items: center; gap: 0.75rem; }
+.code-lang {
+  padding: 2px 0.5rem; background: var(--bg-code);
+  border-radius: 3px; text-transform: uppercase;
+  letter-spacing: 0.05em; font-size: 0.65rem;
+  font-weight: 600; color: var(--accent);
+}
+.code-filename { font-weight: 500; color: var(--text); }
+.copy-btn {
+  background: transparent; border: 1px solid var(--border);
+  color: var(--text-muted); padding: 4px 10px;
+  border-radius: 4px; font-family: inherit;
+  font-size: var(--text-xs); cursor: pointer;
+  display: flex; align-items: center; gap: 0.5rem;
+  transition: all 0.15s;
+}
+.copy-btn:hover { color: var(--text); border-color: var(--border-strong); background: var(--bg-elevated); }
+.copy-btn.copied { color: var(--success); border-color: var(--success); background: var(--success-soft); }
+.code-block pre {
+  margin: 0; padding: 1rem; overflow-x: auto;
+  font-family: var(--font-mono); font-size: var(--text-sm);
+  line-height: 1.6; background: var(--bg-code) !important;
+}
+.code-block pre code {
+  background: transparent !important; border: none;
+  padding: 0; font-size: inherit; color: var(--text);
+}
+
+.callout {
+  margin: 1.5rem 0; padding: 1rem 1.25rem;
+  border-radius: var(--radius); border-left: 3px solid;
+  font-size: var(--text-base); line-height: 1.6;
+}
+.callout-info { background: var(--accent-soft); border-color: var(--accent); }
+.callout-warning { background: var(--warning-soft); border-color: var(--warning); }
+.callout-danger { background: var(--danger-soft); border-color: var(--danger); }
+.callout-success { background: var(--success-soft); border-color: var(--success); }
+.callout-label {
+  font-family: var(--font-mono); text-transform: uppercase;
+  font-size: var(--text-xs); letter-spacing: 0.08em;
+  font-weight: 600; margin-bottom: 0.5rem; display: block;
+}
+.callout-info .callout-label { color: var(--accent); }
+.callout-warning .callout-label { color: var(--warning); }
+.callout-danger .callout-label { color: var(--danger); }
+.callout-success .callout-label { color: var(--success); }
+.callout p:last-child { margin-bottom: 0; }
+
+.table-wrap {
+  margin: 1.5rem 0; overflow-x: auto;
+  border: 1px solid var(--border); border-radius: var(--radius-lg);
+}
+table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+th {
+  background: var(--bg-sidebar); padding: 0.75rem 1rem;
+  text-align: left; font-weight: 600; color: var(--text);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-xs); text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+td {
+  padding: 0.75rem 1rem; border-bottom: 1px solid var(--border);
+  color: var(--text); vertical-align: top;
+}
+tr:last-child td { border-bottom: none; }
+td code { font-size: 0.85em; background: var(--bg-code); }
+
+.compare-grid {
+  display: grid; grid-template-columns: 1fr; gap: 1rem;
+  margin: 1.5rem 0;
+}
+@media (min-width: 640px) {
+  .compare-grid { grid-template-columns: 1fr 1fr; }
+}
+.compare-item {
+  padding: 1rem; border-radius: var(--radius);
+  border: 1px solid var(--border); background: var(--bg-elevated);
+}
+.compare-item-label {
+  font-family: var(--font-mono); text-transform: uppercase;
+  font-size: var(--text-xs); letter-spacing: 0.08em;
+  font-weight: 600; margin-bottom: 0.75rem;
+  display: flex; align-items: center; gap: 0.5rem;
+}
+.compare-mcp .compare-item-label { color: var(--warning); }
+.compare-cli .compare-item-label { color: var(--success); }
+.compare-item-content { font-size: var(--text-base); color: var(--text); }
+
+.pullquote {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl); font-weight: 500;
+  line-height: 1.35; color: var(--text);
+  padding: 2rem; border-left: 3px solid var(--accent);
+  margin: 2.5rem 0; background: var(--bg-sidebar);
+  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+  font-style: italic;
+}
+
+.token-stat {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 1rem; margin: 2rem 0;
+}
+.token-card {
+  padding: 1.5rem; border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+.token-card.highlight {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.token-label {
+  font-family: var(--font-mono); font-size: var(--text-xs);
+  text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--text-muted); margin-bottom: 0.5rem;
+}
+.token-value {
+  font-family: var(--font-display); font-size: 2.5rem;
+  font-weight: 500; line-height: 1; color: var(--text);
+  margin-bottom: 0.25rem;
+}
+.token-detail { font-size: var(--text-sm); color: var(--text-muted); }
+.token-card.highlight .token-value { color: var(--accent); }
+
+.footer {
+  border-top: 1px solid var(--border);
+  padding: 3rem 0; margin-top: 6rem; text-align: center;
+}
+.footer-brand {
+  font-family: var(--font-display); font-size: var(--text-xl);
+  font-weight: 500; margin-bottom: 0.75rem;
+}
+.footer-tagline {
+  color: var(--text-muted); margin-bottom: 1.5rem; font-size: var(--text-base);
+}
+.footer-links {
+  display: flex; gap: 1.5rem; justify-content: center;
+  flex-wrap: wrap; font-size: var(--text-sm);
+}
+.footer-links a { color: var(--text-muted); border-bottom: none; }
+.footer-links a:hover { color: var(--accent); }
+.footer-copy {
+  margin-top: 2rem; color: var(--text-subtle);
+  font-size: var(--text-sm); font-family: var(--font-mono);
+}
+
+.tag-list {
+  display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem;
+}
+.tag {
+  padding: 0.25rem 0.75rem; background: var(--bg-sidebar);
+  border: 1px solid var(--border); border-radius: 100px;
+  font-size: var(--text-xs); color: var(--text-muted); font-weight: 500;
+}
+
+.sidebar-backdrop { display: none; }
+
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; }
+  .sidebar {
+    position: fixed; left: 0; top: var(--header-height);
+    width: 280px; height: calc(100vh - var(--header-height));
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    z-index: 90; background: var(--bg);
+    border-right: 1px solid var(--border);
+  }
+  .sidebar.open { transform: translateX(0); }
+  .sidebar-backdrop.open {
+    display: block; position: fixed; inset: var(--header-height) 0 0 0;
+    background: rgba(0,0,0,0.4); z-index: 80;
+  }
+  .menu-toggle { display: flex; }
+  .main { padding: 2rem 1rem 4rem; }
+  .hero-title { font-size: var(--text-4xl); }
+  .hero-subtitle { font-size: var(--text-lg); }
+  .section-title { font-size: var(--text-3xl); }
+  .content p, .content li { font-size: var(--text-base); }
+  .token-stat { grid-template-columns: 1fr; }
+}
+</style>
+<!-- smi-seo -->
+<meta name="robots" content="index, follow, max-image-preview:large">
+<link rel="canonical" href="https://shapemyinterview.com/study/playwright-cli-skills-guide.html">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Playwright CLI + Skills — The Complete Guide | ShapeMyInterview">
+<meta name="twitter:description" content="The complete guide to the Playwright CLI and the new Skills system — every core command (codegen, test, show-trace, install) plus how Skills package reusable AI-agent capabilities for faster, self-serve Playwright workflows.">
+<meta name="twitter:image" content="https://shapemyinterview.com/favicon.png">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"Playwright CLI + Skills — The Complete Guide","description":"The complete guide to the Playwright CLI and the new Skills system — every core command (codegen, test, show-trace, install) plus how Skills package reusable AI-agent capabilities for faster, self-serve Playwright workflows.","datePublished":"2026-07-10","dateModified":"2026-07-10","author":{"@type":"Organization","name":"ShapeMyInterview","url":"https://shapemyinterview.com"},"publisher":{"@type":"Organization","name":"ShapeMyInterview","logo":{"@type":"ImageObject","url":"https://shapemyinterview.com/favicon.png"}},"mainEntityOfPage":{"@type":"WebPage","@id":"https://shapemyinterview.com/study/playwright-cli-skills-guide.html"},"keywords":"Playwright, CLI, Skills, Automation, TypeScript","url":"https://shapemyinterview.com/study/playwright-cli-skills-guide.html"}</script>
+<!-- /smi-seo -->
+</head>
+<body>
+<div data-smi-bar="" style="font-family:-apple-system,BlinkMacSystemFont,&#39;Segoe UI&#39;,Roboto,Helvetica,Arial,sans-serif;background:#0f172a;color:#fff;padding:9px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px;flex-wrap:wrap;box-sizing:border-box;"><a href="https://shapemyinterview.com/" style="color:#fff;text-decoration:none;font-weight:800;letter-spacing:.3px;">ShapeMyInterview</a><a href="https://shapemyinterview.com/ai-interview" style="color:#0f172a;background:#E8B931;text-decoration:none;font-weight:700;padding:6px 14px;border-radius:7px;">Try a free AI mock →</a></div>
+
+<div class="progress-bar" id="progressBar" style="width: 1.60114%;"></div>
+
+<header class="header">
+  <div class="header-inner">
+    <a href="https://www.shapemyinterview.com/" class="brand" target="_blank" rel="noopener">
+      <span class="brand-mark">SMI</span>
+      <span>ShapeMyInterview <span style="opacity:.5;font-weight:400">· Naveen Automation Labs</span></span>
+    </a>
+    <div class="header-actions">
+      <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+        <span id="themeIcon">☾</span>
+        <span id="themeLabel">Dark</span>
+      </button>
+      <button class="menu-toggle" id="menuToggle" aria-label="Toggle menu">☰ Menu</button>
+    </div>
+  </div>
+</header>
+
+<div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-title">In this guide</div>
+    <ul class="sidebar-nav">
+      <li><a href="https://www.shapemyinterview.com/study/playwright-cli-skills-guide.html?v=2026-07-10#s1" class="">1. Why we need this</a></li>
+      <li><a href="https://www.shapemyinterview.com/study/playwright-cli-skills-guide.html?v=2026-07-10#s2" class="active">2. What is CLI + Skills</a></li>
+      <li><a href="https://www.shapemyinterview.com/study/playwright-cli-skills-guide.html?v=2026-07-10#s3">3. Claude Code vs Copilot</a></li>
+      <li><a href="https://www.shapemyinterview.com/study/playwright-cli-skills-guide.html?v=2026-07-10#s4">4. Prerequisites</a></li>
+      <li><a href="https://www.shapemyinterview.com/study/playwright-cli-skills-guide.html?v=2026-07-10#s5">5. Install Claude Code</a></li>
+      <li><a href="https://www.shapemyinterview.com/study/playwright-cli-skills-guide.html?v=2026-07-10#s6">6. Install Playwright CLI + Skills</a></li>
+      <li><a href="https://www.shapemyinterview.com/study/playwright-cli-skills-guide.html?v=2026-07-10#s7">7. Anatomy of the Skill file</a></li>
+      <li><a href="https://www.shapemyinterview.com/study/playwright-cli-skills-guide.html?v=2026-07-10#s8">8. Planner via CLI</a></li>
+      <li><a href="https://www.shapemyinterview.com/study/playwright-cli-skills-guide.html?v=2026-07-10#s9">9. Generator via CLI</a></li>
+      <li><a href="https://www.shapemyinterview.com/study/playwright-cli-skills-guide.html?v=2026-07-10#s10">10. Healer via CLI</a></li>
+      <li><a href="https://www.shapemyinterview.com/study/playwright-cli-skills-guide.html?v=2026-07-10#s11">11. CLI vs MCP: complete diff</a></li>
+      <li><a href="https://www.shapemyinterview.com/study/playwright-cli-skills-guide.html?v=2026-07-10#s12">12. Token consumption breakdown</a></li>
+      <li><a href="https://www.shapemyinterview.com/study/playwright-cli-skills-guide.html?v=2026-07-10#s13">13. When to use which</a></li>
+      <li><a href="https://www.shapemyinterview.com/study/playwright-cli-skills-guide.html?v=2026-07-10#s14">14. Common pitfalls</a></li>
+      <li><a href="https://www.shapemyinterview.com/study/playwright-cli-skills-guide.html?v=2026-07-10#s15">15. Final thoughts</a></li>
+    </ul>
+  </aside>
+
+  <main class="main">
+    <div class="content">
+<section class="hero">
+  <div class="hero-eyebrow">Practical Guide · 2026</div>
+  <h1 class="hero-title">Playwright CLI<br>+ Skills.</h1>
+  <p class="hero-subtitle">
+    A step-by-step guide to installing Playwright CLI with Skills, running Planner-Generator-Healer through Claude Code, and understanding when to use CLI over MCP.
+  </p>
+  <div class="hero-meta">
+    <div class="hero-meta-item">
+      <div class="author-avatar">N</div>
+      <div>
+        <div class="author-name">Naveen Khunteta</div>
+        <div>Founder · Naveen Automation Labs</div>
+      </div>
+    </div>
+    <div class="hero-meta-item">
+      <span>~22 min read</span>
+    </div>
+  </div>
+  <div class="tag-list">
+    <span class="tag">Playwright CLI</span>
+    <span class="tag">Skills</span>
+    <span class="tag">Claude Code</span>
+    <span class="tag">SauceDemo</span>
+    <span class="tag">SDET</span>
+  </div>
+</section>
+
+<h2 class="section-title" id="s1"><span class="section-number">01</span>Why we need this</h2>
+
+<p>If you've been following along, you already set up Playwright MCP with the three agents — Planner, Generator, and Healer. It works. It's powerful. But there's a hidden cost that becomes obvious the moment you run agents at scale.</p>
+
+<p><strong>Every browser snapshot in MCP burns 15,000 to 25,000 tokens.</strong> Multiply that by a 20-step automation session, and you're at ~114,000 tokens per single task. Do it in CI nightly — costs pile up fast. And past ~60% context fill, LLM reasoning quality drops noticeably ("lost in the middle" problem).</p>
+
+<p>Microsoft's own team saw this. In early 2026, they released <code>@playwright/cli</code> — a lighter, shell-based alternative. The official README puts it plainly:</p>
+
+<div class="callout callout-info">
+  <span class="callout-label">From Microsoft's docs</span>
+  <p>"Modern coding agents increasingly favor CLI-based workflows exposed as SKILLs over MCP because CLI invocations are more token-efficient. They avoid loading large tool schemas and verbose accessibility trees into the model context."</p>
+</div>
+
+<p>This guide covers everything you need to switch to (or supplement with) the CLI approach:</p>
+
+<ul>
+  <li>Install Claude Code (and why it beats Copilot for CLI work)</li>
+  <li>Install Playwright CLI + Skills the correct way</li>
+  <li>Understand the SKILL.md file — the core primitive</li>
+  <li>Run Planner, Generator, and Healer via CLI (with SauceDemo)</li>
+  <li>See the token difference with real numbers</li>
+  <li>Learn when CLI wins and when MCP still wins</li>
+</ul>
+
+<h2 class="section-title" id="s2"><span class="section-number">02</span>What is CLI + Skills</h2>
+
+<p>Two words. Understand both.</p>
+
+<h3 class="subsection">CLI</h3>
+
+<p><strong><code>@playwright/cli</code></strong> is a standalone shell tool from Microsoft. Same team as Playwright MCP, same Playwright engine underneath. Different interface — shell commands instead of MCP protocol calls.</p>
+
+<p>Sample commands the CLI exposes:</p>
+
+<div class="code-block">
+  <div class="code-header">
+    <div class="code-header-left">
+      <span class="code-lang">bash</span>
+      <span class="code-filename">Sample CLI commands</span>
+    </div>
+    <button class="copy-btn" data-target="code-cli-sample">⧉ Copy</button>
+  </div>
+  <pre><code id="code-cli-sample" class="language-bash hljs" data-highlighted="yes">playwright-cli open https://www.saucedemo.com --headed
+playwright-cli snapshot
+playwright-cli <span class="hljs-built_in">type</span> e12 <span class="hljs-string">"standard_user"</span>
+playwright-cli <span class="hljs-built_in">type</span> e13 <span class="hljs-string">"secret_sauce"</span>
+playwright-cli click e14
+playwright-cli screenshot login-success.png
+playwright-cli codegen</code></pre>
+</div>
+
+<p>Each command is short. Each output is short. Agent runs commands like a human developer does — sequentially in a terminal.</p>
+
+<h3 class="subsection">Skills</h3>
+
+<p><strong>Skills</strong> are Markdown guide files. They teach the AI agent how to use a specific tool correctly. Think of them as "onboarding docs for the AI."</p>
+
+<p>Without Skills, an LLM would guess at CLI commands based on its training data — and often hallucinate. With Skills, the agent reads a clear reference and uses commands correctly.</p>
+
+<p>Playwright CLI ships with 6-7 pre-built Skills covering:</p>
+
+<ul>
+  <li><strong>Running Playwright tests</strong> — run, debug, manage test suites</li>
+  <li><strong>Request mocking</strong> — intercept and mock network requests</li>
+  <li><strong>Running Playwright code</strong> — execute arbitrary scripts</li>
+  <li><strong>Browser session management</strong> — manage multiple browser sessions</li>
+  <li><strong>Storage state</strong> — persist cookies and localStorage</li>
+  <li><strong>Test generation</strong> — <em>plan / generate / heal</em> workflow (same three roles as MCP agents, but via CLI!)</li>
+</ul>
+
+<div class="callout callout-success">
+  <span class="callout-label">The important realization</span>
+  <p>The Planner-Generator-Healer workflow you already know from the MCP session <strong>works via CLI too</strong>. The three roles are preserved. What changes is the plumbing underneath — how the agent interacts with the browser.</p>
+</div>
+
+<h3 class="subsection">Together</h3>
+
+<p>Skills tell the agent <em>what commands exist and when to use them</em>. CLI provides the actual commands. Combine them, and the agent has a lean, terminal-based way to drive browsers — without loading heavy tool schemas or streaming snapshots into context.</p>
+
+<div class="pullquote">
+  MCP is the protocol path. CLI + Skills is the shell path. Same job, different economics.
+</div>
+
+<h2 class="section-title" id="s3"><span class="section-number">03</span>Claude Code vs Copilot — why we're switching</h2>
+
+<p>For MCP, we used Copilot Chat in VS Code. That worked. For CLI + Skills, we're switching to <strong>Claude Code</strong>. This isn't fashion — it's fit for purpose. Here's the honest breakdown.</p>
+
+<h3 class="subsection">The core difference</h3>
+
+<div class="compare-grid">
+  <div class="compare-item compare-mcp">
+    <div class="compare-item-label">Copilot Chat</div>
+    <div class="compare-item-content">
+      IDE-centric. Chat panel inside VS Code. Great for inline code suggestions, decent for MCP tools. Terminal integration is possible but feels bolted on.
+    </div>
+  </div>
+  <div class="compare-item compare-cli">
+    <div class="compare-item-label">Claude Code</div>
+    <div class="compare-item-content">
+      Terminal-native. Runs directly in your shell. Discovers Skills automatically from <code>.claude/skills/</code>. CLI-first workflows are its native mode, not an add-on.
+    </div>
+  </div>
+</div>
+
+<h3 class="subsection">Six reasons Claude Code wins for CLI work</h3>
+
+<h4 class="subsubsection">1. Native terminal environment</h4>
+
+<p>Claude Code runs in your terminal. When it uses <code>playwright-cli open ...</code>, it's literally running that shell command as you would. No abstraction, no wrappers. Same environment, same errors, same behavior — every time.</p>
+
+<p>Copilot Chat runs in a VS Code side panel. Terminal commands work, but they go through an approval flow, a different execution context. Debugging is harder because you're one abstraction removed from what's happening.</p>
+
+<h4 class="subsubsection">2. Auto-discovers Skills</h4>
+
+<p>Claude Code scans <code>.claude/skills/</code> in your project (and in <code>~/.claude/skills/</code> globally) on startup. Any Skill you install becomes available immediately.</p>
+
+<p>Copilot's Skills format is different and still evolving. Playwright CLI's Skills folder structure is designed for Claude Code first — that's where it lands out of the box.</p>
+
+<h4 class="subsubsection">3. Bigger context window (1M tokens on Opus)</h4>
+
+<p>Claude Code with Opus 4.8 gives you a 1 million token context window. Even if you occasionally read large snapshots or long files, you have room. Copilot's context varies by model but is typically 128K-200K.</p>
+
+<h4 class="subsubsection">4. Token-efficient by design</h4>
+
+<p>Claude Code is optimized for coding workflows — it manages context intelligently, only reading files when needed, and using tools sparingly. Ties naturally to the CLI philosophy.</p>
+
+<h4 class="subsubsection">5. Better model choices for the task</h4>
+
+<p>Claude Code lets you pick per session: Opus 4.8 for complex reasoning, Sonnet 5 for balanced work, Haiku 4.5 for fast/cheap. All three are strong at agentic tool use. Copilot has model options too — but the routing and picking varies by tier and organization.</p>
+
+<h4 class="subsubsection">6. Simpler mental model for teaching</h4>
+
+<p>This one matters for classroom demos. Students see:</p>
+
+<ol>
+  <li>A prompt goes in the terminal</li>
+  <li>Claude Code runs shell commands</li>
+  <li>Output appears in the same terminal</li>
+  <li>Files change on disk — visible in their IDE</li>
+</ol>
+
+<p>Everything happens in one screen. No hidden layers. No "wait, where did it run?" moments.</p>
+
+<div class="callout callout-info">
+  <span class="callout-label">Fair caveat</span>
+  <p>Copilot Chat is not "bad" for CLI work. It can run terminal commands via Agent mode. But Claude Code was <strong>designed for this shape of workflow from day one</strong>. For teaching purposes and clean demos, Claude Code makes life simpler. Use what your team has access to — but if you're picking fresh for CLI work, Claude Code is the natural choice.</p>
+</div>
+
+<h3 class="subsection">The subscription reality</h3>
+
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr>
+      <th>Option</th>
+      <th>Cost</th>
+      <th>Best for</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Claude Code (via Claude Pro)</td>
+      <td>$20/month</td>
+      <td>Individual devs, learning, batch demos</td>
+    </tr>
+    <tr>
+      <td>Claude Code (via Claude Max)</td>
+      <td>$100+/month</td>
+      <td>Heavy usage, 1M context on Opus, larger rate limits</td>
+    </tr>
+    <tr>
+      <td>Claude Code (Team)</td>
+      <td>$25+/user/month</td>
+      <td>Small teams, shared billing</td>
+    </tr>
+    <tr>
+      <td>GitHub Copilot Pro</td>
+      <td>$10/month</td>
+      <td>MCP work, in-editor completions</td>
+    </tr>
+    <tr>
+      <td>GitHub Copilot Free</td>
+      <td>$0</td>
+      <td>Getting started, limited chat quota</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<p>For serious CLI + Skills work, Claude Code Pro is the sweet spot. If you already have Claude Pro for the web/desktop app, Claude Code is included — no extra cost.</p>
+<h2 class="section-title" id="s4"><span class="section-number">04</span>Prerequisites</h2>
+
+<p>Before starting, verify each of these. Skipping this checklist causes 90% of setup issues.</p>
+
+<div class="code-block">
+  <div class="code-header">
+    <div class="code-header-left">
+      <span class="code-lang">bash</span>
+      <span class="code-filename">Terminal · verify prerequisites</span>
+    </div>
+    <button class="copy-btn" data-target="code-prereq">⧉ Copy</button>
+  </div>
+  <pre><code id="code-prereq" class="language-bash hljs" data-highlighted="yes">node --version   <span class="hljs-comment"># need v18 or higher</span>
+npm --version    <span class="hljs-comment"># any recent version</span>
+git --version    <span class="hljs-comment"># any recent version</span></code></pre>
+</div>
+
+<p>If Node.js is missing or too old, install from <a href="https://nodejs.org/" target="_blank" rel="noopener">nodejs.org</a> — LTS version.</p>
+
+<p>You will also need:</p>
+
+<ul>
+  <li><strong>An Anthropic account</strong> — sign up at <a href="https://claude.ai/" target="_blank" rel="noopener">claude.ai</a>. Pro plan ($20/month) unlocks Claude Code.</li>
+  <li><strong>A working terminal</strong> — Terminal.app (macOS), Windows Terminal, or your favorite (iTerm2, Warp, Alacritty).</li>
+  <li><strong>A code editor</strong> — VS Code works well. Not strictly required, but useful for viewing generated files.</li>
+</ul>
+
+<h2 class="section-title" id="s5"><span class="section-number">05</span>Install Claude Code</h2>
+
+<p>Claude Code is a Node.js package. One command installs it globally.</p>
+
+<div class="code-block">
+  <div class="code-header">
+    <div class="code-header-left">
+      <span class="code-lang">bash</span>
+      <span class="code-filename">Terminal · install Claude Code</span>
+    </div>
+    <button class="copy-btn" data-target="code-install-cc">⧉ Copy</button>
+  </div>
+  <pre><code id="code-install-cc" class="language-bash hljs" data-highlighted="yes">npm install -g @anthropic-ai/claude-code
+claude --version</code></pre>
+</div>
+
+<p>Expected output:</p>
+
+<div class="code-block">
+  <div class="code-header">
+    <div class="code-header-left">
+      <span class="code-lang">output</span>
+    </div>
+  </div>
+  <pre><code data-highlighted="yes" class="hljs language-undefined">Claude Code v2.1.207 (or later)</code></pre>
+</div>
+
+<h3 class="subsection">First launch and login</h3>
+
+<div class="code-block">
+  <div class="code-header">
+    <div class="code-header-left">
+      <span class="code-lang">bash</span>
+      <span class="code-filename">Terminal · start Claude Code</span>
+    </div>
+    <button class="copy-btn" data-target="code-start-cc">⧉ Copy</button>
+  </div>
+  <pre><code id="code-start-cc" class="language-bash hljs" data-highlighted="yes">claude</code></pre>
+</div>
+
+<p>First run prompts you to authenticate. Options:</p>
+
+<ol>
+  <li><strong>Claude Pro / Max subscription</strong> — recommended. Browser opens, log in with your Claude account, done.</li>
+  <li><strong>Anthropic API key</strong> — pay-as-you-go. Higher friction, useful for enterprise.</li>
+</ol>
+
+<p>After login, you'll see the Claude Code welcome banner:</p>
+
+<div class="code-block">
+  <div class="code-header">
+    <div class="code-header-left">
+      <span class="code-lang">output</span>
+    </div>
+  </div>
+  <pre><code data-highlighted="yes" class="hljs language-undefined">Claude Code v2.1.207
+Welcome back Naveen!
+
+Opus 4.8 (1M context) · Claude Max
+
+Tips for getting started:
+Run /init to create a CLAUDE.md file with instructions for Claude
+
+Try "edit &lt;filepath&gt; to..."</code></pre>
+</div>
+
+<h3 class="subsection">Pick the right model for the job</h3>
+
+<p>Inside Claude Code, switch models with <code>/model</code>:</p>
+
+<div class="code-block">
+  <div class="code-header">
+    <div class="code-header-left">
+      <span class="code-lang">prompt</span>
+      <span class="code-filename">Claude Code · model switcher</span>
+    </div>
+  </div>
+  <pre><code data-highlighted="yes" class="hljs language-undefined">/model</code></pre>
+</div>
+
+<p>Recommended for batch demos and daily work:</p>
+
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr>
+      <th>Model</th>
+      <th>Speed</th>
+      <th>Cost</th>
+      <th>Best for</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Claude Sonnet 5</strong></td>
+      <td>Fast</td>
+      <td>Moderate</td>
+      <td>Daily work · batch demos · balanced default</td>
+    </tr>
+    <tr>
+      <td><strong>Claude Haiku 4.5</strong></td>
+      <td>Very fast</td>
+      <td>Low</td>
+      <td>Simple tasks · high throughput · learning</td>
+    </tr>
+    <tr>
+      <td><strong>Claude Opus 4.8</strong></td>
+      <td>Slower</td>
+      <td>Higher</td>
+      <td>Complex reasoning · large refactors · deep debugging</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<p>For our Planner-Generator-Healer demo below, <strong>Sonnet 5</strong> is the sweet spot.</p>
+
+<h2 class="section-title" id="s6"><span class="section-number">06</span>Install Playwright CLI + Skills</h2>
+
+<p>Two commands, in this exact order.</p>
+
+<h4 class="subsubsection">Step 1 — Install the CLI package</h4>
+
+<div class="code-block">
+  <div class="code-header">
+    <div class="code-header-left">
+      <span class="code-lang">bash</span>
+      <span class="code-filename">Terminal · install Playwright CLI</span>
+    </div>
+    <button class="copy-btn" data-target="code-install-cli">⧉ Copy</button>
+  </div>
+  <pre><code id="code-install-cli" class="language-bash hljs" data-highlighted="yes">npm install -g @playwright/cli@latest
+playwright-cli --version</code></pre>
+</div>
+
+<h4 class="subsubsection">Step 2 — Create your demo project</h4>
+
+<div class="code-block">
+  <div class="code-header">
+    <div class="code-header-left">
+      <span class="code-lang">bash</span>
+      <span class="code-filename">Terminal · create project</span>
+    </div>
+    <button class="copy-btn" data-target="code-project">⧉ Copy</button>
+  </div>
+  <pre><code id="code-project" class="language-bash hljs" data-highlighted="yes"><span class="hljs-built_in">cd</span> ~/Documents
+<span class="hljs-built_in">mkdir</span> pw-cli-demo &amp;&amp; <span class="hljs-built_in">cd</span> pw-cli-demo
+npm init -y
+npm install -D @playwright/test</code></pre>
+</div>
+
+<h4 class="subsubsection">Step 3 — Install Skills (the step everyone misses)</h4>
+
+<p>Now the critical step. Skills do NOT install automatically with the CLI package. You need this separate command, run from inside your project:</p>
+
+<div class="code-block">
+  <div class="code-header">
+    <div class="code-header-left">
+      <span class="code-lang">bash</span>
+      <span class="code-filename">Terminal · install Skills</span>
+    </div>
+    <button class="copy-btn" data-target="code-install-skills">⧉ Copy</button>
+  </div>
+  <pre><code id="code-install-skills" class="language-bash hljs" data-highlighted="yes">playwright-cli install --skills</code></pre>
+</div>
+
+<p>Expected output:</p>
+
+<div class="code-block">
+  <div class="code-header">
+    <div class="code-header-left">
+      <span class="code-lang">output</span>
+    </div>
+  </div>
+  <pre><code data-highlighted="yes" class="hljs language-undefined">✅ Workspace initialized at `/path/to/pw-cli-demo`.
+✅ Skills installed to `.claude/skills/playwright-cli`.
+✅ Found chrome, will use it as the default browser.</code></pre>
+</div>
+
+<div class="callout callout-warning">
+  <span class="callout-label">Important note on location</span>
+  <p>Skills install to <code>&lt;project&gt;/.claude/skills/</code>, NOT to <code>~/.claude/skills/</code>. This is <strong>project-local by design</strong> — different projects can use different Skill versions, and you can commit Skills to git for team consistency. Claude Code must be started from this project folder to discover them.</p>
+</div>
+
+<h4 class="subsubsection">Step 4 — Install browser binaries</h4>
+
+<div class="code-block">
+  <div class="code-header">
+    <div class="code-header-left">
+      <span class="code-lang">bash</span>
+      <span class="code-filename">Terminal · install browsers</span>
+    </div>
+    <button class="copy-btn" data-target="code-install-browsers">⧉ Copy</button>
+  </div>
+  <pre><code id="code-install-browsers" class="language-bash hljs" data-highlighted="yes">playwright-cli install-browser</code></pre>
+</div>
+
+<p>Downloads Chromium, Firefox, and WebKit (~450 MB total). One-time step per machine.</p>
+
+<h4 class="subsubsection">Step 5 — Verify everything</h4>
+
+<div class="code-block">
+  <div class="code-header">
+    <div class="code-header-left">
+      <span class="code-lang">bash</span>
+      <span class="code-filename">Terminal · verify installation</span>
+    </div>
+    <button class="copy-btn" data-target="code-verify">⧉ Copy</button>
+  </div>
+  <pre><code id="code-verify" class="language-bash hljs" data-highlighted="yes"><span class="hljs-comment"># Verify CLI</span>
+playwright-cli --version
+
+<span class="hljs-comment"># Verify Skills folder exists</span>
+<span class="hljs-built_in">ls</span> .claude/skills/playwright-cli/
+
+<span class="hljs-comment"># Should show: SKILL.md and references/</span>
+<span class="hljs-built_in">ls</span> .claude/skills/playwright-cli/references/
+
+<span class="hljs-comment"># Try one manual command to confirm browsers work</span>
+playwright-cli open https://www.google.com --headed
+<span class="hljs-comment"># (Close the browser after it opens)</span></code></pre>
+</div>
+
+<p>If all four commands work, you're ready to launch Claude Code.</p>
+
+<h2 class="section-title" id="s7"><span class="section-number">07</span>Anatomy of the Skill file</h2>
+
+<p>Before running any agent, spend two minutes understanding what a Skill actually is. This is the primitive that changes everything.</p>
+
+<div class="code-block">
+  <div class="code-header">
+    <div class="code-header-left">
+      <span class="code-lang">bash</span>
+      <span class="code-filename">Terminal · peek at SKILL.md</span>
+    </div>
+    <button class="copy-btn" data-target="code-peek-skill">⧉ Copy</button>
+  </div>
+  <pre><code id="code-peek-skill" class="language-bash hljs" data-highlighted="yes"><span class="hljs-built_in">cat</span> .claude/skills/playwright-cli/SKILL.md | <span class="hljs-built_in">head</span> -40</code></pre>
+</div>
+
+<p>You'll see something like this:</p>
+
+<div class="code-block">
+  <div class="code-header">
+    <div class="code-header-left">
+      <span class="code-lang">markdown</span>
+      <span class="code-filename">.claude/skills/playwright-cli/SKILL.md (excerpt)</span>
+    </div>
+  </div>
+  <pre><code data-highlighted="yes" class="hljs language-undefined">---
+name: playwright-cli
+description: Drive a real browser from the terminal using playwright-cli.
+  Handles navigation, snapshots, clicks, typing, screenshots, and test generation.
+---
+
+# Playwright CLI Skill
+
+Use `playwright-cli` to drive browsers from the terminal. Commands are
+short and token-efficient. Snapshots are saved to disk, not streamed
+into context.
+
+## Basic workflow
+1. Open a page: `playwright-cli open &lt;url&gt; --headed`
+2. Snapshot to get element refs: `playwright-cli snapshot`
+3. Interact using refs: `playwright-cli click e21`
+4. Re-snapshot after significant DOM changes
+
+## Common commands
+- `open &lt;url&gt;` — navigate to URL
+- `snapshot` — capture accessibility tree to disk, return element refs
+- `click &lt;ref&gt;` — click element by ref
+- `type &lt;ref&gt; &lt;text&gt;` — type into a field
+- `screenshot [filename]` — save screenshot
+- `codegen` — generate Playwright code from actions
+
+## References
+See references/ for detailed guides:
+- run-tests.md — running and debugging Playwright tests
+- test-generation.md — plan / generate / heal workflow
+- storage-state.md — cookies and localStorage
+- ...</code></pre>
+</div>
+
+<h3 class="subsection">Three important properties</h3>
+
+<p><strong>1. It's plain Markdown.</strong> Not JSON, not a special format. Any editor can open it. Any agent that reads text can use it.</p>
+
+<p><strong>2. It's small.</strong> ~500-1000 tokens total. Compare to MCP's ~3,600 token tool schema load. The upfront cost is 5-7x lower.</p>
+
+<p><strong>3. It's discoverable.</strong> Claude Code scans <code>.claude/skills/</code> automatically. No config, no registration, no server to start. Drop a folder in, restart Claude Code, Skill becomes available.</p>
+
+<div class="callout callout-info">
+  <span class="callout-label">The design insight</span>
+  <p>Skills are just <strong>documentation the AI reads</strong>. That's it. There's no runtime, no protocol, no server. Any tool that can be driven from a terminal can be exposed as a Skill in minutes. This is why the pattern is spreading fast — the barrier to add a new tool is a Markdown file.</p>
+</div>
+
+<h3 class="subsection">The references folder</h3>
+
+<p>The main <code>SKILL.md</code> is short — a hub. Deep guides live in <code>references/</code> and get loaded only when the agent needs them.</p>
+
+<div class="code-block">
+  <div class="code-header">
+    <div class="code-header-left">
+      <span class="code-lang">bash</span>
+      <span class="code-filename">Terminal · list references</span>
+    </div>
+    <button class="copy-btn" data-target="code-refs">⧉ Copy</button>
+  </div>
+  <pre><code id="code-refs" class="language-bash hljs" data-highlighted="yes"><span class="hljs-built_in">ls</span> .claude/skills/playwright-cli/references/</code></pre>
+</div>
+
+<p>Typical output:</p>
+
+<div class="code-block">
+  <div class="code-header">
+    <div class="code-header-left">
+      <span class="code-lang">output</span>
+    </div>
+  </div>
+  <pre><code data-highlighted="yes" class="hljs language-undefined">run-tests.md
+mock-requests.md
+run-code.md
+session-management.md
+storage-state.md
+test-generation.md</code></pre>
+</div>
+
+<p>The <strong><code>test-generation.md</code></strong> reference is what enables Planner-Generator-Healer via CLI. When you ask the agent to "plan tests" or "heal this failing test," it reads this reference and adopts the right behavior.</p>
+<h2 class="section-title" id="s8"><span class="section-number">08</span>Planner via CLI — SauceDemo walkthrough</h2>
+
+<p>Time to run the first agent. We'll plan test scenarios for <a href="https://www.saucedemo.com/" target="_blank" rel="noopener">SauceDemo</a> — the same app you may have used with MCP.</p>
+
+<h3 class="subsection">Start Claude Code</h3>
+
+<div class="code-block">
+  <div class="code-header">
+    <div class="code-header-left">
+      <span class="code-lang">bash</span>
+      <span class="code-filename">Terminal · make sure you're in the project</span>
+    </div>
+    <button class="copy-btn" data-target="code-start-project">⧉ Copy</button>
+  </div>
+  <pre><code id="code-start-project" class="language-bash hljs" data-highlighted="yes"><span class="hljs-built_in">cd</span> ~/Documents/pw-cli-demo
+<span class="hljs-built_in">mkdir</span> -p specs tests
+claude</code></pre>
+</div>
+
+<p>Inside Claude Code, switch to Sonnet:</p>
+
+<div class="code-block">
+  <div class="code-header">
+    <div class="code-header-left">
+      <span class="code-lang">prompt</span>
+      <span class="code-filename">Claude Code</span>
+    </div>
+  </div>
+  <pre><code data-highlighted="yes" class="hljs language-undefined">/model
+# Select: Claude Sonnet 5</code></pre>
+</div>
+
+<h3 class="subsection">Sanity check — confirm Skill is discoverable</h3>
+
+<p>First prompt — verify Claude Code sees the Skill:</p>
+
+<div class="code-block">
+  <div class="code-header">
+    <div class="code-header-left">
+      <span class="code-lang">prompt</span>
+      <span class="code-filename">Claude Code · sanity check</span>
+    </div>
+    <button class="copy-btn" data-target="code-sanity">⧉ Copy</button>
+  </div>
+  <pre><code id="code-sanity" data-highlighted="yes" class="hljs language-undefined">Read .claude/skills/playwright-cli/SKILL.md
+and confirm you understand how to use playwright-cli.
+Just confirm — do not run any commands yet.</code></pre>
+</div>
+
+<p>Claude Code will read the file and reply with a summary of what it can do. If it says "I don't see a Skill file" — you're not in the right directory. Exit and <code>cd</code> to the project.</p>
+
+<h3 class="subsection">The Planner prompt</h3>
+
+<p>Now the real prompt. Notice how it's written — it tells the agent to <em>use the skill</em>, <em>use playwright-cli</em>, and gives clear scope:</p>
+
+<div class="code-block">
+  <div class="code-header">
+    <div class="code-header-left">
+      <span class="code-lang">prompt</span>
+      <span class="code-filename">Claude Code · Planner</span>
+    </div>
+    <button class="copy-btn" data-target="code-planner">⧉ Copy</button>
+  </div>
+  <pre><code id="code-planner" data-highlighted="yes" class="hljs language-undefined">Act as the Planner from the playwright-cli test-generation skill.
+
+Explore https://www.saucedemo.com using playwright-cli.
+
+Cover the login flow with these scenarios:
+- standard_user (successful login → inventory page)
+- locked_out_user (should show error)
+- Empty username submission
+- Empty password submission
+- Invalid credentials (username: foo, password: bar)
+
+Password for valid users: secret_sauce
+
+Rules:
+- Read-only exploration — do NOT submit forms with real data
+  beyond what's needed to observe the flow
+- Do NOT write any test code
+- Save the plan as a numbered Markdown file at specs/saucedemo-login.md
+- Use two-part scenario numbers (1.1, 1.2, ...)
+- Each scenario must have: preconditions, steps, expected assertions
+
+Approach:
+1. Use playwright-cli open with --headed so I can see the browser
+2. Take snapshots to identify elements
+3. Walk each scenario, noting what happens
+4. Consolidate into the plan file</code></pre>
+</div>
+
+<h3 class="subsection">What you'll see happen</h3>
+
+<p>Claude Code will run a sequence of CLI commands. Something like:</p>
+
+<div class="code-block">
+  <div class="code-header">
+    <div class="code-header-left">
+      <span class="code-lang">output</span>
+      <span class="code-filename">Live terminal output (abbreviated)</span>
+    </div>
+  </div>
+  <pre><code data-highlighted="yes" class="hljs language-undefined">▶ Running: playwright-cli open https://www.saucedemo.com --headed
+✓ Browser opened, session id: default
+
+▶ Running: playwright-cli snapshot
+✓ Snapshot saved to .playwright/snapshot.yaml
+  Found: textbox "Username" [e12]
+  Found: textbox "Password" [e13]
+  Found: button "Login" [e14]
+
+▶ Running: playwright-cli type e12 "standard_user"
+▶ Running: playwright-cli type e13 "secret_sauce"
+▶ Running: playwright-cli click e14
+▶ Running: playwright-cli snapshot
+✓ Page changed to /inventory.html
+  Found: 6 product cards, header "Products"
+
+... (continues for each scenario)
+
+✓ Wrote plan to specs/saucedemo-login.md (5 scenarios)</code></pre>
+</div>
+
+<h3 class="subsection">The generated plan</h3>
+
+<p>Open <code>specs/saucedemo-login.md</code>. You'll see something like:</p>
+
+<div class="code-block">
+  <div class="code-header">
+    <div class="code-header-left">
+      <span class="code-lang">markdown</span>
+      <span class="code-filename">specs/saucedemo-login.md</span>
+    </div>
+  </div>
+  <pre><code data-highlighted="yes" class="hljs language-undefined"># Test Plan: SauceDemo Login Flow
+
+**Target:** https://www.saucedemo.com
+**Date:** 2026-01-15
+
+## Preconditions
+- App available at https://www.saucedemo.com
+- Test users: standard_user, locked_out_user
+- All valid users use password: secret_sauce
+
+## Scenarios
+
+### Scenario 1.1 — Standard user login succeeds
+- **Priority:** P0
+- **Tags:** @smoke @critical
+- **Steps:**
+  1. Navigate to https://www.saucedemo.com
+  2. Fill Username with "standard_user"
+  3. Fill Password with "secret_sauce"
+  4. Click Login
+- **Assertions:**
+  - URL changes to /inventory.html
+  - Header shows "Products"
+  - Exactly 6 product cards are visible
+
+### Scenario 1.2 — Locked-out user shows error
+- **Priority:** P1
+- **Tags:** @regression
+- **Steps:**
+  1. Navigate to https://www.saucedemo.com
+  2. Fill Username with "locked_out_user"
+  3. Fill Password with "secret_sauce"
+  4. Click Login
+- **Assertions:**
+  - Error message contains "locked out"
+  - URL remains on login page
+
+### Scenario 1.3 — Empty username shows validation
+... (continues for all 5 scenarios)</code></pre>
+</div>
+
+<h3 class="subsection">What to verify in the plan</h3>
+
+<ul>
+  <li>Scenarios are numbered (1.1, 1.2, ...)</li>
+  <li>Each scenario has clear preconditions, steps, and assertions</li>
+  <li>Assertions are meaningful (not just "page loaded")</li>
+  <li>Tags applied (@smoke, @regression, etc.)</li>
+</ul>
+
+<p>Edit the file by hand if anything is off. The plan is the source of truth for the next step. Fixing it here is cheaper than fixing generated code later.</p>
+
+<h2 class="section-title" id="s9"><span class="section-number">09</span>Generator via CLI — from plan to test</h2>
+
+<p>Now turn scenario 1.1 into a runnable Playwright test.</p>
+
+<h3 class="subsection">Set up a minimal framework</h3>
+
+<p>Before running the Generator, add two starter files so it has conventions to follow:</p>
+
+<div class="code-block">
+  <div class="code-header">
+    <div class="code-header-left">
+      <span class="code-lang">bash</span>
+      <span class="code-filename">Terminal · create framework skeleton</span>
+    </div>
+    <button class="copy-btn" data-target="code-skeleton">⧉ Copy</button>
+  </div>
+  <pre><code id="code-skeleton" class="language-bash hljs" data-highlighted="yes"><span class="hljs-built_in">mkdir</span> -p src/pages src/fixtures tests/data
+<span class="hljs-built_in">touch</span> src/pages/BasePage.ts src/fixtures/base.ts tests/data/users.json</code></pre>
+</div>
+
+<p>Fill <code>src/fixtures/base.ts</code>:</p>
+
+<div class="code-block">
+  <div class="code-header">
+    <div class="code-header-left">
+      <span class="code-lang">typescript</span>
+      <span class="code-filename">src/fixtures/base.ts</span>
+    </div>
+    <button class="copy-btn" data-target="code-fixture">⧉ Copy</button>
+  </div>
+  <pre><code id="code-fixture" class="language-typescript hljs" data-highlighted="yes"><span class="hljs-keyword">import</span> { test <span class="hljs-keyword">as</span> base, expect } <span class="hljs-keyword">from</span> <span class="hljs-string">'@playwright/test'</span>;
+
+<span class="hljs-keyword">export</span> <span class="hljs-keyword">const</span> test = base.<span class="hljs-property">extend</span>&lt;{}&gt;({});
+<span class="hljs-keyword">export</span> { expect };</code></pre>
+</div>
+
+<p>Fill <code>src/pages/BasePage.ts</code>:</p>
+
+<div class="code-block">
+  <div class="code-header">
+    <div class="code-header-left">
+      <span class="code-lang">typescript</span>
+      <span class="code-filename">src/pages/BasePage.ts</span>
+    </div>
+    <button class="copy-btn" data-target="code-basepage">⧉ Copy</button>
+  </div>
+  <pre><code id="code-basepage" class="language-typescript hljs" data-highlighted="yes"><span class="hljs-keyword">import</span> { <span class="hljs-title class_">Page</span> } <span class="hljs-keyword">from</span> <span class="hljs-string">'@playwright/test'</span>;
+
+<span class="hljs-keyword">export</span> <span class="hljs-keyword">abstract</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">BasePage</span> {
+  <span class="hljs-keyword">protected</span> <span class="hljs-keyword">readonly</span> <span class="hljs-attr">page</span>: <span class="hljs-title class_">Page</span>;
+  <span class="hljs-title function_">constructor</span>(<span class="hljs-params">page: Page</span>) { <span class="hljs-variable language_">this</span>.<span class="hljs-property">page</span> = page; }
+  <span class="hljs-keyword">abstract</span> <span class="hljs-title function_">goto</span>(): <span class="hljs-title class_">Promise</span>&lt;<span class="hljs-built_in">void</span>&gt;;
+}</code></pre>
+</div>
+
+<p>Fill <code>tests/data/users.json</code>:</p>
+
+<div class="code-block">
+  <div class="code-header">
+    <div class="code-header-left">
+      <span class="code-lang">json</span>
+      <span class="code-filename">tests/data/users.json</span>
+    </div>
+    <button class="copy-btn" data-target="code-users">⧉ Copy</button>
+  </div>
+  <pre><code id="code-users" class="language-json hljs" data-highlighted="yes"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">"standard"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"username"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"standard_user"</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">"password"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"secret_sauce"</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">"locked"</span><span class="hljs-punctuation">:</span>   <span class="hljs-punctuation">{</span> <span class="hljs-attr">"username"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"locked_out_user"</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">"password"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"secret_sauce"</span> <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">}</span></code></pre>
+</div>
+
+<h3 class="subsection">The Generator prompt</h3>
+
+<div class="code-block">
+  <div class="code-header">
+    <div class="code-header-left">
+      <span class="code-lang">prompt</span>
+      <span class="code-filename">Claude Code · Generator</span>
+    </div>
+    <button class="copy-btn" data-target="code-generator">⧉ Copy</button>
+  </div>
+  <pre><code id="code-generator" data-highlighted="yes" class="hljs language-undefined">Act as the Generator from the playwright-cli test-generation skill.
+
+Use scenario 1.1 from specs/saucedemo-login.md.
+
+Framework conventions (STRICT):
+- Import test and expect from src/fixtures/base.ts,
+  NOT from @playwright/test directly
+- Page objects live in src/pages/ and extend BasePage
+- Load credentials from tests/data/users.json (users.standard)
+- Locator priority: getByRole → getByLabel → getByTestId.
+  NO CSS, NO XPath, NO waitForTimeout.
+- Tag the test title with @smoke @critical
+
+Workflow:
+1. Use playwright-cli to verify locators on the live app
+2. Ask before creating any new page object file
+3. Create LoginPage.ts and InventoryPage.ts as needed
+4. Save the spec at tests/auth/standard-login.spec.ts
+5. Run the test with: npx playwright test tests/auth/standard-login.spec.ts
+6. Fix and re-run until it passes
+7. Report the final files and pass output</code></pre>
+</div>
+
+<h3 class="subsection">What you'll see</h3>
+
+<p>The agent will:</p>
+
+<ol>
+  <li>Open the SauceDemo login page via CLI</li>
+  <li>Snapshot to identify locators</li>
+  <li>Ask you to confirm creating <code>LoginPage.ts</code> — approve</li>
+  <li>Ask about <code>InventoryPage.ts</code> — approve</li>
+  <li>Write the test file</li>
+  <li>Run the test</li>
+  <li>Iterate if anything fails</li>
+</ol>
+
+<h3 class="subsection">Sample generated test</h3>
+
+<p>The output should look like this:</p>
+
+<div class="code-block">
+  <div class="code-header">
+    <div class="code-header-left">
+      <span class="code-lang">typescript</span>
+      <span class="code-filename">tests/auth/standard-login.spec.ts</span>
+    </div>
+  </div>
+  <pre><code data-highlighted="yes" class="hljs language-undefined">import { test, expect } from '../../src/fixtures/base';
+import { LoginPage } from '../../src/pages/LoginPage';
+import users from '../data/users.json';
+
+test.describe('SauceDemo login', () =&gt; {
+  test('standard user logs in and lands on inventory @smoke @critical',
+    async ({ page }) =&gt; {
+      const login = new LoginPage(page);
+      await login.goto();
+      const inventory = await login.loginAs(users.standard);
+
+      await expect(page).toHaveURL(/inventory\.html/);
+      await expect(inventory.header).toHaveText('Products');
+      await expect(inventory.productCards).toHaveCount(6);
+    });
+});</code></pre>
+</div>
+
+<p>Verify by hand:</p>
+
+<ul>
+  <li>Imports come from <code>../../src/fixtures/base</code>, not <code>@playwright/test</code></li>
+  <li><code>page.getByRole</code> is not called directly in the test — locators live in page objects</li>
+  <li>No CSS selectors, no XPath, no <code>waitForTimeout</code></li>
+  <li>Tag applied to test title</li>
+</ul>
+
+<div class="callout callout-danger">
+  <span class="callout-label">Review discipline</span>
+  <p>If any of these are violated, do NOT accept the code as-is. The AI generated it. Your job is to review it against your framework rules. This review skill is where engineering judgment lives — and where fundamentals pay off.</p>
+</div>
+
+<h2 class="section-title" id="s10"><span class="section-number">10</span>Healer via CLI — diagnose and fix</h2>
+
+<p>The Healer is the third role. It diagnoses a failing test, identifies root cause, and produces a minimum-viable fix — without weakening the assertions.</p>
+
+<h3 class="subsection">Step 1 — Break the test intentionally</h3>
+
+<p>Open <code>src/pages/LoginPage.ts</code>. Find the username locator and change the accessible name:</p>
+
+<div class="code-block">
+  <div class="code-header">
+    <div class="code-header-left">
+      <span class="code-lang">typescript</span>
+      <span class="code-filename">src/pages/LoginPage.ts (introduce a break)</span>
+    </div>
+  </div>
+  <pre><code data-highlighted="yes" class="hljs language-undefined">// Original — works
+readonly usernameInput = this.page.getByRole('textbox', { name: 'Username' });
+
+// Broken — typo in the accessible name
+readonly usernameInput = this.page.getByRole('textbox', { name: 'User Name' });</code></pre>
+</div>
+
+<p>Save. Confirm the test now fails:</p>
+
+<div class="code-block">
+  <div class="code-header">
+    <div class="code-header-left">
+      <span class="code-lang">bash</span>
+      <span class="code-filename">Terminal · reproduce the failure</span>
+    </div>
+    <button class="copy-btn" data-target="code-fail">⧉ Copy</button>
+  </div>
+  <pre><code id="code-fail" class="language-bash hljs" data-highlighted="yes">npx playwright <span class="hljs-built_in">test</span> tests/auth/standard-login.spec.ts</code></pre>
+</div>
+
+<p>You should see a timeout error waiting for the locator.</p>
+
+<h3 class="subsection">Step 2 — The Healer prompt</h3>
+
+<div class="code-block">
+  <div class="code-header">
+    <div class="code-header-left">
+      <span class="code-lang">prompt</span>
+      <span class="code-filename">Claude Code · Healer</span>
+    </div>
+    <button class="copy-btn" data-target="code-healer">⧉ Copy</button>
+  </div>
+  <pre><code id="code-healer" data-highlighted="yes" class="hljs language-undefined">Act as the Healer from the playwright-cli test-generation skill.
+
+The test tests/auth/standard-login.spec.ts is failing.
+
+Diagnose and fix using the healing discipline:
+
+1. Run the test to reproduce the failure
+2. Read the error output carefully
+3. Use playwright-cli to open the app and inspect the actual DOM
+4. Classify the failure (locator drift / UI restructure / real regression)
+5. Apply the minimum-viable fix
+6. PRESERVE assertion intent — do NOT weaken any assertion
+7. Do NOT add waitForTimeout, do NOT skip the test,
+   do NOT increase timeouts
+8. Re-run the test twice to confirm stability
+9. Produce a Healer Report explaining what you did and why
+
+If root cause looks like a real bug in the app, STOP and report —
+do not modify the test to hide it.</code></pre>
+</div>
+
+<h3 class="subsection">What a good Healer output looks like</h3>
+
+<div class="code-block">
+  <div class="code-header">
+    <div class="code-header-left">
+      <span class="code-lang">markdown</span>
+      <span class="code-filename">Healer Report (excerpt)</span>
+    </div>
+  </div>
+  <pre><code data-highlighted="yes" class="hljs language-undefined">## Healer Report — tests/auth/standard-login.spec.ts
+
+### Failure classification
+A — Locator drift
+
+### Root cause
+The LoginPage.usernameInput locator uses accessible name "User Name"
+(with space). The actual DOM element has accessible name "Username"
+(no space). Verified via playwright-cli snapshot on the live app.
+
+### Fix applied
+Changed the accessible name back to "Username" in
+src/pages/LoginPage.ts, line 8.
+
+### Intent preservation check
+- Original assertion: expect(page).toHaveURL(/inventory\.html/)
+- New assertion: (unchanged)
+- Did assertion intent change? NO
+- Was any assertion softened? NO
+- Was any test skipped? NO
+- Was any timeout increased? NO
+
+### Test result
+- Run 1: PASS
+- Run 2: PASS
+
+### Recommendation
+Ready to merge — clean fix.</code></pre>
+</div>
+
+<h3 class="subsection">The critical review question</h3>
+
+<div class="pullquote">
+  Every Healer PR must be reviewed with one question: did the Healer fix the test, or fix the pass/fail status?
+</div>
+
+<p>Watch for these red flags in Healer output:</p>
+
+<ul>
+  <li>Assertion changed from <code>toHaveCount(6)</code> to <code>toBeVisible()</code></li>
+  <li>Assertion changed from <code>toHaveText</code> to <code>toContainText</code></li>
+  <li>New <code>waitForTimeout(5000)</code> added</li>
+  <li>Test marked <code>test.fixme</code> or <code>test.skip</code></li>
+  <li>Timeout increased beyond your config default</li>
+  <li>Page object modified when only the spec was supposed to change</li>
+</ul>
+
+<p>Any of these — reject the fix. Fix by hand instead.</p>
+<h2 class="section-title" id="s11"><span class="section-number">11</span>CLI vs MCP — complete diff</h2>
+
+<p>You've now used both approaches. Here's how they actually differ, feature by feature.</p>
+
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr>
+      <th style="width: 25%">Dimension</th>
+      <th style="width: 37%">MCP</th>
+      <th style="width: 37%">CLI + Skills</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Interface</strong></td>
+      <td>JSON-RPC protocol between client and server</td>
+      <td>Shell commands run in a terminal</td>
+    </tr>
+    <tr>
+      <td><strong>How agent invokes tools</strong></td>
+      <td>Structured tool calls (<code>browser_click</code>)</td>
+      <td>Shell commands (<code>playwright-cli click e21</code>)</td>
+    </tr>
+    <tr>
+      <td><strong>Tool schema load</strong></td>
+      <td>~3,600 tokens upfront (all tools)</td>
+      <td>~68 tokens (Skill description)</td>
+    </tr>
+    <tr>
+      <td><strong>Snapshot handling</strong></td>
+      <td>Full a11y tree streamed to context</td>
+      <td>Saved to <code>.playwright/snapshot.yaml</code></td>
+    </tr>
+    <tr>
+      <td><strong>Snapshot cost</strong></td>
+      <td>15,000-25,000 tokens each</td>
+      <td>~15 tokens (just the file path)</td>
+    </tr>
+    <tr>
+      <td><strong>Context growth</strong></td>
+      <td>Compounds fast — hits 200K+ in long sessions</td>
+      <td>Stays clean — 20-50K even in long sessions</td>
+    </tr>
+    <tr>
+      <td><strong>Agent workflow</strong></td>
+      <td>Chat mode dropdown (Planner/Generator/Healer)</td>
+      <td>Single agent, prompt-driven role selection</td>
+    </tr>
+    <tr>
+      <td><strong>Setup complexity</strong></td>
+      <td>MCP config + 3 <code>.agent.md</code> files + AGENTS.md</td>
+      <td>Install CLI + install --skills. Done.</td>
+    </tr>
+    <tr>
+      <td><strong>Where it lives</strong></td>
+      <td><code>.github/agents/</code> + <code>.vscode/mcp.json</code></td>
+      <td><code>.claude/skills/</code></td>
+    </tr>
+    <tr>
+      <td><strong>Best AI client</strong></td>
+      <td>GitHub Copilot Chat (Agent mode)</td>
+      <td>Claude Code (native fit)</td>
+    </tr>
+    <tr>
+      <td><strong>Response quality (long sessions)</strong></td>
+      <td>Degrades past ~60% context fill</td>
+      <td>Stays high — context stays lean</td>
+    </tr>
+    <tr>
+      <td><strong>Wall-clock time</strong></td>
+      <td>Fast — state is already loaded</td>
+      <td>Similar, sometimes 5-15% slower (file reads)</td>
+    </tr>
+    <tr>
+      <td><strong>Cost at scale (CI)</strong></td>
+      <td>Higher — $1,500-3,500/mo typical</td>
+      <td>Lower — $50-200/mo typical</td>
+    </tr>
+    <tr>
+      <td><strong>Sandbox compatibility</strong></td>
+      <td>Works in Claude Desktop, browser tabs</td>
+      <td>Needs shell access</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<h3 class="subsection">The single biggest structural difference</h3>
+
+<div class="pullquote">
+  MCP streams page state INTO the model's context. CLI keeps it ON disk and reads only when needed.
+</div>
+
+<p>This is the entire architectural difference in one sentence. Every other difference — token cost, context growth, wall-clock time, cost at scale — flows from this one design choice.</p>
+
+<h2 class="section-title" id="s12"><span class="section-number">12</span>Token consumption breakdown</h2>
+
+<p>Where do tokens actually get spent in an AI-driven browser session? Five places. Let's break them down individually, then compare.</p>
+
+<h3 class="subsection">1. Tool schema loading (upfront, once per session)</h3>
+
+<div class="token-stat">
+  <div class="token-card">
+    <div class="token-label">MCP</div>
+    <div class="token-value">3,600</div>
+    <div class="token-detail">Full JSON schemas for all browser tools</div>
+  </div>
+  <div class="token-card highlight">
+    <div class="token-label">CLI + Skills</div>
+    <div class="token-value">~68</div>
+    <div class="token-detail">Just the SKILL.md description</div>
+  </div>
+</div>
+
+<h3 class="subsection">2. Page snapshots (recurring, biggest cost)</h3>
+
+<p>This is the killer. Every browser interaction that changes the page needs a fresh snapshot.</p>
+
+<div class="token-stat">
+  <div class="token-card">
+    <div class="token-label">MCP · per snapshot</div>
+    <div class="token-value">15-25K</div>
+    <div class="token-detail">Full accessibility tree streamed into context</div>
+  </div>
+  <div class="token-card highlight">
+    <div class="token-label">CLI · per snapshot</div>
+    <div class="token-value">~15</div>
+    <div class="token-detail">Just "Saved to snapshot.yaml"</div>
+  </div>
+</div>
+
+<p>And critically — with CLI, the agent reads the yaml file <em>only when it needs specific information</em>. Most snapshots never actually enter the context window.</p>
+
+<h3 class="subsection">3. Tool call return values</h3>
+
+<div class="token-stat">
+  <div class="token-card">
+    <div class="token-label">MCP · per return</div>
+    <div class="token-value">8-20K</div>
+    <div class="token-detail">Structured response with page state</div>
+  </div>
+  <div class="token-card highlight">
+    <div class="token-label">CLI · per return</div>
+    <div class="token-value">~10</div>
+    <div class="token-detail">Terminal confirmation: "✓ Clicked element e21"</div>
+  </div>
+</div>
+
+<h3 class="subsection">4. Context accumulation (the compounding cost)</h3>
+
+<p>MCP's snapshots stay in conversation history. Every subsequent reasoning step re-reads them. After 10 snapshots, your context is bloated with page states you're no longer looking at.</p>
+
+<p>CLI's snapshots live on disk. Conversation history only has file paths. Context stays lean throughout the session.</p>
+
+<div class="callout callout-warning">
+  <span class="callout-label">The "lost in the middle" effect</span>
+  <p>Studies of transformer models show attention quality degrades past ~60% context fill. Snapshots piled up in MCP sessions push you past this threshold fast. Result: your LLM reasons worse on turn 15 than it did on turn 3. CLI avoids this entirely.</p>
+</div>
+
+<h3 class="subsection">5. Reasoning tokens (same both ways)</h3>
+
+<p>LLMs need tokens to think. The LLM's own reasoning is roughly the same in both cases — same problem, same intelligence needed to solve it. Difference: CLI mode gets <em>higher quality reasoning</em> because context is cleaner.</p>
+
+<h3 class="subsection">Same task — full comparison</h3>
+
+<p>Microsoft's benchmark, same task both ways: "Explore a 20-page e-commerce app, add items to cart, complete checkout."</p>
+
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr>
+      <th>Cost point</th>
+      <th style="text-align: right">MCP tokens</th>
+      <th style="text-align: right">CLI tokens</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>Tool schema load</td><td style="text-align: right">3,600</td><td style="text-align: right">68</td></tr>
+    <tr><td>Snapshots (5 total)</td><td style="text-align: right">85,000</td><td style="text-align: right">75</td></tr>
+    <tr><td>Tool returns</td><td style="text-align: right">18,000</td><td style="text-align: right">250</td></tr>
+    <tr><td>Context accumulation</td><td style="text-align: right">5,000</td><td style="text-align: right">400</td></tr>
+    <tr><td>Reasoning</td><td style="text-align: right">2,400</td><td style="text-align: right">2,235</td></tr>
+    <tr style="background: var(--bg-sidebar); font-weight: 600;">
+      <td>Total</td><td style="text-align: right">~114,000</td><td style="text-align: right">~3,028</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<div class="pullquote">
+  ~38x fewer tokens for the same task. This is not a rounding-error difference — it's a category change.
+</div>
+
+<h3 class="subsection">Production dollar impact</h3>
+
+<p>Cost projection for a small QA team running agents nightly in CI:</p>
+
+<ul>
+  <li>100 test files, average 20 agent turns per file</li>
+  <li>Run 30 nights per month</li>
+</ul>
+
+<p><strong>MCP:</strong> 100 × 20 × 20,000 = 40M tokens per night × 30 = 1.2B tokens/month → <strong>~$3,600/month</strong> at Sonnet pricing</p>
+
+<p><strong>CLI:</strong> 100 × 20 × 500 = 1M tokens per night × 30 = 30M tokens/month → <strong>~$90/month</strong> at Sonnet pricing</p>
+
+<p>Monthly savings: <strong>$3,510</strong>. Annual: <strong>$42,000</strong>. This pays for two junior QA engineers.</p>
+
+<h2 class="section-title" id="s13"><span class="section-number">13</span>When to use which</h2>
+
+<p>Not one-size-fits-all. Both have their place.</p>
+
+<h3 class="subsection">Use CLI + Skills when...</h3>
+
+<ul>
+  <li>Running agents in <strong>CI/CD pipelines</strong> — cost matters, token efficiency matters</li>
+  <li><strong>Long automation sessions</strong> (20+ steps) — CLI's clean context stays coherent</li>
+  <li><strong>Batch test generation</strong> — 100 tests × many steps × many days</li>
+  <li>Working with <strong>coding agents that combine browser + code</strong> — Claude Code, Codex, Cursor Agent</li>
+  <li>Your project uses <strong>large repos</strong> — you want the LLM's context free for reading your code, not choked with page snapshots</li>
+  <li>You need <strong>reproducible</strong>, <strong>audit-able</strong>, <strong>scriptable</strong> automation — shell commands you can log, replay, debug</li>
+  <li><strong>Cost-sensitive</strong> projects — startups, tight budgets, high-frequency runs</li>
+</ul>
+
+<h3 class="subsection">Use MCP when...</h3>
+
+<ul>
+  <li><strong>Sandboxed environments</strong> — Claude Desktop, web-based agents that can't run shell commands</li>
+  <li><strong>Interactive exploration</strong> — you want the LLM to see everything about the page in real-time</li>
+  <li><strong>Locator hunting</strong> — quick "help me find a good locator for this element" sessions</li>
+  <li><strong>Self-healing workflows with rich introspection</strong> — where the agent benefits from persistent, deeply-loaded page state</li>
+  <li><strong>Short sessions</strong> — 3-5 turns, where token cost is negligible</li>
+  <li>You're on <strong>Copilot Free/Pro</strong> and want a built-in solution — MCP integrates directly with the Copilot Chat modes</li>
+</ul>
+
+<h3 class="subsection">Use both when...</h3>
+
+<p>Many teams do this. Different tool for different job:</p>
+
+<ul>
+  <li><strong>CLI</strong> — for CI/CD, test generation, long autonomous runs</li>
+  <li><strong>MCP</strong> — for interactive debugging in IDE, exploratory locator work</li>
+</ul>
+
+<p>Think of it like git and gh — both are Git-related tools, both have their place. Same here.</p>
+
+<div class="pullquote">
+  MCP is a rich API. CLI is a set of shell commands. Pick MCP for rich introspection; pick CLI for lean throughput.
+</div>
+
+<h2 class="section-title" id="s14"><span class="section-number">14</span>Common pitfalls</h2>
+
+<h4 class="subsubsection">Forgetting to install Skills</h4>
+
+<p>The #1 mistake. Installing <code>@playwright/cli</code> does NOT install Skills. Run <code>playwright-cli install --skills</code> separately, from inside your project.</p>
+
+<h4 class="subsubsection">Starting Claude Code from the wrong folder</h4>
+
+<p>Skills are project-local at <code>.claude/skills/</code>. Claude Code must be started from the project root — otherwise it doesn't see them. Symptom: agent says "I don't see any Playwright Skill."</p>
+
+<h4 class="subsubsection">Assuming CLI = faster (wall-clock)</h4>
+
+<p>CLI is more <em>token-efficient</em>, not always <em>faster in wall-clock time</em>. It sometimes takes extra round trips reading yaml files. The savings are in cost and reasoning quality, not raw speed.</p>
+
+<h4 class="subsubsection">Not restarting Claude Code after Skill install</h4>
+
+<p>Skills are discovered at startup. If you installed Skills while Claude Code was running, exit (<code>/exit</code>) and restart.</p>
+
+<h4 class="subsubsection">Using Opus for simple tasks</h4>
+
+<p>Opus is powerful but expensive. For basic test generation, Sonnet or Haiku is more cost-effective and often faster in practice. Save Opus for complex refactors and deep debugging.</p>
+
+<h4 class="subsubsection">Trusting Healer output blindly</h4>
+
+<p>Same warning as with MCP. Never merge a Healer fix without reading the diff. The most common failure mode is silent test weakening — Healer changes an assertion to make the test pass, but now it doesn't catch the original bug.</p>
+
+<h4 class="subsubsection">Skipping the SKILL.md read</h4>
+
+<p>Sometimes the agent doesn't automatically read the SKILL.md at session start. Add "read <code>.claude/skills/playwright-cli/SKILL.md</code>" explicitly to your first prompt if you notice the agent guessing at commands.</p>
+
+<h4 class="subsubsection">Prompting without saying "use playwright-cli"</h4>
+
+<p>Explicitly mention <code>playwright-cli</code> in your prompt. Otherwise the agent may try to use <code>@playwright/test</code> code directly (which is fine, but skips the CLI benefits).</p>
+
+<h4 class="subsubsection">Committing browser cache to git</h4>
+
+<p>Add these to <code>.gitignore</code>:</p>
+
+<div class="code-block">
+  <div class="code-header">
+    <div class="code-header-left">
+      <span class="code-lang">bash</span>
+      <span class="code-filename">.gitignore</span>
+    </div>
+    <button class="copy-btn" data-target="code-gitignore">⧉ Copy</button>
+  </div>
+  <pre><code id="code-gitignore" class="language-bash hljs" data-highlighted="yes">node_modules/
+.playwright/
+test-results/
+playwright-report/
+
+<span class="hljs-comment"># Keep Skills tracked — they're team documentation</span>
+<span class="hljs-comment"># .claude/skills/  ← DO NOT ignore this</span>
+</code></pre>
+</div>
+
+<p><strong>Commit your Skills</strong> to git — they're team documentation. Ignore the <code>.playwright/</code> browser cache and snapshot temp files.</p>
+
+<h2 class="section-title" id="s15"><span class="section-number">15</span>Final thoughts</h2>
+
+<p>Three months ago, "AI agents for testing" meant MCP. Today it means MCP <em>or</em> CLI + Skills. Six months from now there'll likely be a third or fourth option. The tools change. The fundamentals don't.</p>
+
+<div class="pullquote">
+  Learn to evaluate tools, not just use them. That is the meta-skill worth building.
+</div>
+
+<h3 class="subsection">Three habits worth building</h3>
+
+<ol>
+  <li><strong>Read the SKILL.md.</strong> Not just for Playwright — for every tool you use. Skills are documentation. Understanding them makes you a better prompter.</li>
+  <li><strong>Read every diff.</strong> AI generates code. Your job is to review it. This is where fundamentals pay off — you can't review what you don't understand.</li>
+  <li><strong>Measure your tokens.</strong> Run <code>/status</code> in Claude Code periodically. Track cost per task. Optimize when it matters. Ignore when it doesn't.</li>
+</ol>
+
+<h3 class="subsection">The bigger shift</h3>
+
+<p>The role of a test engineer isn't becoming "prompt writer." It's becoming <strong>reviewer, guardrail, architect</strong>. Those roles come from fundamentals — framework knowledge, locator strategy, assertion discipline, understanding why weakened tests kill coverage.</p>
+
+<p>AI turns those roles from valuable into critical. An engineer who understands the framework becomes 3-5x more productive with AI. An engineer who doesn't ships plausible-looking test debt at scale.</p>
+
+<p>Use CLI where it makes sense. Use MCP where it makes sense. Use both if both fit your workflow. But always — always — review harder than you write.</p>
+
+<hr>
+
+<h4 class="subsubsection">Further reading</h4>
+<ul>
+  <li><a href="https://github.com/microsoft/playwright-cli" target="_blank" rel="noopener">Playwright CLI · GitHub</a></li>
+  <li><a href="https://playwright.dev/docs/getting-started-cli" target="_blank" rel="noopener">Playwright CLI documentation</a></li>
+  <li><a href="https://docs.claude.com/en/docs/claude-code" target="_blank" rel="noopener">Claude Code documentation</a></li>
+  <li><a href="https://github.com/microsoft/playwright-mcp" target="_blank" rel="noopener">Playwright MCP · GitHub</a></li>
+</ul>
+
+<div style="margin-top: 4rem; padding: 2rem; background: var(--bg-sidebar); border-radius: var(--radius-lg); border: 1px solid var(--border); display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap;">
+  <div style="width: 60px; height: 60px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--accent-hover)); color: white; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 20px; flex-shrink: 0;">N</div>
+  <div style="flex: 1; min-width: 200px;">
+    <div style="font-family: var(--font-display); font-size: 1.25rem; font-weight: 500; margin-bottom: 0.25rem;">Naveen Khunteta</div>
+    <div style="color: var(--text-muted); font-size: 0.95rem; line-height: 1.5;">Founder of Naveen Automation Labs. 500K+ subscribers on YouTube. Teaches Playwright TypeScript, framework design, and AI-augmented testing. Based in Dubai.</div>
+    <div style="margin-top: 0.75rem; display: flex; gap: 1rem; font-size: 0.875rem;">
+      <a href="https://youtube.com/@naveenautomationlabs" target="_blank" rel="noopener">YouTube</a>
+      <a href="https://linkedin.com/in/naveenkhunteta" target="_blank" rel="noopener">LinkedIn</a>
+      <a href="https://shapemyinterview.com/" target="_blank" rel="noopener">ShapeMyInterview</a>
+    </div>
+  </div>
+</div>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">
+  <div class="footer-brand">ShapeMyInterview <span style="opacity:.5;font-weight:400">· Naveen Automation Labs</span></div>
+  <p class="footer-tagline">Published on ShapeMyInterview — AI mock interviews &amp; QA/SDET practice. Fundamentals-first, now with AI leverage.</p>
+  <div class="footer-links">
+    <a href="https://www.shapemyinterview.com/ai-interview" target="_blank" rel="noopener">AI Mock Interview</a>
+    <a href="https://www.shapemyinterview.com/resources" target="_blank" rel="noopener">Study Material</a>
+    <a href="https://youtube.com/@naveenautomationlabs" target="_blank" rel="noopener">YouTube</a>
+    <a href="https://linkedin.com/in/naveenkhunteta" target="_blank" rel="noopener">LinkedIn</a>
+    <a href="https://github.com/microsoft/playwright-cli" target="_blank" rel="noopener">Playwright CLI</a>
+  </div>
+  <div class="footer-copy">© 2026 Naveen Khunteta · Written for engineers who value the craft</div>
+</footer>
+
+<script src="./Playwright CLI + Skills — The Complete Guide _ ShapeMyInterview_files/highlight.min.js"></script>
+<script src="./Playwright CLI + Skills — The Complete Guide _ ShapeMyInterview_files/typescript.min.js"></script>
+<script src="./Playwright CLI + Skills — The Complete Guide _ ShapeMyInterview_files/bash.min.js"></script>
+<script src="./Playwright CLI + Skills — The Complete Guide _ ShapeMyInterview_files/json.min.js"></script>
+<script src="./Playwright CLI + Skills — The Complete Guide _ ShapeMyInterview_files/yaml.min.js"></script>
+<script src="./Playwright CLI + Skills — The Complete Guide _ ShapeMyInterview_files/markdown.min.js"></script>
+<script>
+// Only run highlight.js if it actually loaded from the CDN — guard so a
+// blocked / failed CDN leaves code unhighlighted instead of throwing.
+if (typeof hljs !== 'undefined') {
+  hljs.configure({ languages: [], ignoreUnescapedHTML: true });
+  ['prompt','output'].forEach(l => hljs.registerLanguage(l, () => ({ name: l, contains: [] })));
+  document.querySelectorAll('pre code').forEach(block => { try { hljs.highlightElement(block); } catch(e) {} });
+}
+
+document.querySelectorAll('.copy-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const code = document.getElementById(btn.dataset.target);
+    if (!code) return;
+    navigator.clipboard.writeText(code.textContent).then(() => {
+      const orig = btn.innerHTML;
+      btn.classList.add('copied');
+      btn.innerHTML = '<span>✓</span> Copied';
+      setTimeout(() => { btn.classList.remove('copied'); btn.innerHTML = orig; }, 2000);
+    });
+  });
+});
+
+const themeToggle = document.getElementById('themeToggle');
+const hljsLight = document.getElementById('hljs-light');
+const hljsDark = document.getElementById('hljs-dark');
+function setTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  localStorage.setItem('theme', theme);
+  document.getElementById('themeIcon').textContent = theme === 'dark' ? '☀' : '☾';
+  document.getElementById('themeLabel').textContent = theme === 'dark' ? 'Light' : 'Dark';
+  hljsLight.disabled = theme === 'dark';
+  hljsDark.disabled = theme !== 'dark';
+}
+setTheme(localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+themeToggle.addEventListener('click', () => setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));
+
+const menuToggle = document.getElementById('menuToggle');
+const sidebar = document.getElementById('sidebar');
+const sidebarBackdrop = document.getElementById('sidebarBackdrop');
+menuToggle.addEventListener('click', () => {
+  sidebar.classList.toggle('open');
+  sidebarBackdrop.classList.toggle('open');
+});
+sidebarBackdrop.addEventListener('click', () => {
+  sidebar.classList.remove('open');
+  sidebarBackdrop.classList.remove('open');
+});
+document.querySelectorAll('.sidebar-nav a').forEach(a => {
+  a.addEventListener('click', () => {
+    sidebar.classList.remove('open');
+    sidebarBackdrop.classList.remove('open');
+  });
+});
+
+const progressBar = document.getElementById('progressBar');
+window.addEventListener('scroll', () => {
+  const winScroll = document.documentElement.scrollTop;
+  const height = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+  progressBar.style.width = (winScroll / height * 100) + '%';
+});
+
+const sections = document.querySelectorAll('.section-title[id]');
+const navLinks = document.querySelectorAll('.sidebar-nav a');
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      navLinks.forEach(link => link.classList.toggle('active', link.getAttribute('href') === '#' + entry.target.id));
+    }
+  });
+}, { rootMargin: '-40% 0px -55% 0px' });
+sections.forEach(section => observer.observe(section));
+</script>
+<div data-smi-footer="" style="font-family:-apple-system,BlinkMacSystemFont,&#39;Segoe UI&#39;,Roboto,Helvetica,Arial,sans-serif;background:#f8fafc;border-top:1px solid #e2e8f0;padding:28px 20px;text-align:center;color:#475569;font-size:13px;box-sizing:border-box;"><div style="font-weight:800;color:#0f172a;margin-bottom:8px;font-size:15px;">ShapeMyInterview</div><div style="margin-bottom:14px;max-width:560px;margin-left:auto;margin-right:auto;line-height:1.6;">Free QA / SDET interview prep — AI mock interviews, 1,000+ practice problems, and study material.</div><div style="display:flex;gap:18px;justify-content:center;flex-wrap:wrap;"><a href="https://shapemyinterview.com/ai-interview" style="color:#1e3a8a;text-decoration:none;font-weight:600;">AI Mock Interview</a><a href="https://shapemyinterview.com/problems" style="color:#1e3a8a;text-decoration:none;font-weight:600;">Practice Problems</a><a href="https://shapemyinterview.com/resources" style="color:#1e3a8a;text-decoration:none;font-weight:600;">More Study Material</a><a href="https://shapemyinterview.com/" style="color:#1e3a8a;text-decoration:none;font-weight:600;">Home</a></div></div>
+<script>(function(){try{if(window.self!==window.top){var n=document.querySelectorAll('[data-smi-bar],[data-smi-footer]');for(var i=0;i<n.length;i++){n[i].style.display='none';}}}catch(e){}})();</script>
+<script type="module" src="./Playwright CLI + Skills — The Complete Guide _ ShapeMyInterview_files/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon="{&quot;version&quot;:&quot;2024.11.0&quot;,&quot;token&quot;:&quot;699ecd71842d4a83b12ddc6db57bf385&quot;,&quot;r&quot;:1}" crossorigin="anonymous"></script>
+
+
+</body></html>
